@@ -119,6 +119,27 @@ function dedupeLabel(label: string, fileName: string, sources: Source[], selfId:
   return `${withFile} (${i})`
 }
 
+/** The "no mailboxes loaded" state — resets all per-session state (but not
+ *  persisted panel widths or worker status). */
+function freshState(): Partial<AppState> {
+  return {
+    sources: [],
+    selection: { sourceId: null, folderId: null, messageId: null },
+    messages: [],
+    messagesLoading: false,
+    messageContent: null,
+    contentLoading: false,
+    expanded: {},
+    searchQuery: '',
+    searchResults: [],
+    searching: false,
+    exportSel: {},
+    exporting: false,
+    ocrState: 'idle',
+    ocrProgress: { done: 0, total: 0 },
+  }
+}
+
 export const useApp = create<AppState>((set, get) => {
   /** Open one PST/OST File: register a source, parse it, then index it. */
   const startSource = (file: File) => {
@@ -130,7 +151,12 @@ export const useApp = create<AppState>((set, get) => {
       label: stripExt(file.name),
       status: 'parsing',
     }
-    set((s) => ({ sources: [...s.sources, source] }))
+    // A newly added mailbox isn't covered by a prior OCR run, so re-enable the
+    // OCR action (drop a stale "done" state).
+    set((s) => ({
+      sources: [...s.sources, source],
+      ocrState: s.ocrState === 'done' ? 'idle' : s.ocrState,
+    }))
 
     pst
       .openSource(id, file)
@@ -272,7 +298,14 @@ export const useApp = create<AppState>((set, get) => {
       void pst.closeSource(id)
       set((s) => {
         const sources = s.sources.filter((src) => src.id !== id)
+        // Removing the last mailbox returns to a clean slate.
+        if (sources.length === 0) return freshState()
+
         const wasSelected = s.selection.sourceId === id
+        // Drop anything tied to the removed source.
+        const exportSel = Object.fromEntries(
+          Object.entries(s.exportSel).filter(([, v]) => v.sourceId !== id),
+        )
         return {
           sources,
           selection: wasSelected
@@ -281,23 +314,14 @@ export const useApp = create<AppState>((set, get) => {
           messages: wasSelected ? [] : s.messages,
           messageContent: wasSelected ? null : s.messageContent,
           searchResults: s.searchResults.filter((h) => h.sourceId !== id),
+          exportSel,
         }
       })
     },
 
     clearSources: () => {
       for (const src of get().sources) void pst.closeSource(src.id)
-      set({
-        sources: [],
-        selection: { sourceId: null, folderId: null, messageId: null },
-        messages: [],
-        messagesLoading: false,
-        messageContent: null,
-        contentLoading: false,
-        expanded: {},
-        searchQuery: '',
-        searchResults: [],
-      })
+      set(freshState())
     },
 
     renameSource: (id, label) =>
