@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vite
+# Local sample PST/OST/zip test fixtures (never commit private mail data)
+/fixtures
+*.pst
+*.ost

@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #020617;
+  color: #e2e8f0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin dark scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+  background-clip: padding-box;
+}
+
+/* Clear, wide, easy-to-click scrollbars for preview areas (dark surfaces). */
+.scroll-clear {
+  scrollbar-width: auto;
+  scrollbar-color: #64748b #0f172a;
+  overflow: auto;
+}
+.scroll-clear::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+.scroll-clear::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+.scroll-clear::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 8px;
+  border: 3px solid #0f172a;
+}
+.scroll-clear::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.scroll-clear::-webkit-scrollbar-corner {
+  background: #0f172a;
+}
+
+/* Light variant for previews on a white background (spreadsheets). */
+.scroll-clear-light {
+  scrollbar-width: auto;
+  scrollbar-color: #94a3b8 #e2e8f0;
+  overflow: auto;
+}
+.scroll-clear-light::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+.scroll-clear-light::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+.scroll-clear-light::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 8px;
+  border: 3px solid #e2e8f0;
+}
+.scroll-clear-light::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+.scroll-clear-light::-webkit-scrollbar-corner {
+  background: #e2e8f0;
+}
+
+/* Spreadsheet table styling (rendered inline, not in an iframe). */
+.sheet-view table {
+  border-collapse: collapse;
+}
+.sheet-view td,
+.sheet-view th {
+  border: 1px solid #d4d4d8;
+  padding: 3px 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #111;
+}
+.sheet-view tr:first-child td,
+.sheet-view tr:first-child th {
+  background: #f1f5f9;
+  font-weight: 600;
+}

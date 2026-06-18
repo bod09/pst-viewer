@@ -1,0 +1,2 @@
+# Normalize line endings to LF in the repo; auto-detect binary files.
+* text=auto eol=lf
