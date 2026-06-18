@@ -6,10 +6,13 @@ import { createWorker, type Worker as TesseractWorker } from 'tesseract.js'
  * when the user opts in.
  */
 export function createOcrWorker(): Promise<TesseractWorker> {
+  // Base-aware so the bundled engine/model resolve under any deploy path
+  // (root domain, or a GitHub Pages subpath like /pst-viewer/).
+  const base = import.meta.env.BASE_URL
   return createWorker('eng', 1, {
-    workerPath: '/tesseract/worker.min.js',
-    corePath: '/tesseract',
-    langPath: '/tesseract/tessdata',
+    workerPath: `${base}tesseract/worker.min.js`,
+    corePath: `${base}tesseract`,
+    langPath: `${base}tesseract/tessdata`,
   })
 }
 

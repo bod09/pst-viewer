@@ -3,7 +3,15 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Node global (vite.config runs in Node); declared locally to avoid @types/node.
+declare const process: { env: Record<string, string | undefined> }
+
+// Default '/' (root domains, Caddy, Nginx, Netlify, etc.). GitHub Pages project
+// sites are served from a subpath, so the CI build sets BASE_PATH=/pst-viewer/.
+const base = process.env.BASE_PATH || '/'
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     tailwindcss(),
@@ -17,7 +25,8 @@ export default defineConfig({
         theme_color: '#0b1220',
         background_color: '#020617',
         display: 'standalone',
-        start_url: '/',
+        // Relative so it resolves correctly at both '/' and '/pst-viewer/'.
+        start_url: '.',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
