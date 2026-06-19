@@ -134,6 +134,11 @@ export function printHtmlDocument(html: string): void {
     // Let data-URL images settle before printing.
     setTimeout(() => {
       try {
+        // If focus is inside the sandboxed email reader iframe, the browser
+        // suppresses the print dialog (it silently never opens, then they all
+        // flood out when that iframe is removed). Move focus out first.
+        const active = document.activeElement as HTMLElement | null
+        if (active && active.tagName === 'IFRAME') active.blur()
         win.focus()
         win.print()
       } catch {
