@@ -7,6 +7,7 @@ import { categoryFromNameMime } from '../lib/detectType'
 import { sanitizeEmailHtml } from '../lib/sanitizeHtml'
 import { queryTerms, termsRegExp } from '../lib/highlight'
 import { EmailFrame } from './EmailFrame'
+import { ImageLightbox } from './ImageLightbox'
 import { AttachmentBar } from './attachments/AttachmentBar'
 import { Printer } from './icons'
 
@@ -20,6 +21,7 @@ export function MessageView({
   content: MessageContent
 }) {
   const [allowRemote, setAllowRemote] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
   const searchQuery = useApp((s) => s.searchQuery)
   const terms = useMemo(() => queryTerms(searchQuery), [searchQuery])
   const [ocrMatch, setOcrMatch] = useState<OcrMatchResult>({
@@ -161,6 +163,7 @@ export function MessageView({
             terms={terms}
             highlightImageUrls={highlightImageUrls}
             highlightBodyImageIndexes={ocrMatch.bodyImageIndexes}
+            onImageClick={setPreview}
           />
         ) : content.text ? (
           <pre className="m-0 min-h-full whitespace-pre-wrap break-words bg-white px-6 py-4 font-sans text-sm text-slate-900">
@@ -170,6 +173,7 @@ export function MessageView({
           <div className="p-8 text-center text-sm text-slate-400">(No message content)</div>
         )}
       </div>
+      {preview && <ImageLightbox src={preview} onClose={() => setPreview(null)} />}
     </section>
   )
 }

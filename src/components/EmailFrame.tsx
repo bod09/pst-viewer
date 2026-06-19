@@ -7,7 +7,8 @@ const BASE_CSS = `
 html,body{margin:0;padding:16px;background:#fff;color:#111;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   font-size:14px;line-height:1.5;word-wrap:break-word;overflow-wrap:anywhere}
-img{max-width:100%;height:auto}
+img{max-width:100%;height:auto;cursor:zoom-in}
+a img{cursor:pointer}
 a{color:#0b57d0}
 table{max-width:100%}
 blockquote{border-left:3px solid #ddd;margin:0 0 0 8px;padding-left:12px;color:#555}
@@ -119,17 +120,21 @@ export function EmailFrame({
   terms = [],
   highlightImageUrls = [],
   highlightBodyImageIndexes = [],
+  onImageClick,
 }: {
   html: string
   terms?: string[]
   highlightImageUrls?: string[]
   highlightBodyImageIndexes?: number[]
+  onImageClick?: (src: string) => void
 }) {
   const ref = useRef<HTMLIFrameElement>(null)
   const termsKey = terms.join('')
 
   const imgKey = highlightImageUrls.join('') + '|' + highlightBodyImageIndexes.join(',')
   const scrolledForHtmlRef = useRef('')
+  const onImageClickRef = useRef(onImageClick)
+  onImageClickRef.current = onImageClick
 
   useEffect(() => {
     const iframe = ref.current
@@ -142,6 +147,15 @@ export function EmailFrame({
       if (anchor?.href) {
         e.preventDefault()
         window.open(anchor.href, '_blank', 'noopener,noreferrer')
+        return
+      }
+      const img = target?.closest?.('img') as HTMLImageElement | null
+      if (img) {
+        const src = img.currentSrc || img.src
+        if (/^(blob:|data:|https?:)/i.test(src)) {
+          e.preventDefault()
+          onImageClickRef.current?.(src)
+        }
       }
     }
 
