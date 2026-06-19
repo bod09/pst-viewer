@@ -30,9 +30,7 @@ const MAX_OCR_PIXELS = 8_000_000
  */
 async function preprocessForOcr(blob: Blob): Promise<Blob> {
   try {
-    if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas === 'undefined') {
-      return blob
-    }
+    if (typeof document === 'undefined' || typeof createImageBitmap !== 'function') return blob
     const bitmap = await createImageBitmap(blob)
     const w0 = bitmap.width
     const h0 = bitmap.height
@@ -47,7 +45,11 @@ async function preprocessForOcr(blob: Blob): Promise<Blob> {
     const w = Math.round(w0 * scale)
     const h = Math.round(h0 * scale)
 
-    const canvas = new OffscreenCanvas(w, h)
+    // A plain <canvas> (main thread) is supported everywhere, unlike
+    // OffscreenCanvas filters which are unreliable on some platforms.
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
     const ctx = canvas.getContext('2d')
     if (!ctx) {
       bitmap.close?.()
@@ -58,7 +60,8 @@ async function preprocessForOcr(blob: Blob): Promise<Blob> {
     ctx.filter = 'grayscale(1) contrast(1.25)'
     ctx.drawImage(bitmap, 0, 0, w, h)
     bitmap.close?.()
-    return await canvas.convertToBlob({ type: 'image/png' })
+    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    return out || blob
   } catch {
     return blob
   }
