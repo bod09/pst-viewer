@@ -92,6 +92,22 @@ export interface EmbeddedMessageResult {
   content: MessageContent
 }
 
+/** An image to run OCR over: either a real attachment or a data: image in the body. */
+export interface OcrTarget {
+  messageId: string
+  kind: 'att' | 'body'
+  /** Attachment index, or position among the body's data: images. */
+  ref: number
+}
+
+/** Which images of an open message contain the search text (via OCR). */
+export interface OcrMatchResult {
+  /** Attachment indexes (chips + cid inline images). */
+  attachmentIndexes: number[]
+  /** Positions among the body's data: images (in document order). */
+  bodyImageIndexes: number[]
+}
+
 /** A single full-text search match. */
 export interface SearchHit {
   sourceId: string

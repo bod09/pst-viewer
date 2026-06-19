@@ -33,13 +33,25 @@ function clearHighlights(doc: Document) {
   }
 }
 
-/** Outline body images whose resolved src is in `urls`. Returns the count. */
-function applyImageHighlights(doc: Document, urls: string[]): number {
-  if (!urls.length || !doc.body) return 0
-  const set = new Set(urls)
+/**
+ * Outline matched images: cid/blob images by `urls`, and data: body images by
+ * their position among data: images (`bodyIndexes`, in document order, which
+ * matches how the worker counts them). Returns the count.
+ */
+function applyImageHighlights(doc: Document, urls: string[], bodyIndexes: number[]): number {
+  if (!doc.body || (!urls.length && !bodyIndexes.length)) return 0
+  const urlSet = new Set(urls)
+  const bodySet = new Set(bodyIndexes)
   let count = 0
+  let dataIdx = 0
   for (const img of Array.from(doc.images || [])) {
-    if (set.has(img.src) || set.has(img.getAttribute('src') ?? '')) {
+    const attr = img.getAttribute('src') ?? ''
+    let hit = urlSet.has(img.src) || urlSet.has(attr)
+    if (/^data:/i.test(attr) || /^data:/i.test(img.src)) {
+      if (bodySet.has(dataIdx)) hit = true
+      dataIdx++
+    }
+    if (hit) {
       img.classList.add('pstv-img-hit')
       count++
     }
@@ -106,15 +118,17 @@ export function EmailFrame({
   html,
   terms = [],
   highlightImageUrls = [],
+  highlightBodyImageIndexes = [],
 }: {
   html: string
   terms?: string[]
   highlightImageUrls?: string[]
+  highlightBodyImageIndexes?: number[]
 }) {
   const ref = useRef<HTMLIFrameElement>(null)
   const termsKey = terms.join('')
 
-  const imgKey = highlightImageUrls.join('')
+  const imgKey = highlightImageUrls.join('') + '|' + highlightBodyImageIndexes.join(',')
   const scrolledForHtmlRef = useRef('')
 
   useEffect(() => {
@@ -159,7 +173,7 @@ export function EmailFrame({
       if (!doc || !doc.body) return
       clearHighlights(doc)
       const textCount = terms.length ? applyHighlights(doc, terms) : 0
-      const imgCount = applyImageHighlights(doc, highlightImageUrls)
+      const imgCount = applyImageHighlights(doc, highlightImageUrls, highlightBodyImageIndexes)
       // Auto-scroll to the first hit once per opened message (matches can be a
       // text mark or an outlined image, and OCR matches can resolve after load).
       // Not on later term tweaks for the same body, which would yank the scroll.

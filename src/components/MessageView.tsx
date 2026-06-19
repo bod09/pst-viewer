@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../store/store'
 import { pst } from '../worker/client'
-import type { MessageContent, RecipientInfo } from '../types'
+import type { MessageContent, OcrMatchResult, RecipientInfo } from '../types'
 import { formatDate } from '../lib/format'
 import { categoryFromNameMime } from '../lib/detectType'
 import { sanitizeEmailHtml } from '../lib/sanitizeHtml'
@@ -22,20 +22,23 @@ export function MessageView({
   const [allowRemote, setAllowRemote] = useState(false)
   const searchQuery = useApp((s) => s.searchQuery)
   const terms = useMemo(() => queryTerms(searchQuery), [searchQuery])
-  const [ocrHits, setOcrHits] = useState<number[]>([])
+  const [ocrMatch, setOcrMatch] = useState<OcrMatchResult>({
+    attachmentIndexes: [],
+    bodyImageIndexes: [],
+  })
 
-  // Which image attachments contain the active search text (via OCR), so we can
-  // point the user at the image their match actually lives in.
+  // Which images contain the active search text (via OCR), so we can point the
+  // user at the picture their match lives in: a chip, or an image in the body.
   useEffect(() => {
     let alive = true
     if (!searchQuery.trim()) {
-      setOcrHits([])
+      setOcrMatch({ attachmentIndexes: [], bodyImageIndexes: [] })
       return
     }
     pst
       .ocrMatches(sourceId, messageId, searchQuery)
-      .then((h) => {
-        if (alive) setOcrHits(h)
+      .then((res) => {
+        if (alive) setOcrMatch(res)
       })
       .catch(() => {})
     return () => {
@@ -64,17 +67,16 @@ export function MessageView({
     [content.html, cidUrls, allowRemote],
   )
 
-  // Inline images whose OCR text matched the search get outlined in the body.
+  // Inline (cid) images whose OCR text matched the search get outlined in the body.
   const highlightImageUrls = useMemo(() => {
-    if (!ocrHits.length) return []
     const urls: string[] = []
-    for (const idx of ocrHits) {
+    for (const idx of ocrMatch.attachmentIndexes) {
       const att = content.attachments.find((a) => a.index === idx)
       const url = att?.cid ? cidUrls.get(att.cid) : undefined
       if (url) urls.push(url)
     }
     return urls
-  }, [ocrHits, content.attachments, cidUrls])
+  }, [ocrMatch.attachmentIndexes, content.attachments, cidUrls])
 
   // Hide only inline *images* (they render inside the body); everything else,
   // including inline PDFs, stays visible as a downloadable/previewable chip.
@@ -136,7 +138,7 @@ export function MessageView({
           sourceId={sourceId}
           messageId={messageId}
           attachments={visibleAttachments}
-          ocrHits={ocrHits}
+          ocrHits={ocrMatch.attachmentIndexes}
         />
       )}
 
@@ -154,7 +156,12 @@ export function MessageView({
 
       <div className="scroll-clear min-h-0 flex-1 overflow-y-auto">
         {sanitized ? (
-          <EmailFrame html={sanitized.html} terms={terms} highlightImageUrls={highlightImageUrls} />
+          <EmailFrame
+            html={sanitized.html}
+            terms={terms}
+            highlightImageUrls={highlightImageUrls}
+            highlightBodyImageIndexes={ocrMatch.bodyImageIndexes}
+          />
         ) : content.text ? (
           <pre className="m-0 min-h-full whitespace-pre-wrap break-words bg-white px-6 py-4 font-sans text-sm text-slate-900">
             {terms.length ? <HighlightedText text={content.text} terms={terms} /> : content.text}

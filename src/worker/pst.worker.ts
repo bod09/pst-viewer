@@ -18,6 +18,8 @@ import type {
   InlineImage,
   MessageContent,
   MessageMeta,
+  OcrMatchResult,
+  OcrTarget,
   RecipientInfo,
   SearchHit,
   SourceIndex,
@@ -39,8 +41,10 @@ interface SourceEntry {
   messages: Map<string, IPSTMessage>
   /** Cached attachment handles per message id, for lazy byte fetching. */
   attachments: Map<string, IPSTAttachment[]>
-  /** OCR text per image attachment, keyed `${messageId}:${index}` (for locating matches). */
+  /** OCR text per image, keyed `${kind}:${messageId}:${ref}` (for locating matches). */
   ocr: Map<string, string>
+  /** Count of data: images in each message body (only messages that have any). */
+  bodyImageCount: Map<string, number>
   /** Search-index document ids contributed by this source (for cleanup). */
   searchIds: Set<string>
 }
@@ -75,6 +79,34 @@ const searchDocs = new Map<string, SearchDoc>()
 const IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i
 function isImageAttachment(name: string, mime: string): boolean {
   return mime.toLowerCase().startsWith('image/') || IMAGE_EXT.test(name)
+}
+
+// Images embedded straight into the HTML body as base64 (not PST attachments).
+const DATA_IMG_RE = /<img\b[^>]*?\ssrc\s*=\s*(["'])(data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+?)\1/gi
+
+/** The data: image URLs in a body, in document order (matches the rendered DOM). */
+function dataImageUrls(html: string): string[] {
+  if (!html) return []
+  const out: string[] = []
+  DATA_IMG_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = DATA_IMG_RE.exec(html))) out.push(m[2].replace(/\s+/g, ''))
+  return out
+}
+
+/** Decode a `data:image/...;base64,...` URL into bytes + mime. */
+function dataUrlToBytes(dataUrl: string): { mime: string; data: ArrayBuffer } | null {
+  const comma = dataUrl.indexOf(',')
+  if (comma < 0) return null
+  const mime = dataUrl.slice(5, comma).split(';')[0] || 'image/png'
+  try {
+    const bin = atob(dataUrl.slice(comma + 1))
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return { mime, data: bytes.buffer }
+  } catch {
+    return null
+  }
 }
 
 function stripHtml(html: string): string {
@@ -178,6 +210,9 @@ async function buildSearchDoc(
   const bodies = extractBodies(m)
   const html = bodies.html
   const body = bodies.text || (html ? stripHtml(html) : '')
+
+  const bodyImgCount = html ? dataImageUrls(html).length : 0
+  if (bodyImgCount) entry.bodyImageCount.set(msgId, bodyImgCount)
 
   let attachments = ''
   if (safe(() => m.hasAttachments, false)) {
@@ -562,6 +597,7 @@ const api = {
       messages: new Map(),
       attachments: new Map(),
       ocr: new Map(),
+      bodyImageCount: new Map(),
       searchIds: new Set(),
     }
     sources.set(sourceId, entry)
@@ -764,35 +800,53 @@ const api = {
     }))
   },
 
-  /** List image attachments across an indexed source (for OCR). */
-  async listImageAttachments(
-    sourceId: string,
-  ): Promise<Array<{ messageId: string; index: number; name: string }>> {
+  /** Every image to OCR across a source: image attachments plus data: body images. */
+  async listOcrImages(sourceId: string): Promise<OcrTarget[]> {
     const entry = sources.get(sourceId)
     if (!entry) return []
-    const out: Array<{ messageId: string; index: number; name: string }> = []
+    const out: OcrTarget[] = []
     for (const [messageId, list] of entry.attachments) {
       list.forEach((a, index) => {
         if (safe(() => a.attachMethod, 0) !== Consts.ATTACH_BY_VALUE) return
         const name = attachmentName(a, index, false)
         if (isImageAttachment(name, safe(() => a.mimeTag, ''))) {
-          out.push({ messageId, index, name })
+          out.push({ messageId, kind: 'att', ref: index })
         }
       })
+    }
+    for (const [messageId, count] of entry.bodyImageCount) {
+      for (let i = 0; i < count; i++) out.push({ messageId, kind: 'body', ref: i })
     }
     return out
   },
 
-  /** Merge OCR-recognized text into a message's search-index entry (and remember
-   *  it per image attachment so a match can be traced back to a specific image). */
+  /** Bytes for the ref-th data: image in a message body (transferred, zero-copy). */
+  async getBodyImageData(
+    sourceId: string,
+    messageId: string,
+    ref: number,
+  ): Promise<AttachmentData | null> {
+    const entry = sources.get(sourceId)
+    const m = entry?.messages.get(messageId)
+    if (!m) return null
+    const url = dataImageUrls(extractBodies(m).html)[ref]
+    const decoded = url ? dataUrlToBytes(url) : null
+    if (!decoded) return null
+    const result: AttachmentData = { name: `body-image-${ref}`, mime: decoded.mime, data: decoded.data }
+    return Comlink.transfer(result, [decoded.data])
+  },
+
+  /** Merge OCR text into a message's search-index entry, keyed per image so a
+   *  match can be traced back to a specific attachment or body image. */
   async addOcrText(
     sourceId: string,
     messageId: string,
-    index: number,
+    kind: OcrTarget['kind'],
+    ref: number,
     text: string,
   ): Promise<void> {
     const entry = sources.get(sourceId)
-    if (entry) entry.ocr.set(`${messageId}:${index}`, text)
+    if (entry) entry.ocr.set(`${kind}:${messageId}:${ref}`, text)
     const id = `${sourceId}:${messageId}`
     const doc = searchDocs.get(id)
     if (!doc) return
@@ -800,20 +854,27 @@ const api = {
     if (searchIndex.has(id)) searchIndex.replace(doc)
   },
 
-  /** Which image attachments of a message contain the query text (via OCR). */
-  async ocrMatches(sourceId: string, messageId: string, query: string): Promise<number[]> {
+  /** Which images of a message contain the query text (via OCR). */
+  async ocrMatches(sourceId: string, messageId: string, query: string): Promise<OcrMatchResult> {
+    const empty: OcrMatchResult = { attachmentIndexes: [], bodyImageIndexes: [] }
     const entry = sources.get(sourceId)
-    if (!entry) return []
+    if (!entry) return empty
     const terms = queryTerms(query)
-    if (!terms.length) return []
-    const hits: number[] = []
-    const prefix = `${messageId}:`
+    if (!terms.length) return empty
+    const attPrefix = `att:${messageId}:`
+    const bodyPrefix = `body:${messageId}:`
+    const attachmentIndexes: number[] = []
+    const bodyImageIndexes: number[] = []
     for (const [key, text] of entry.ocr) {
-      if (!key.startsWith(prefix)) continue
       const low = text.toLowerCase()
-      if (terms.some((t) => low.includes(t))) hits.push(Number(key.slice(prefix.length)))
+      if (!terms.some((t) => low.includes(t))) continue
+      if (key.startsWith(attPrefix)) attachmentIndexes.push(Number(key.slice(attPrefix.length)))
+      else if (key.startsWith(bodyPrefix)) bodyImageIndexes.push(Number(key.slice(bodyPrefix.length)))
     }
-    return hits.sort((a, b) => a - b)
+    return {
+      attachmentIndexes: attachmentIndexes.sort((a, b) => a - b),
+      bodyImageIndexes: bodyImageIndexes.sort((a, b) => a - b),
+    }
   },
 
   /** Release a source, its PST handle, and its search-index entries. */

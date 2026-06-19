@@ -4,7 +4,7 @@ import { pst } from '../worker/client'
 import { scanZipForPsts } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
 import type { Worker as OcrWorker } from 'tesseract.js'
-import type { FolderNode, MessageContent, MessageMeta, SearchHit, SourceIndex } from '../types'
+import type { FolderNode, MessageContent, MessageMeta, OcrTarget, SearchHit, SourceIndex } from '../types'
 
 export type WorkerStatus = 'idle' | 'ready' | 'error'
 export type SourceStatus = 'parsing' | 'ready' | 'error'
@@ -271,9 +271,9 @@ export const useApp = create<AppState>((set, get) => {
       while (ocrQueue.length) {
         const sourceId = ocrQueue.shift() as string
         if (!hasSource(sourceId)) continue
-        let targets: Array<{ messageId: string; index: number }> = []
+        let targets: OcrTarget[] = []
         try {
-          targets = await pst.listImageAttachments(sourceId)
+          targets = await pst.listOcrImages(sourceId)
         } catch {
           /* ignore */
         }
@@ -292,11 +292,14 @@ export const useApp = create<AppState>((set, get) => {
           if (!hasSource(sourceId)) break
           const t = targets[i]
           try {
-            const data = await pst.getAttachmentData(sourceId, t.messageId, t.index)
+            const data =
+              t.kind === 'body'
+                ? await pst.getBodyImageData(sourceId, t.messageId, t.ref)
+                : await pst.getAttachmentData(sourceId, t.messageId, t.ref)
             if (data) {
               const blob = new Blob([data.data], { type: data.mime || 'image/png' })
               const text = await lib.recognizeImage(worker, blob)
-              if (text) await pst.addOcrText(sourceId, t.messageId, t.index, text)
+              if (text) await pst.addOcrText(sourceId, t.messageId, t.kind, t.ref, text)
             }
           } catch {
             /* skip unreadable image */
