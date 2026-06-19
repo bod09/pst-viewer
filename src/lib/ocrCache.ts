@@ -5,8 +5,9 @@
  *
  * Only the recognized TEXT is stored, keyed by a SHA-256 of the image bytes (a
  * stable, content-addressed key). Images and sharpened canvases are never
- * stored, so the cache stays tiny. Entries expire 7 days after they are written
- * and are dropped on the next open, so it never grows without bound.
+ * stored, so the cache stays tiny. Each use renews an entry's life; one left
+ * unused for 7 days expires and is dropped on the next open, so it never grows
+ * without bound.
  *
  * Lives in IndexedDB on the user's device and is never uploaded. Every operation
  * degrades gracefully to "no cache" (IndexedDB or WebCrypto unavailable,
@@ -16,7 +17,8 @@
 const DB_NAME = 'pstv-ocr-cache'
 const STORE = 'text'
 const DB_VERSION = 1
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // expire cached text after 7 days
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // keep cached text 7 days after its last use
+const DAY_MS = 24 * 60 * 60 * 1000 // only renew an entry's life once a day, to avoid churn
 
 /** Stored value: recognized text plus the time it stops being valid. */
 interface Entry {
@@ -82,17 +84,30 @@ export async function hashImageBytes(bytes: ArrayBuffer): Promise<string | null>
 /**
  * Cached OCR text for a content hash. Returns `undefined` when the image has
  * never been read or its cached text has expired; an empty string means "read,
- * contained no text" (so we do not OCR it again).
+ * contained no text" (so we do not OCR it again). A valid hit renews the entry's
+ * 7-day window, so a mailbox you keep using is never re-read.
  */
 export async function getCachedOcr(hash: string): Promise<string | undefined> {
   const db = await openDb()
   if (!db) return undefined
   return new Promise((resolve) => {
     try {
-      const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(hash)
+      const tx = db.transaction(STORE, 'readwrite')
+      const store = tx.objectStore(STORE)
+      const req = store.get(hash)
       req.onsuccess = () => {
         const v = req.result as Entry | undefined
-        if (v && typeof v.text === 'string' && typeof v.exp === 'number' && v.exp >= Date.now()) {
+        const now = Date.now()
+        if (v && typeof v.text === 'string' && typeof v.exp === 'number' && v.exp >= now) {
+          // Sliding expiry: push the 7-day window out from now, but at most once
+          // a day so re-opening a mailbox does not rewrite every entry.
+          if (now - (v.exp - MAX_AGE_MS) > DAY_MS) {
+            try {
+              store.put({ text: v.text, exp: now + MAX_AGE_MS }, hash)
+            } catch {
+              /* ignore */
+            }
+          }
           resolve(v.text)
         } else {
           resolve(undefined)
