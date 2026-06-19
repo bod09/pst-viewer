@@ -23,12 +23,14 @@ const MAX_OCR_PIXELS = 8_000_000
 
 /**
  * Prepare an image for OCR: enlarge it (so small digits/letters have enough
- * pixels to recognise) and convert to high-contrast grayscale. All steps are
- * GPU-friendly canvas ops with off-thread decode/encode, so they barely touch
- * the main thread. Returns the original blob unchanged if anything is
- * unsupported or fails (the engine then reads it as before).
+ * pixels to recognise) and convert to high-contrast grayscale. Returns a
+ * <canvas> for the engine to read, NOT a re-encoded blob, because the
+ * `canvas.toBlob()` / `toDataURL()` step is exactly what privacy browsers
+ * (canvas fingerprinting protection) block or scramble. The upscale itself uses
+ * `createImageBitmap` + `drawImage`, which those browsers leave alone. Falls
+ * back to the original blob if anything is unsupported or fails.
  */
-async function preprocessForOcr(blob: Blob): Promise<Blob> {
+async function preprocessForOcr(blob: Blob): Promise<Blob | HTMLCanvasElement> {
   try {
     if (typeof document === 'undefined' || typeof createImageBitmap !== 'function') return blob
     const bitmap = await createImageBitmap(blob)
@@ -45,8 +47,6 @@ async function preprocessForOcr(blob: Blob): Promise<Blob> {
     const w = Math.round(w0 * scale)
     const h = Math.round(h0 * scale)
 
-    // A plain <canvas> (main thread) is supported everywhere, unlike
-    // OffscreenCanvas filters which are unreliable on some platforms.
     const canvas = document.createElement('canvas')
     canvas.width = w
     canvas.height = h
@@ -60,8 +60,7 @@ async function preprocessForOcr(blob: Blob): Promise<Blob> {
     ctx.filter = 'grayscale(1) contrast(1.25)'
     ctx.drawImage(bitmap, 0, 0, w, h)
     bitmap.close?.()
-    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-    return out || blob
+    return canvas
   } catch {
     return blob
   }
