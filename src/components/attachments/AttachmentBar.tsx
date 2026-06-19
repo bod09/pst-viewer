@@ -75,7 +75,7 @@ function Chip({
           ? 'border-amber-400/70 bg-amber-400/10 ring-2 ring-amber-400/60 hover:bg-amber-400/15'
           : 'border-slate-700 bg-slate-800/60 hover:border-slate-600 hover:bg-slate-700/60'
       }`}
-      data-tip={matched ? `${meta.name} — contains your search text` : meta.name}
+      data-tip={matched ? `${meta.name} (contains your search text)` : meta.name}
     >
       <span
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${CATEGORY_BADGE[category]}`}

@@ -13,6 +13,7 @@ table{max-width:100%}
 blockquote{border-left:3px solid #ddd;margin:0 0 0 8px;padding-left:12px;color:#555}
 mark.pstv-hit{background:#fde047;color:#111;border-radius:2px}
 mark.pstv-hit.pstv-current{background:#f59e0b;box-shadow:0 0 0 2px #f59e0b}
+img.pstv-img-hit{outline:3px solid #f59e0b;outline-offset:2px;border-radius:3px}
 html{scrollbar-width:auto;scrollbar-color:#94a3b8 #e2e8f0}
 ::-webkit-scrollbar{width:14px;height:14px}
 ::-webkit-scrollbar-track{background:#e2e8f0}
@@ -23,12 +24,28 @@ html{scrollbar-width:auto;scrollbar-color:#94a3b8 #e2e8f0}
 
 const MAX_MARKS = 500
 
-/** Remove any highlight wrappers we previously added, restoring the text. */
+/** Remove any highlight wrappers / outlines we previously added. */
 function clearHighlights(doc: Document) {
+  doc.querySelectorAll('img.pstv-img-hit').forEach((img) => img.classList.remove('pstv-img-hit'))
   const marks = doc.querySelectorAll('mark.pstv-hit')
-  if (!marks.length) return
-  marks.forEach((m) => m.replaceWith(doc.createTextNode(m.textContent ?? '')))
-  doc.body?.normalize()
+  if (marks.length) {
+    marks.forEach((m) => m.replaceWith(doc.createTextNode(m.textContent ?? '')))
+    doc.body?.normalize()
+  }
+}
+
+/** Outline body images whose resolved src is in `urls`. Returns the count. */
+function applyImageHighlights(doc: Document, urls: string[]): number {
+  if (!urls.length || !doc.body) return 0
+  const set = new Set(urls)
+  let count = 0
+  for (const img of Array.from(doc.images || [])) {
+    if (set.has(img.src) || set.has(img.getAttribute('src') ?? '')) {
+      img.classList.add('pstv-img-hit')
+      count++
+    }
+  }
+  return count
 }
 
 /** Wrap matches of `terms` in <mark> across text nodes. Returns the match count. */
@@ -80,15 +97,26 @@ function applyHighlights(doc: Document, terms: string[]): number {
  * Renders sanitized email HTML inside a sandboxed, same-origin iframe so the
  * email's own CSS displays accurately while scripts cannot run. The iframe
  * auto-sizes to its content (measured on load, on image loads, and on a few
- * timers — deliberately NOT via ResizeObserver, which can feedback-loop when
+ * timers; deliberately NOT via ResizeObserver, which can feedback-loop when
  * the height we set changes the content layout).
  *
  * When `terms` is non-empty (an active search) the matched words are highlighted
  * and, on first load, the reader scrolls to the first hit.
  */
-export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[] }) {
+export function EmailFrame({
+  html,
+  terms = [],
+  highlightImageUrls = [],
+}: {
+  html: string
+  terms?: string[]
+  highlightImageUrls?: string[]
+}) {
   const ref = useRef<HTMLIFrameElement>(null)
   const termsKey = terms.join('')
+
+  const imgKey = highlightImageUrls.join('')
+  const scrolledForHtmlRef = useRef('')
 
   useEffect(() => {
     const iframe = ref.current
@@ -104,12 +132,12 @@ export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[
       }
     }
 
-    // Scroll the reader pane (the iframe's scrollable ancestor — the iframe
+    // Scroll the reader pane (the iframe's scrollable ancestor, since the iframe
     // itself is sized to its content) so the first hit is comfortably in view.
     const scrollToFirstHit = () => {
       const doc = iframe.contentDocument
-      const mark = doc?.querySelector('mark.pstv-hit') as HTMLElement | null
-      if (!mark) return
+      const target = doc?.querySelector('mark.pstv-hit, img.pstv-img-hit') as HTMLElement | null
+      if (!target) return
       let container: HTMLElement | null = iframe.parentElement
       while (container && container !== document.body) {
         const oy = getComputedStyle(container).overflowY
@@ -118,24 +146,28 @@ export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[
         }
         container = container.parentElement
       }
-      const markTop = mark.getBoundingClientRect().top
+      const targetTop = target.getBoundingClientRect().top
       if (container && container !== document.body) {
-        const top = container.scrollTop + (markTop - container.getBoundingClientRect().top) - 80
+        const top = container.scrollTop + (targetTop - container.getBoundingClientRect().top) - 80
         container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
       } else {
-        mark.scrollIntoView({ block: 'center' })
+        target.scrollIntoView({ block: 'center' })
       }
     }
 
-    const highlight = (scroll: boolean) => {
+    const highlight = () => {
       const doc = iframe.contentDocument
       if (!doc || !doc.body) return
       clearHighlights(doc)
-      if (!terms.length) return
-      const count = applyHighlights(doc, terms)
-      if (count > 0) {
-        doc.querySelector('mark.pstv-hit')?.classList.add('pstv-current')
-        if (scroll) timers.push(window.setTimeout(scrollToFirstHit, 400))
+      const textCount = terms.length ? applyHighlights(doc, terms) : 0
+      if (textCount > 0) doc.querySelector('mark.pstv-hit')?.classList.add('pstv-current')
+      const imgCount = applyImageHighlights(doc, highlightImageUrls)
+      // Auto-scroll to the first hit once per opened message (matches can be a
+      // text mark or an outlined image, and OCR matches can resolve after load).
+      // Not on later term tweaks for the same body, which would yank the scroll.
+      if ((textCount > 0 || imgCount > 0) && scrolledForHtmlRef.current !== html) {
+        scrolledForHtmlRef.current = html
+        timers.push(window.setTimeout(scrollToFirstHit, 400))
       }
     }
 
@@ -164,7 +196,7 @@ export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[
         }
       }
       measure()
-      highlight(true)
+      highlight()
       // Re-measure after late layout (fonts / inline images / reflow).
       for (const t of [50, 200, 500, 1200]) timers.push(window.setTimeout(measure, t))
       // Re-measure as each image finishes loading.
@@ -177,7 +209,7 @@ export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[
     // Terms changed without an HTML change (the iframe is already loaded): just
     // re-highlight in place, without yanking the user's scroll position.
     const doc = iframe.contentDocument
-    if (doc?.body && doc.readyState === 'complete') highlight(false)
+    if (doc?.body && doc.readyState === 'complete') highlight()
 
     return () => {
       iframe.removeEventListener('load', onLoad)
@@ -186,7 +218,7 @@ export function EmailFrame({ html, terms = [] }: { html: string; terms?: string[
     // `terms` is captured via the stable `termsKey`; depending on the array
     // itself would re-run this effect on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, termsKey])
+  }, [html, termsKey, imgKey])
 
   return (
     <iframe

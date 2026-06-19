@@ -53,6 +53,8 @@ export interface AttachmentMeta {
   mime: string
   /** Referenced inline from the HTML body (has a Content-ID). */
   isInline: boolean
+  /** Content-ID (without angle brackets) for inline images, if any. */
+  cid?: string
   /** This attachment is itself an embedded email. */
   isEmbeddedMessage: boolean
 }

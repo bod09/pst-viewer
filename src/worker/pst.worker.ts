@@ -509,6 +509,7 @@ async function buildMessageContent(
       size: safe(() => a.filesize, 0) || safe(() => a.size, 0),
       mime: safe(() => a.mimeTag, ''),
       isInline,
+      cid: cid || undefined,
       isEmbeddedMessage: isEmbedded,
     })
 
