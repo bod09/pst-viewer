@@ -1,28 +1,18 @@
 import DOMPurify from 'dompurify'
 
-export interface SanitizeResult {
-  html: string
-  /** True if any remote (http/https) image or CSS resource was blocked. */
-  blockedRemote: boolean
-}
-
-const REMOTE_RE = /^https?:\/\//i
+// Width/height of 0 or 1 (with optional px) marks an invisible tracking pixel.
+const TINY = /^0*[01](?:\.0+)?(?:px)?$/
 
 /**
  * Sanitize an email's HTML body for safe, faithful rendering inside a
  * sandboxed iframe.
- *  - Strips scripts/objects/forms (XSS-safe).
+ *  - Strips scripts/objects/forms/event-handlers (XSS-safe).
  *  - Resolves `cid:` image references to local blob: URLs.
- *  - Blocks remote images/CSS by default (tracking-pixel protection); the
- *    caller can re-run with `allowRemote = true` to load them.
+ *  - Loads remote images/CSS normally (like a regular mail client), so emails
+ *    look exactly as sent, but drops invisible 1x1 / hidden tracking pixels,
+ *    which removes the obvious trackers without changing how anything looks.
  */
-export function sanitizeEmailHtml(
-  rawHtml: string,
-  cidUrls: Map<string, string>,
-  allowRemote: boolean,
-): SanitizeResult {
-  let blockedRemote = false
-
+export function sanitizeEmailHtml(rawHtml: string, cidUrls: Map<string, string>): string {
   const hook = (node: Element) => {
     const el = node as HTMLElement
 
@@ -38,30 +28,22 @@ export function sanitizeEmailHtml(
         const url = cidUrls.get(key)
         if (url) el.setAttribute('src', url)
         else el.removeAttribute('src')
-      } else if (REMOTE_RE.test(src)) {
-        if (!allowRemote) {
-          blockedRemote = true
-          el.removeAttribute('src')
-          el.setAttribute('data-blocked-src', src)
-        }
-      } else if (!/^data:/i.test(src)) {
-        el.removeAttribute('src')
       }
-      if (el.hasAttribute('srcset') && !allowRemote) {
-        blockedRemote = true
-        el.removeAttribute('srcset')
-      }
-    }
 
-    const style = el.getAttribute('style')
-    if (style && !allowRemote && /url\(\s*['"]?https?:/i.test(style)) {
-      blockedRemote = true
-      el.setAttribute('style', style.replace(/url\(\s*['"]?https?:[^)]*\)/gi, 'none'))
+      // Drop invisible tracking pixels (zero/one px, or hidden). This keeps the
+      // visible content identical while pinging fewer trackers.
+      const tiny = (v: string | null) => v != null && TINY.test(v.trim())
+      const style = (el.getAttribute('style') ?? '').toLowerCase()
+      const hidden =
+        /display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0(?:px)?\b/.test(style)
+      if (tiny(el.getAttribute('width')) || tiny(el.getAttribute('height')) || hidden) {
+        el.remove()
+      }
     }
   }
 
   DOMPurify.addHook('afterSanitizeAttributes', hook)
-  let html = DOMPurify.sanitize(rawHtml, {
+  const html = DOMPurify.sanitize(rawHtml, {
     WHOLE_DOCUMENT: true,
     FORBID_TAGS: ['script', 'noscript', 'iframe', 'object', 'embed', 'form', 'base'],
     FORBID_ATTR: ['ping'],
@@ -69,13 +51,5 @@ export function sanitizeEmailHtml(
   })
   DOMPurify.removeHook('afterSanitizeAttributes')
 
-  // Neutralize remote resources referenced inside <style> blocks.
-  if (!allowRemote && /url\(\s*['"]?https?:|@import/i.test(html)) {
-    blockedRemote = true
-    html = html
-      .replace(/url\(\s*['"]?https?:[^)]*\)/gi, 'none')
-      .replace(/@import[^;]+;/gi, '')
-  }
-
-  return { html, blockedRemote }
+  return html
 }

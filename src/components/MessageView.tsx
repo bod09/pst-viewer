@@ -20,7 +20,6 @@ export function MessageView({
   messageId: string
   content: MessageContent
 }) {
-  const [allowRemote, setAllowRemote] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const searchQuery = useApp((s) => s.searchQuery)
   const terms = useMemo(() => queryTerms(searchQuery), [searchQuery])
@@ -64,9 +63,9 @@ export function MessageView({
     }
   }, [cidUrls])
 
-  const sanitized = useMemo(
-    () => (content.html ? sanitizeEmailHtml(content.html, cidUrls, allowRemote) : null),
-    [content.html, cidUrls, allowRemote],
+  const sanitizedHtml = useMemo(
+    () => (content.html ? sanitizeEmailHtml(content.html, cidUrls) : null),
+    [content.html, cidUrls],
   )
 
   // Inline (cid) images whose OCR text matched the search get outlined in the body.
@@ -144,22 +143,10 @@ export function MessageView({
         />
       )}
 
-      {sanitized?.blockedRemote && !allowRemote && (
-        <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-sm text-amber-200">
-          <span>Remote images were blocked to protect your privacy.</span>
-          <button
-            onClick={() => setAllowRemote(true)}
-            className="shrink-0 rounded-md bg-amber-500/20 px-3 py-1 font-medium transition hover:bg-amber-500/30"
-          >
-            Load remote content
-          </button>
-        </div>
-      )}
-
       <div className="scroll-clear min-h-0 flex-1 overflow-y-auto">
-        {sanitized ? (
+        {sanitizedHtml ? (
           <EmailFrame
-            html={sanitized.html}
+            html={sanitizedHtml}
             terms={terms}
             highlightImageUrls={highlightImageUrls}
             highlightBodyImageIndexes={ocrMatch.bodyImageIndexes}

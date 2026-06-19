@@ -29,8 +29,8 @@ function bodyAndStyles(content: MessageContent): { styles: string; body: string 
   if (content.html) {
     const cidMap = new Map<string, string>()
     for (const img of content.inlineImages) cidMap.set(img.cid, toDataUrl(img.data, img.mime))
-    // Include all images in exports (inline embedded as data URLs, remote allowed).
-    const { html } = sanitizeEmailHtml(content.html, cidMap, true)
+    // Inline images become data URLs; remote images load normally.
+    const html = sanitizeEmailHtml(content.html, cidMap)
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const styles = Array.from(doc.querySelectorAll('style'))
       .map((s) => s.textContent ?? '')
