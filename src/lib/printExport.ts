@@ -128,9 +128,18 @@ export function printHtmlDocument(html: string): void {
     printStarted = true
     clearTimeout(printCap)
     const win = iframe.contentWindow
+    const doc = iframe.contentDocument
     if (!win) {
       cleanup()
       return
+    }
+    // Drop any image that has not finished loading. A stalled remote image
+    // otherwise keeps Chrome's print preview from ever rendering (so the PDF
+    // button appears to do nothing); the ones that loaded still print.
+    if (doc) {
+      for (const img of Array.from(doc.images || [])) {
+        if (!img.complete || img.naturalWidth === 0) img.removeAttribute('src')
+      }
     }
     win.onafterprint = () => {
       clearTimeout(safety)
