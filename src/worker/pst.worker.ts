@@ -787,7 +787,14 @@ const api = {
   async search(query: string, limit = 100): Promise<SearchHit[]> {
     const q = query.trim()
     if (!q) return []
-    const results = searchIndex.search(q, { combineWith: 'AND' })
+    // Terms with a digit (numbers, ids, reference codes) are specific, so match
+    // them exactly. Fuzzy matching on an id finds near-misses that are rarely
+    // wanted and, worse, do not contain the typed text so nothing highlights.
+    // Plain words stay fuzzy for typo tolerance.
+    const results = searchIndex.search(q, {
+      combineWith: 'AND',
+      fuzzy: (term) => (/\d/.test(term) ? false : 0.2),
+    })
     return results.slice(0, limit).map((r) => ({
       sourceId: r.sourceId as string,
       messageId: r.messageId as string,
@@ -875,6 +882,17 @@ const api = {
       attachmentIndexes: attachmentIndexes.sort((a, b) => a - b),
       bodyImageIndexes: bodyImageIndexes.sort((a, b) => a - b),
     }
+  },
+
+  /** Dev diagnostic: stored OCR text for a message's images, keyed by image. */
+  async debugOcr(sourceId: string, messageId: string): Promise<Record<string, string>> {
+    const entry = sources.get(sourceId)
+    if (!entry) return {}
+    const out: Record<string, string> = {}
+    for (const [key, text] of entry.ocr) {
+      if (key.split(':')[1] === messageId) out[key] = text
+    }
+    return out
   },
 
   /** Release a source, its PST handle, and its search-index entries. */
