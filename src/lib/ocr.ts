@@ -21,18 +21,40 @@ export function createOcrWorker(): Promise<TesseractWorker> {
 // (never during PST load), one image at a time.
 const MAX_OCR_PIXELS = 8_000_000
 
+// Privacy browsers (canvas fingerprinting protection) perturb the pixels you
+// read back from a canvas. That silently corrupts the sharpened image, so OCR
+// of small text fails there. Detect it once: draw a known colour and read it
+// back; if it doesn't come back exactly, the browser is scrambling canvas data
+// and we must not sharpen (we recognise the original image instead).
+let canvasReliable: boolean | null = null
+function canvasReadbackReliable(): boolean {
+  if (canvasReliable !== null) return canvasReliable
+  try {
+    if (typeof document === 'undefined') return (canvasReliable = false)
+    const c = document.createElement('canvas')
+    c.width = 4
+    c.height = 4
+    const ctx = c.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return (canvasReliable = false)
+    ctx.fillStyle = 'rgb(10,20,30)'
+    ctx.fillRect(0, 0, 4, 4)
+    const d = ctx.getImageData(1, 1, 1, 1).data
+    return (canvasReliable = d[0] === 10 && d[1] === 20 && d[2] === 30 && d[3] === 255)
+  } catch {
+    return (canvasReliable = false)
+  }
+}
+
 /**
  * Prepare an image for OCR: enlarge it (so small digits/letters have enough
- * pixels to recognise) and convert to high-contrast grayscale. Returns a
- * <canvas> for the engine to read, NOT a re-encoded blob, because the
- * `canvas.toBlob()` / `toDataURL()` step is exactly what privacy browsers
- * (canvas fingerprinting protection) block or scramble. The upscale itself uses
- * `createImageBitmap` + `drawImage`, which those browsers leave alone. Falls
- * back to the original blob if anything is unsupported or fails.
+ * pixels to recognise) and convert to high-contrast grayscale. The engine
+ * decodes the returned blob off the main thread, keeping the UI responsive.
+ * If the browser scrambles canvas readback, or anything is unsupported/fails,
+ * the original blob is returned unchanged.
  */
-async function preprocessForOcr(blob: Blob): Promise<Blob | HTMLCanvasElement> {
+async function preprocessForOcr(blob: Blob): Promise<Blob> {
   try {
-    if (typeof document === 'undefined' || typeof createImageBitmap !== 'function') return blob
+    if (typeof createImageBitmap !== 'function' || !canvasReadbackReliable()) return blob
     const bitmap = await createImageBitmap(blob)
     const w0 = bitmap.width
     const h0 = bitmap.height
@@ -60,7 +82,8 @@ async function preprocessForOcr(blob: Blob): Promise<Blob | HTMLCanvasElement> {
     ctx.filter = 'grayscale(1) contrast(1.25)'
     ctx.drawImage(bitmap, 0, 0, w, h)
     bitmap.close?.()
-    return canvas
+    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    return out || blob
   } catch {
     return blob
   }
