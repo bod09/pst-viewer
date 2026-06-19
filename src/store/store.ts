@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as Comlink from 'comlink'
 import { pst } from '../worker/client'
-import { extractPstsFromZip } from '../lib/zip'
+import { scanZipForPsts } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
 import type { Worker as OcrWorker } from 'tesseract.js'
 import type { FolderNode, MessageContent, MessageMeta, SearchHit, SourceIndex } from '../types'
@@ -217,10 +217,15 @@ export const useApp = create<AppState>((set, get) => {
       ],
     }))
 
-    extractPstsFromZip(file)
-      .then((entries) => {
+    scanZipForPsts(file)
+      .then(({ psts, otherFiles }) => {
         set((s) => ({ sources: s.sources.filter((x) => x.id !== scanId) }))
-        if (entries.length === 0) {
+        if (psts.length === 0) {
+          const sample = otherFiles.slice(0, 5).join(', ')
+          const detail = otherFiles.length
+            ? ` It contains ${otherFiles.length} other file${otherFiles.length === 1 ? '' : 's'}` +
+              `${sample ? ` (${sample}${otherFiles.length > 5 ? ', …' : ''})` : ''}. Did you pick the right zip?`
+            : ' The zip is empty.'
           set((s) => ({
             sources: [
               ...s.sources,
@@ -230,13 +235,13 @@ export const useApp = create<AppState>((set, get) => {
                 size: file.size,
                 label: stripExt(file.name),
                 status: 'error',
-                error: 'No PST/OST files found in this zip.',
+                error: `No PST or OST files found in this zip.${detail}`,
               },
             ],
           }))
           return
         }
-        for (const entry of entries) startSource(entry.file)
+        for (const entry of psts) startSource(entry.file)
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
