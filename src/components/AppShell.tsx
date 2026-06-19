@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../store/store'
 import { DropZone } from './DropZone'
 import { NavPane } from './NavPane'
@@ -7,8 +7,8 @@ import { ReaderPane } from './ReaderPane'
 import { SearchBar } from './SearchBar'
 import { SearchResults } from './SearchResults'
 import { Resizer } from './Resizer'
-import { ACCEPT_ATTR, dragHasFiles, filterAccepted } from '../lib/files'
-import { Plus, Printer, Search, Spinner } from './icons'
+import { dragHasFiles, filterAccepted } from '../lib/files'
+import { Printer, Spinner } from './icons'
 
 export function AppShell() {
   const sources = useApp((s) => s.sources)
@@ -68,11 +68,18 @@ export function AppShell() {
           <Resizer width={navWidth} min={200} max={520} onResize={setNavWidth} />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <ContentHeader />
             <ExportBar />
             <div className="flex min-h-0 flex-1">
-              <div style={{ width: listWidth }} className="h-full min-h-0 shrink-0">
-                {isSearching ? <SearchResults /> : <MessageList />}
+              <div
+                style={{ width: listWidth }}
+                className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-800"
+              >
+                <div className="shrink-0 border-b border-slate-800 bg-slate-900/40 p-2">
+                  <SearchBar />
+                </div>
+                <div className="min-h-0 flex-1">
+                  {isSearching ? <SearchResults /> : <MessageList />}
+                </div>
               </div>
               <Resizer width={listWidth} min={280} max={680} onResize={setListWidth} />
               <div className="min-h-0 min-w-0 flex-1">
@@ -106,20 +113,6 @@ function EmptyState() {
       </div>
       <DropZone />
     </div>
-  )
-}
-
-function ContentHeader() {
-  return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-800 bg-slate-900/60 px-4">
-      <div className="w-full max-w-md">
-        <SearchBar />
-      </div>
-      <div className="ml-auto flex shrink-0 items-center gap-3">
-        <OcrButton />
-        <AddFilesButton />
-      </div>
-    </header>
   )
 }
 
@@ -178,68 +171,5 @@ function ExportBar() {
         )}
       </div>
     </div>
-  )
-}
-
-function OcrButton() {
-  const state = useApp((s) => s.ocrState)
-  const progress = useApp((s) => s.ocrProgress)
-  const enableOcr = useApp((s) => s.enableOcr)
-
-  if (state === 'running') {
-    return (
-      <span className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-300">
-        <Spinner className="h-4 w-4 text-sky-400" />
-        OCR {progress.total ? `${progress.done}/${progress.total}` : '…'}
-      </span>
-    )
-  }
-  if (state === 'done') {
-    return (
-      <span
-        className="flex items-center gap-1.5 rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-300"
-        data-tip="Text inside images is now searchable"
-      >
-        ✓ Images searchable
-      </span>
-    )
-  }
-  return (
-    <button
-      onClick={enableOcr}
-      data-tip="Recognize text inside image attachments so it becomes searchable"
-      className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700/60"
-    >
-      <Search className="h-4 w-4" />
-      {state === 'error' ? 'Retry image OCR' : 'Search images'}
-    </button>
-  )
-}
-
-function AddFilesButton() {
-  const addFiles = useApp((s) => s.addFiles)
-  const input = useRef<HTMLInputElement>(null)
-  return (
-    <>
-      <button
-        onClick={() => input.current?.click()}
-        className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700/60"
-      >
-        <Plus className="h-4 w-4" />
-        Add files
-      </button>
-      <input
-        ref={input}
-        type="file"
-        accept={ACCEPT_ATTR}
-        multiple
-        hidden
-        onChange={(e) => {
-          const accepted = filterAccepted(e.target.files ?? [])
-          if (accepted.length) addFiles(accepted)
-          e.target.value = ''
-        }}
-      />
-    </>
   )
 }

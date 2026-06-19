@@ -3,6 +3,7 @@ import * as Comlink from 'comlink'
 import { pst } from '../worker/client'
 import { extractPstsFromZip } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
+import type { Worker as OcrWorker } from 'tesseract.js'
 import type { FolderNode, MessageContent, MessageMeta, SearchHit, SourceIndex } from '../types'
 
 export type WorkerStatus = 'idle' | 'ready' | 'error'
@@ -18,6 +19,8 @@ export interface Source {
   index?: SourceIndex
   indexProgress?: { done: number; total: number }
   indexed?: boolean
+  ocrProgress?: { done: number; total: number }
+  ocrDone?: boolean
 }
 
 interface Selection {
@@ -44,9 +47,6 @@ interface AppState {
   exportSel: Record<string, { sourceId: string; messageId: string }>
   exporting: boolean
 
-  ocrState: 'idle' | 'running' | 'done' | 'error'
-  ocrProgress: { done: number; total: number }
-
   /** Persisted panel widths (px). */
   navWidth: number
   listWidth: number
@@ -71,8 +71,6 @@ interface AppState {
   clearExport: () => void
   exportSelected: (direction?: 'asc' | 'desc') => void
   exportSingle: (sourceId: string, messageId: string) => void
-
-  enableOcr: () => void
 }
 
 let counter = 0
@@ -135,8 +133,6 @@ function freshState(): Partial<AppState> {
     searching: false,
     exportSel: {},
     exporting: false,
-    ocrState: 'idle',
-    ocrProgress: { done: 0, total: 0 },
   }
 }
 
@@ -151,12 +147,7 @@ export const useApp = create<AppState>((set, get) => {
       label: stripExt(file.name),
       status: 'parsing',
     }
-    // A newly added mailbox isn't covered by a prior OCR run, so re-enable the
-    // OCR action (drop a stale "done" state).
-    set((s) => ({
-      sources: [...s.sources, source],
-      ocrState: s.ocrState === 'done' ? 'idle' : s.ocrState,
-    }))
+    set((s) => ({ sources: [...s.sources, source] }))
 
     pst
       .openSource(id, file)
@@ -196,6 +187,8 @@ export const useApp = create<AppState>((set, get) => {
             set((s) => ({
               sources: s.sources.map((src) => (src.id === id ? { ...src, indexed: true } : src)),
             }))
+            // Then OCR this mailbox's images so their text is searchable too.
+            enqueueOcr(id)
           })
       })
       .catch((err: unknown) => {
@@ -255,6 +248,76 @@ export const useApp = create<AppState>((set, get) => {
       })
   }
 
+  // Automatic background OCR: after a mailbox is indexed, recognize text in its
+  // image attachments so it becomes searchable too. One image at a time, reusing
+  // a single Tesseract worker across queued mailboxes; never blocks the UI.
+  const ocrQueue: string[] = []
+  let ocrActive = false
+  const hasSource = (id: string) => get().sources.some((s) => s.id === id)
+  const patchSource = (id: string, patch: Partial<Source>) =>
+    set((s) => ({ sources: s.sources.map((src) => (src.id === id ? { ...src, ...patch } : src)) }))
+
+  const drainOcr = async () => {
+    if (ocrActive) return
+    ocrActive = true
+    let lib: typeof import('../lib/ocr') | null = null
+    let worker: OcrWorker | null = null
+    try {
+      while (ocrQueue.length) {
+        const sourceId = ocrQueue.shift() as string
+        if (!hasSource(sourceId)) continue
+        let targets: Array<{ messageId: string; index: number }> = []
+        try {
+          targets = await pst.listImageAttachments(sourceId)
+        } catch {
+          /* ignore */
+        }
+        if (!targets.length) {
+          patchSource(sourceId, { ocrDone: true })
+          continue
+        }
+        if (!lib) lib = await import('../lib/ocr').catch(() => null)
+        if (!worker && lib) worker = await lib.createOcrWorker().catch(() => null)
+        if (!lib || !worker) {
+          patchSource(sourceId, { ocrDone: true }) // engine unavailable; skip silently
+          continue
+        }
+        patchSource(sourceId, { ocrProgress: { done: 0, total: targets.length } })
+        for (let i = 0; i < targets.length; i++) {
+          if (!hasSource(sourceId)) break
+          const t = targets[i]
+          try {
+            const data = await pst.getAttachmentData(sourceId, t.messageId, t.index)
+            if (data) {
+              const blob = new Blob([data.data], { type: data.mime || 'image/png' })
+              const text = await lib.recognizeImage(worker, blob)
+              if (text) await pst.addOcrText(sourceId, t.messageId, text)
+            }
+          } catch {
+            /* skip unreadable image */
+          }
+          patchSource(sourceId, { ocrProgress: { done: i + 1, total: targets.length } })
+        }
+        patchSource(sourceId, { ocrDone: true, ocrProgress: undefined })
+        if (get().searchQuery.trim()) get().runSearch()
+      }
+    } finally {
+      if (worker) {
+        try {
+          await worker.terminate()
+        } catch {
+          /* ignore */
+        }
+      }
+      ocrActive = false
+      if (ocrQueue.length) void drainOcr()
+    }
+  }
+  const enqueueOcr = (sourceId: string) => {
+    if (!ocrQueue.includes(sourceId)) ocrQueue.push(sourceId)
+    void drainOcr()
+  }
+
   return {
     workerStatus: 'idle',
     sources: [],
@@ -269,8 +332,6 @@ export const useApp = create<AppState>((set, get) => {
     searching: false,
     exportSel: {},
     exporting: false,
-    ocrState: 'idle',
-    ocrProgress: { done: 0, total: 0 },
     navWidth: readNum(NAV_W_KEY, 272),
     listWidth: readNum(LIST_W_KEY, 380),
 
@@ -456,43 +517,6 @@ export const useApp = create<AppState>((set, get) => {
           if (content) printHtmlDocument(buildPrintDocument([content]))
         })
         .finally(() => set({ exporting: false }))
-    },
-
-    enableOcr: () => {
-      if (get().ocrState === 'running') return
-      set({ ocrState: 'running', ocrProgress: { done: 0, total: 0 } })
-      ;(async () => {
-        const { createOcrWorker, recognizeImage } = await import('../lib/ocr')
-        const worker = await createOcrWorker()
-        try {
-          const targets: Array<{ sourceId: string; messageId: string; index: number }> = []
-          for (const src of get().sources) {
-            if (src.status !== 'ready') continue
-            const list = await pst.listImageAttachments(src.id)
-            for (const t of list) targets.push({ sourceId: src.id, messageId: t.messageId, index: t.index })
-          }
-          set({ ocrProgress: { done: 0, total: targets.length } })
-
-          for (let i = 0; i < targets.length; i++) {
-            const t = targets[i]
-            try {
-              const data = await pst.getAttachmentData(t.sourceId, t.messageId, t.index)
-              if (data) {
-                const blob = new Blob([data.data], { type: data.mime || 'image/png' })
-                const text = await recognizeImage(worker, blob)
-                if (text) await pst.addOcrText(t.sourceId, t.messageId, text)
-              }
-            } catch {
-              // skip an unreadable image
-            }
-            set({ ocrProgress: { done: i + 1, total: targets.length } })
-          }
-          set({ ocrState: 'done' })
-          get().runSearch()
-        } finally {
-          await worker.terminate()
-        }
-      })().catch(() => set({ ocrState: 'error' }))
     },
   }
 })

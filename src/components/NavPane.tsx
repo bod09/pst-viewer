@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp, type Source } from '../store/store'
 import type { FolderNode } from '../types'
-import { Alert, Caret, FolderIcon, Pencil, Spinner, Trash } from './icons'
+import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
+import { Alert, Caret, FolderIcon, Pencil, Plus, Spinner, Trash } from './icons'
 
 export function NavPane() {
   const sources = useApp((s) => s.sources)
@@ -25,14 +26,41 @@ export function NavPane() {
         Mailboxes
       </button>
 
-      {mailboxesOpen && (
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
-          {sources.map((source) => (
-            <SourceTree key={source.id} source={source} />
-          ))}
-        </div>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+        {mailboxesOpen &&
+          sources.map((source) => <SourceTree key={source.id} source={source} />)}
+      </div>
+
+      <NavAddFiles />
     </nav>
+  )
+}
+
+function NavAddFiles() {
+  const addFiles = useApp((s) => s.addFiles)
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <div className="shrink-0 border-t border-slate-800 p-2">
+      <button
+        onClick={() => input.current?.click()}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700/60"
+      >
+        <Plus className="h-4 w-4" />
+        Add files
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept={ACCEPT_ATTR}
+        multiple
+        hidden
+        onChange={(e) => {
+          const accepted = filterAccepted(e.target.files ?? [])
+          if (accepted.length) addFiles(accepted)
+          e.target.value = ''
+        }}
+      />
+    </div>
   )
 }
 
@@ -120,6 +148,15 @@ function SourceTree({ source }: { source: Source }) {
       {source.status === 'ready' && !source.indexed && source.indexProgress && (
         <p className="px-3 pb-1 text-[11px] text-slate-500">Indexing for search… {pct}%</p>
       )}
+      {source.status === 'ready' &&
+        source.indexed &&
+        !source.ocrDone &&
+        source.ocrProgress &&
+        source.ocrProgress.total > 0 && (
+          <p className="px-3 pb-1 text-[11px] text-slate-500">
+            Reading images… {source.ocrProgress.done}/{source.ocrProgress.total}
+          </p>
+        )}
       {source.status === 'ready' && source.index && (
         <ul>
           {source.index.rootFolder.children.map((child) => (
