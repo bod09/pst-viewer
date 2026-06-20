@@ -250,6 +250,10 @@ export const useApp = create<AppState>((set, get) => {
       })
   }
 
+  // Skip images smaller than this for OCR: tracking pixels, spacers and tiny
+  // icons hold no readable text but dominate image counts in real mail.
+  const MIN_OCR_BYTES = 1024
+
   // Automatic background OCR: after a mailbox is indexed, recognize text in its
   // image attachments so it becomes searchable too. One image at a time, reusing
   // a single Tesseract worker across queued mailboxes; never blocks the UI.
@@ -276,12 +280,14 @@ export const useApp = create<AppState>((set, get) => {
         }
         if (!targets.length) {
           patchSource(sourceId, { ocrDone: true })
+          void pst.releaseSearchDocs(sourceId)
           continue
         }
         if (!lib) lib = await import('../lib/ocr').catch(() => null)
         if (!worker && lib) worker = await lib.createOcrWorker().catch(() => null)
         if (!lib || !worker) {
           patchSource(sourceId, { ocrDone: true }) // engine unavailable; skip silently
+          void pst.releaseSearchDocs(sourceId)
           continue
         }
         patchSource(sourceId, { ocrProgress: { done: 0, total: targets.length } })
@@ -293,7 +299,8 @@ export const useApp = create<AppState>((set, get) => {
               t.kind === 'body'
                 ? await pst.getBodyImageData(sourceId, t.messageId, t.ref)
                 : await pst.getAttachmentData(sourceId, t.messageId, t.ref)
-            if (data) {
+            // Skip tiny images: too small to hold readable text (see MIN_OCR_BYTES).
+            if (data && data.data.byteLength >= MIN_OCR_BYTES) {
               // Reuse cached text (keyed by image content) so a re-opened
               // mailbox, or an image shared across emails, is read only once.
               const hash = await hashImageBytes(data.data)
@@ -311,6 +318,7 @@ export const useApp = create<AppState>((set, get) => {
           patchSource(sourceId, { ocrProgress: { done: i + 1, total: targets.length } })
         }
         patchSource(sourceId, { ocrDone: true, ocrProgress: undefined })
+        void pst.releaseSearchDocs(sourceId)
         if (get().searchQuery.trim()) get().runSearch()
       }
     } finally {

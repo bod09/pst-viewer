@@ -842,6 +842,15 @@ const api = {
     }
   },
 
+  /** Free the staged search docs for a source once its OCR pass is done. They
+   *  are kept only so OCR text can be merged into the index; the search index
+   *  keeps its own copy, so dropping them reclaims the duplicated message bodies. */
+  async releaseSearchDocs(sourceId: string): Promise<void> {
+    const entry = sources.get(sourceId)
+    if (!entry) return
+    for (const id of entry.searchIds) searchDocs.delete(id)
+  },
+
   /** Release a source, its PST handle, and its search-index entries. */
   async closeSource(sourceId: string): Promise<void> {
     const entry = sources.get(sourceId)
