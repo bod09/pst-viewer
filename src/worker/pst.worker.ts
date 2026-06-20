@@ -188,12 +188,28 @@ function toMeta(m: IPSTMessage, folderId: string): MessageMeta {
   }
 }
 
+// Internal Outlook containers that hold no readable user mail; hidden from the tree.
+const SYSTEM_FOLDERS = new Set([
+  'search root',
+  'spooler queue',
+  'ipm_views',
+  'ipm_common_views',
+  'deferred action',
+  'deferred action folder',
+  'finder',
+  'freebusy data',
+  'schedule+ ems interpersonal',
+])
+const isSystemFolder = (name: string): boolean =>
+  SYSTEM_FOLDERS.has((name || '').trim().toLowerCase())
+
 async function buildFolderTree(folder: IPSTFolder, entry: SourceEntry): Promise<FolderNode> {
   const id = String(folder.primaryNodeId)
   entry.folders.set(id, folder)
   const subs = await safeAsync(() => folder.getSubFolders(), [] as IPSTFolder[])
   const children: FolderNode[] = []
   for (const sub of subs) {
+    if (isSystemFolder(safe(() => sub.displayName, ''))) continue
     children.push(await buildFolderTree(sub, entry))
   }
   return {
