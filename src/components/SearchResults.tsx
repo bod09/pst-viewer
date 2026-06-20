@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { memo, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useApp } from '../store/store'
 import type { SearchHit } from '../types'
@@ -10,6 +10,7 @@ export function SearchResults() {
   const searching = useApp((s) => s.searching)
   const query = useApp((s) => s.searchQuery)
   const selectedId = useApp((s) => s.selection.messageId)
+  const selectedSourceId = useApp((s) => s.selection.sourceId)
   const openHit = useApp((s) => s.openHit)
   const sources = useApp((s) => s.sources)
   const exportSel = useApp((s) => s.exportSel)
@@ -18,7 +19,11 @@ export function SearchResults() {
   // OCR runs after indexing, so image text becomes searchable a little later.
   const anyOcr = sources.some((s) => s.status === 'ready' && s.indexed && !s.ocrDone)
 
-  const labelFor = (id: string) => sources.find((s) => s.id === id)?.label ?? ''
+  const labelById = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const s of sources) m[s.id] = s.label
+    return m
+  }, [sources])
 
   const parentRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -84,11 +89,11 @@ export function SearchResults() {
                 >
                   <HitRow
                     hit={hit}
-                    sourceLabel={labelFor(hit.sourceId)}
-                    selected={hit.messageId === selectedId}
+                    sourceLabel={labelById[hit.sourceId] ?? ''}
+                    selected={hit.messageId === selectedId && hit.sourceId === selectedSourceId}
                     exportChecked={!!exportSel[`${hit.sourceId}:${hit.messageId}`]}
-                    onClick={() => openHit(hit)}
-                    onToggleExport={() => toggleExport(hit.sourceId, hit.messageId)}
+                    onOpen={openHit}
+                    onToggleExport={toggleExport}
                   />
                 </div>
               )
@@ -100,20 +105,20 @@ export function SearchResults() {
   )
 }
 
-function HitRow({
+const HitRow = memo(function HitRow({
   hit,
   sourceLabel,
   selected,
   exportChecked,
-  onClick,
+  onOpen,
   onToggleExport,
 }: {
   hit: SearchHit
   sourceLabel: string
   selected: boolean
   exportChecked: boolean
-  onClick: () => void
-  onToggleExport: () => void
+  onOpen: (hit: SearchHit) => void
+  onToggleExport: (sourceId: string, messageId: string) => void
 }) {
   return (
     <div
@@ -129,11 +134,11 @@ function HitRow({
         <input
           type="checkbox"
           checked={exportChecked}
-          onChange={onToggleExport}
+          onChange={() => onToggleExport(hit.sourceId, hit.messageId)}
           className="h-4 w-4 cursor-pointer accent-sky-500"
         />
       </label>
-      <button onClick={onClick} className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pr-3 text-left">
+      <button onClick={() => onOpen(hit)} className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pr-3 text-left">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm text-slate-200" data-tip={hit.subject}>
             {hit.subject || '(no subject)'}
@@ -155,4 +160,4 @@ function HitRow({
       </button>
     </div>
   )
-}
+})

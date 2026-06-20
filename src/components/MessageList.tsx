@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react'
+import { memo, useRef, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useApp } from '../store/store'
 import type { MessageMeta } from '../types'
@@ -64,8 +64,9 @@ export function MessageList() {
                     message={message}
                     selected={message.id === selectedId}
                     exportChecked={!!sourceId && !!exportSel[`${sourceId}:${message.id}`]}
-                    onClick={() => selectMessage(message.id)}
-                    onToggleExport={() => sourceId && toggleExport(sourceId, message.id)}
+                    sourceId={sourceId}
+                    onSelect={selectMessage}
+                    onToggleExport={toggleExport}
                   />
                 </div>
               )
@@ -77,18 +78,20 @@ export function MessageList() {
   )
 }
 
-function MessageRow({
+const MessageRow = memo(function MessageRow({
   message,
   selected,
   exportChecked,
-  onClick,
+  sourceId,
+  onSelect,
   onToggleExport,
 }: {
   message: MessageMeta
   selected: boolean
   exportChecked: boolean
-  onClick: () => void
-  onToggleExport: () => void
+  sourceId: string | null
+  onSelect: (messageId: string) => void
+  onToggleExport: (sourceId: string, messageId: string) => void
 }) {
   const from = message.fromName || message.fromEmail || '(unknown sender)'
   return (
@@ -105,11 +108,11 @@ function MessageRow({
         <input
           type="checkbox"
           checked={exportChecked}
-          onChange={onToggleExport}
+          onChange={() => sourceId && onToggleExport(sourceId, message.id)}
           className="h-4 w-4 cursor-pointer accent-sky-500"
         />
       </label>
-      <button onClick={onClick} className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pr-3 text-left">
+      <button onClick={() => onSelect(message.id)} className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pr-3 text-left">
         <div className="flex items-center gap-2">
           {!message.isRead && <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400" />}
           <span
@@ -131,7 +134,7 @@ function MessageRow({
       </button>
     </div>
   )
-}
+})
 
 function Centered({ children }: { children: ReactNode }) {
   return (
