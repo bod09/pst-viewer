@@ -19,6 +19,7 @@ import type {
   AttachmentData,
   AttachmentMeta,
   ContactCard,
+  DistListCard,
   EmbeddedMessageResult,
   FolderNode,
   InlineImage,
@@ -507,6 +508,7 @@ function attachmentName(a: IPSTAttachment, index: number, isEmbedded: boolean): 
 /** Map a PST message class to the item kind we render. */
 function itemKindOf(messageClass: string): MessageContent['itemKind'] {
   const c = (messageClass || '').toLowerCase()
+  if (c.startsWith('ipm.distlist')) return 'distlist'
   if (c.startsWith('ipm.contact')) return 'contact'
   if (c.startsWith('ipm.appointment') || c.startsWith('ipm.schedule.meeting')) return 'appointment'
   return 'email'
@@ -533,48 +535,56 @@ function asAppointment(m: IPSTMessage): IPSTAppointment {
   )
 }
 
+// Drop U+FFFD replacement chars (mis-decoded bytes, e.g. the empty location on a
+// canceled meeting that arrives as a single "replacement character") and trim, so
+// junk-only values are treated as empty and not rendered.
+function cleanStr(s: string): string {
+  return (s || '').replace(/�/g, '').trim()
+}
+const safeStr = (fn: () => string): string => cleanStr(safe(fn, ''))
+
 function buildContactCard(m: IPSTMessage): ContactCard {
   const c = asContact(m)
   const fullName =
-    safe(() => c.fileUnder, '') ||
-    [safe(() => c.givenName, ''), safe(() => c.middleName, ''), safe(() => c.surname, '')]
+    safeStr(() => c.fileUnder) ||
+    [safeStr(() => c.givenName), safeStr(() => c.middleName), safeStr(() => c.surname)]
       .filter(Boolean)
       .join(' ') ||
-    safe(() => m.subject, '')
+    safeStr(() => m.subject)
   const emails: ContactCard['emails'] = []
   const pushEmail = (address: string, label: string) => {
     if (address) emails.push({ label: label || 'Email', address })
   }
-  pushEmail(safe(() => c.email1EmailAddress, ''), safe(() => c.email1DisplayName, ''))
-  pushEmail(safe(() => c.email2EmailAddress, ''), safe(() => c.email2DisplayName, ''))
-  pushEmail(safe(() => c.email3EmailAddress, ''), safe(() => c.email3DisplayName, ''))
+  pushEmail(safeStr(() => c.email1EmailAddress), safeStr(() => c.email1DisplayName))
+  pushEmail(safeStr(() => c.email2EmailAddress), safeStr(() => c.email2DisplayName))
+  pushEmail(safeStr(() => c.email3EmailAddress), safeStr(() => c.email3DisplayName))
   const phones: ContactCard['phones'] = []
   const pushPhone = (value: string, label: string) => {
     if (value) phones.push({ label, value })
   }
-  pushPhone(safe(() => c.businessTelephoneNumber, ''), 'Business')
-  pushPhone(safe(() => c.mobileTelephoneNumber, ''), 'Mobile')
-  pushPhone(safe(() => c.homeTelephoneNumber, ''), 'Home')
-  pushPhone(safe(() => c.otherTelephoneNumber, ''), 'Other')
-  pushPhone(safe(() => c.companyMainPhoneNumber, ''), 'Company')
-  pushPhone(safe(() => c.businessFaxNumber, ''), 'Business fax')
+  pushPhone(safeStr(() => c.businessTelephoneNumber), 'Business')
+  pushPhone(safeStr(() => c.mobileTelephoneNumber), 'Mobile')
+  pushPhone(safeStr(() => c.homeTelephoneNumber), 'Home')
+  pushPhone(safeStr(() => c.otherTelephoneNumber), 'Other')
+  pushPhone(safeStr(() => c.companyMainPhoneNumber), 'Company')
+  pushPhone(safeStr(() => c.businessFaxNumber), 'Business fax')
   const addresses: ContactCard['addresses'] = []
   const pushAddress = (value: string, label: string) => {
     if (value) addresses.push({ label, value })
   }
-  pushAddress(safe(() => c.workAddress, ''), 'Work')
-  pushAddress(safe(() => c.homeAddress, ''), 'Home')
-  pushAddress(safe(() => c.otherAddress, ''), 'Other')
+  pushAddress(safeStr(() => c.workAddress), 'Work')
+  pushAddress(safeStr(() => c.homeAddress), 'Home')
+  pushAddress(safeStr(() => c.otherAddress), 'Other')
   return {
     fullName,
     emails,
     phones,
-    company: safe(() => c.companyName, ''),
-    jobTitle: safe(() => c.title, ''),
-    department: safe(() => c.departmentName, ''),
+    company: safeStr(() => c.companyName),
+    jobTitle: safeStr(() => c.title),
+    department: safeStr(() => c.departmentName),
     addresses,
-    website: safe(() => c.businessHomePage, '') || safe(() => c.personalHomePage, ''),
-    im: safe(() => c.instantMessagingAddress, ''),
+    website: safeStr(() => c.businessHomePage) || safeStr(() => c.personalHomePage),
+    im: safeStr(() => c.instantMessagingAddress),
     birthday: safe(() => c.birthday, null)?.getTime() ?? null,
   }
 }
@@ -582,15 +592,73 @@ function buildContactCard(m: IPSTMessage): ContactCard {
 function buildAppointmentCard(m: IPSTMessage): AppointmentCard {
   const a = asAppointment(m)
   return {
-    location: safe(() => a.location, ''),
+    location: safeStr(() => a.location),
     start: safe(() => a.startTime, null)?.getTime() ?? null,
     end: safe(() => a.endTime, null)?.getTime() ?? null,
     allDay: safe(() => a.subType, false),
-    organizer: safe(() => m.sentRepresentingName, '') || safe(() => m.senderName, ''),
-    requiredAttendees: safe(() => a.requiredAttendees, '') || safe(() => a.toAttendees, ''),
-    optionalAttendees: safe(() => a.ccAttendees, ''),
-    recurrence: safe(() => a.isRecurring, false) ? safe(() => a.recurrencePattern, '') : '',
+    organizer: safeStr(() => m.sentRepresentingName) || safeStr(() => m.senderName),
+    requiredAttendees: safeStr(() => a.requiredAttendees) || safeStr(() => a.toAttendees),
+    optionalAttendees: safeStr(() => a.ccAttendees),
+    recurrence: safe(() => a.isRecurring, false) ? safeStr(() => a.recurrencePattern) : '',
   }
+}
+
+// One-off EntryID (MS-OXCDATA): 4-byte flags + 16-byte UID + 2-byte version + 2-byte
+// flags, then 3 null-terminated strings (display name, address type, email). The
+// 0x8000 flag marks the strings as UTF-16LE rather than 8-bit.
+function parseOneOffMember(bytes: Uint8Array): { name: string; email: string } | null {
+  if (bytes.length < 26) return null
+  const flags = bytes[22] | (bytes[23] << 8)
+  const unicode = (flags & 0x8000) !== 0
+  let off = 24
+  const readStr = (): string => {
+    if (unicode) {
+      let end = off
+      while (end + 1 < bytes.length && !(bytes[end] === 0 && bytes[end + 1] === 0)) end += 2
+      const s = new TextDecoder('utf-16le').decode(bytes.subarray(off, end))
+      off = end + 2
+      return s
+    }
+    let end = off
+    while (end < bytes.length && bytes[end] !== 0) end++
+    const s = new TextDecoder('utf-8').decode(bytes.subarray(off, end))
+    off = end + 1
+    return s
+  }
+  const name = cleanStr(readStr())
+  readStr() // address type (e.g. SMTP)
+  const email = cleanStr(readStr())
+  if (!email.includes('@') && !/[a-z0-9]/i.test(name)) return null // drop garbage
+  return { name, email }
+}
+
+function buildDistListCard(m: IPSTMessage): DistListCard {
+  const name =
+    safeStr(() => (m as unknown as { displayName: string }).displayName) || safeStr(() => m.subject)
+  const members: DistListCard['members'] = []
+  try {
+    const x = m as unknown as {
+      _rootProvider: { getNameToIdMapItem: (key: number, idx: number) => number }
+      _propertyFinder: { findByKey: (key: number) => { value: unknown } | undefined }
+    }
+    // PidLidDistributionListOneOffMembers (0x8054) under PSETID_Address (2).
+    const tag = x._rootProvider.getNameToIdMapItem(0x8054, 2)
+    const value = tag !== -1 ? x._propertyFinder.findByKey(tag)?.value : undefined
+    const list: unknown[] = Array.isArray(value) ? value : value != null ? [value] : []
+    for (const item of list) {
+      const buf =
+        item instanceof ArrayBuffer
+          ? new Uint8Array(item)
+          : item instanceof Uint8Array
+            ? item
+            : null
+      const parsed = buf ? parseOneOffMember(buf) : null
+      if (parsed) members.push(parsed)
+    }
+  } catch {
+    // best-effort; the name alone is still useful
+  }
+  return { name, members }
 }
 
 async function buildMessageContent(
@@ -667,6 +735,7 @@ async function buildMessageContent(
     headers: safe(() => m.transportMessageHeaders, ''),
     contact: kind === 'contact' ? buildContactCard(m) : undefined,
     appointment: kind === 'appointment' ? buildAppointmentCard(m) : undefined,
+    distlist: kind === 'distlist' ? buildDistListCard(m) : undefined,
   }
 }
 

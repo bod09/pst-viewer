@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { AppointmentCard, ContactCard } from '../types'
+import type { AppointmentCard, ContactCard, DistListCard } from '../types'
 import { formatDate } from '../lib/format'
 
 function dateOnly(ms: number): string {
@@ -107,6 +107,49 @@ export function AppointmentCardView({ appointment }: { appointment: AppointmentC
           <Row label="Optional">{appointment.optionalAttendees}</Row>
         )}
         {appointment.recurrence && <Row label="Recurrence">{appointment.recurrence}</Row>}
+      </div>
+    </div>
+  )
+}
+
+/** A distribution list / contact group (IPM.DistList) shown as a card. */
+export function DistListCardView({
+  distlist,
+  notes,
+}: {
+  distlist: DistListCard
+  notes?: string | null
+}) {
+  const n = distlist.members.length
+  return (
+    <div className="mx-auto max-w-2xl p-6">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6">
+        <h2 className="text-xl font-semibold text-slate-100">
+          {distlist.name || '(unnamed group)'}
+        </h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Distribution list{n > 0 ? `, ${n} member${n === 1 ? '' : 's'}` : ''}
+        </p>
+        {n > 0 && (
+          <ul className="mt-4 divide-y divide-slate-800/70">
+            {distlist.members.map((mem, i) => (
+              <li key={i} className="flex flex-col py-2">
+                {mem.name && <span className="text-sm text-slate-200">{mem.name}</span>}
+                {mem.email && (
+                  <a href={`mailto:${mem.email}`} className="text-sm text-sky-400 hover:underline">
+                    {mem.email}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {notes && notes.trim() && (
+          <div className="mt-4 border-t border-slate-800/70 pt-3">
+            <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">Notes</div>
+            <p className="whitespace-pre-wrap text-sm text-slate-300">{notes}</p>
+          </div>
+        )}
       </div>
     </div>
   )

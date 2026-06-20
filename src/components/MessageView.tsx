@@ -10,7 +10,7 @@ import { EmailFrame } from './EmailFrame'
 import { ImageLightbox } from './ImageLightbox'
 import { AttachmentBar } from './attachments/AttachmentBar'
 import { HeadersDialog } from './HeadersDialog'
-import { AppointmentCardView, ContactCardView } from './ItemCard'
+import { AppointmentCardView, ContactCardView, DistListCardView } from './ItemCard'
 import { Code, Download, Printer } from './icons'
 
 export function MessageView({
@@ -175,6 +175,8 @@ export function MessageView({
       <div className="scroll-clear min-h-0 flex-1 overflow-y-auto">
         {content.itemKind === 'contact' && content.contact ? (
           <ContactCardView contact={content.contact} notes={content.text} />
+        ) : content.itemKind === 'distlist' && content.distlist ? (
+          <DistListCardView distlist={content.distlist} notes={content.text} />
         ) : (
           <>
             {content.itemKind === 'appointment' && content.appointment && (

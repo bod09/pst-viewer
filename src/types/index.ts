@@ -65,7 +65,7 @@ export interface AttachmentData {
 }
 
 /** What kind of Outlook item a message is, so non-email items render properly. */
-export type ItemKind = 'email' | 'contact' | 'appointment'
+export type ItemKind = 'email' | 'contact' | 'appointment' | 'distlist'
 
 /** A contact (IPM.Contact) rendered as a card instead of an email. */
 export interface ContactCard {
@@ -93,6 +93,12 @@ export interface AppointmentCard {
   recurrence: string
 }
 
+/** A distribution list / contact group (IPM.DistList) rendered as a card. */
+export interface DistListCard {
+  name: string
+  members: { name: string; email: string }[]
+}
+
 /** Full content of a single message, fetched lazily when it is opened. */
 export interface MessageContent {
   /** Item type, so contacts/appointments can render as cards instead of email. */
@@ -116,6 +122,8 @@ export interface MessageContent {
   contact?: ContactCard
   /** Present when itemKind is 'appointment'. */
   appointment?: AppointmentCard
+  /** Present when itemKind is 'distlist'. */
+  distlist?: DistListCard
 }
 
 /** Result of opening an embedded (nested) email attachment. */
