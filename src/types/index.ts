@@ -65,7 +65,14 @@ export interface AttachmentData {
 }
 
 /** What kind of Outlook item a message is, so non-email items render properly. */
-export type ItemKind = 'email' | 'contact' | 'appointment' | 'distlist'
+export type ItemKind =
+  | 'email'
+  | 'contact'
+  | 'appointment'
+  | 'distlist'
+  | 'task'
+  | 'journal'
+  | 'note'
 
 /** A contact (IPM.Contact) rendered as a card instead of an email. */
 export interface ContactCard {
@@ -97,6 +104,24 @@ export interface AppointmentCard {
 export interface DistListCard {
   name: string
   members: { name: string; email: string }[]
+}
+
+/** A task (IPM.Task) rendered as a card. */
+export interface TaskCard {
+  status: string
+  percentComplete: number
+  startDate: number | null
+  dueDate: number | null
+  dateCompleted: number | null
+  owner: string
+  priority: 'low' | 'high' | null
+}
+
+/** A journal entry (IPM.Activity) rendered as a card. */
+export interface JournalCard {
+  entryType: string
+  start: number | null
+  durationMinutes: number
 }
 
 /** Full content of a single message, fetched lazily when it is opened. */
@@ -132,6 +157,10 @@ export interface MessageContent {
   appointment?: AppointmentCard
   /** Present when itemKind is 'distlist'. */
   distlist?: DistListCard
+  /** Present when itemKind is 'task'. */
+  task?: TaskCard
+  /** Present when itemKind is 'journal'. */
+  journal?: JournalCard
 }
 
 /** Result of opening an embedded (nested) email attachment. */

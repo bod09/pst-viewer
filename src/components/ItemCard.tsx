@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { AppointmentCard, ContactCard, DistListCard } from '../types'
+import type { AppointmentCard, ContactCard, DistListCard, JournalCard, TaskCard } from '../types'
 import { formatDate } from '../lib/format'
 
 function dateOnly(ms: number): string {
@@ -150,6 +150,38 @@ export function DistListCardView({
             <p className="whitespace-pre-wrap text-sm text-slate-300">{notes}</p>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** A task (IPM.Task) shown as a card; its description renders below. */
+export function TaskCardView({ task }: { task: TaskCard }) {
+  const status =
+    task.status +
+    (task.percentComplete > 0 && task.percentComplete < 100 ? ` (${task.percentComplete}%)` : '')
+  return (
+    <div className="border-b border-slate-800 bg-slate-900/40 px-6 py-4">
+      <div className="space-y-0.5">
+        {task.status && <Row label="Status">{status}</Row>}
+        {task.dueDate != null && <Row label="Due">{dateOnly(task.dueDate)}</Row>}
+        {task.startDate != null && <Row label="Start">{dateOnly(task.startDate)}</Row>}
+        {task.dateCompleted != null && <Row label="Completed">{dateOnly(task.dateCompleted)}</Row>}
+        {task.owner && <Row label="Owner">{task.owner}</Row>}
+        {task.priority && <Row label="Priority">{task.priority === 'high' ? 'High' : 'Low'}</Row>}
+      </div>
+    </div>
+  )
+}
+
+/** A journal entry (IPM.Activity) shown as a card; its body renders below. */
+export function JournalCardView({ journal }: { journal: JournalCard }) {
+  return (
+    <div className="border-b border-slate-800 bg-slate-900/40 px-6 py-4">
+      <div className="space-y-0.5">
+        {journal.entryType && <Row label="Type">{journal.entryType}</Row>}
+        {journal.start != null && <Row label="When">{formatDate(journal.start)}</Row>}
+        {journal.durationMinutes > 0 && <Row label="Duration">{journal.durationMinutes} min</Row>}
       </div>
     </div>
   )

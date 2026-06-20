@@ -6,12 +6,14 @@ import {
   openPst,
   PSTAppointment,
   PSTContact,
+  PSTTask,
   type IPSTAppointment,
   type IPSTAttachment,
   type IPSTContact,
   type IPSTFile,
   type IPSTFolder,
   type IPSTMessage,
+  type IPSTTask,
   type ReadFileApi,
 } from '@hiraokahypertools/pst-extractor'
 import type {
@@ -23,6 +25,7 @@ import type {
   EmbeddedMessageResult,
   FolderNode,
   InlineImage,
+  JournalCard,
   MessageContent,
   MessageMeta,
   OcrMatchResult,
@@ -30,6 +33,7 @@ import type {
   RecipientInfo,
   SearchHit,
   SourceIndex,
+  TaskCard,
 } from '../types'
 
 /**
@@ -531,6 +535,9 @@ function attachmentName(a: IPSTAttachment, index: number, isEmbedded: boolean): 
 function itemKindOf(messageClass: string): MessageContent['itemKind'] {
   const c = (messageClass || '').toLowerCase()
   if (c.startsWith('ipm.distlist')) return 'distlist'
+  if (c.startsWith('ipm.task')) return 'task'
+  if (c.startsWith('ipm.activity')) return 'journal'
+  if (c.startsWith('ipm.stickynote')) return 'note'
   if (c.startsWith('ipm.contact')) return 'contact'
   if (c.startsWith('ipm.appointment') || c.startsWith('ipm.schedule.meeting')) return 'appointment'
   return 'email'
@@ -683,6 +690,59 @@ function buildDistListCard(m: IPSTMessage): DistListCard {
   return { name, members }
 }
 
+type TaskObj = IPSTTask & { taskStartDate: Date | null; taskDueDate: Date | null }
+function asTask(m: IPSTMessage): TaskObj {
+  const x = m as unknown as Record<string, unknown>
+  return new (PSTTask as unknown as new (...a: unknown[]) => TaskObj)(
+    x._rootProvider,
+    x._node,
+    x._subNode,
+    x._propertyFinder,
+  )
+}
+
+function buildTaskCard(m: IPSTMessage): TaskCard {
+  const t = asTask(m)
+  const statuses = ['Not started', 'In progress', 'Completed', 'Waiting on someone else', 'Deferred']
+  const pc = safe(() => t.percentComplete, 0)
+  const pr = safe(() => m.priority, 0)
+  return {
+    status: statuses[safe(() => t.taskStatus, 0)] || '',
+    percentComplete: Math.round(pc <= 1 ? pc * 100 : pc),
+    startDate: safe(() => t.taskStartDate, null)?.getTime() ?? null,
+    dueDate: safe(() => t.taskDueDate, null)?.getTime() ?? null,
+    dateCompleted: safe(() => t.taskDateCompleted, null)?.getTime() ?? null,
+    owner: safeStr(() => t.taskOwner),
+    priority: pr === 1 ? 'high' : pr === -1 ? 'low' : null,
+  }
+}
+
+// Read a named MAPI property value via the message internals (named id under set index).
+function readNamedValue(m: IPSTMessage, namedId: number, setIdx: number): unknown {
+  try {
+    const x = m as unknown as {
+      _rootProvider: { getNameToIdMapItem: (key: number, idx: number) => number }
+      _propertyFinder: { findByKey: (key: number) => { value: unknown } | undefined }
+    }
+    const tag = x._rootProvider.getNameToIdMapItem(namedId, setIdx)
+    return tag !== -1 ? x._propertyFinder.findByKey(tag)?.value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function buildJournalCard(m: IPSTMessage): JournalCard {
+  // PSETID_Log (6): LogTypeDesc 34578, LogType 34560, LogStart 34566, LogDuration 34567.
+  const entryType = cleanStr(
+    String(readNamedValue(m, 34578, 6) ?? readNamedValue(m, 34560, 6) ?? ''),
+  )
+  const startVal = readNamedValue(m, 34566, 6)
+  const start =
+    startVal instanceof Date ? startVal.getTime() : typeof startVal === 'number' ? startVal : null
+  const durVal = readNamedValue(m, 34567, 6)
+  return { entryType, start, durationMinutes: typeof durVal === 'number' ? durVal : 0 }
+}
+
 async function buildMessageContent(
   m: IPSTMessage,
   msgId: string,
@@ -775,6 +835,8 @@ async function buildMessageContent(
     contact: kind === 'contact' ? buildContactCard(m) : undefined,
     appointment: kind === 'appointment' ? buildAppointmentCard(m) : undefined,
     distlist: kind === 'distlist' ? buildDistListCard(m) : undefined,
+    task: kind === 'task' ? buildTaskCard(m) : undefined,
+    journal: kind === 'journal' ? buildJournalCard(m) : undefined,
   }
 }
 

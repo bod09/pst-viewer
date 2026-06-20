@@ -10,7 +10,13 @@ import { EmailFrame } from './EmailFrame'
 import { ImageLightbox } from './ImageLightbox'
 import { AttachmentBar } from './attachments/AttachmentBar'
 import { HeadersDialog } from './HeadersDialog'
-import { AppointmentCardView, ContactCardView, DistListCardView } from './ItemCard'
+import {
+  AppointmentCardView,
+  ContactCardView,
+  DistListCardView,
+  JournalCardView,
+  TaskCardView,
+} from './ItemCard'
 import { Code, Download, Printer } from './icons'
 
 export function MessageView({
@@ -202,6 +208,10 @@ export function MessageView({
           <>
             {content.itemKind === 'appointment' && content.appointment && (
               <AppointmentCardView appointment={content.appointment} />
+            )}
+            {content.itemKind === 'task' && content.task && <TaskCardView task={content.task} />}
+            {content.itemKind === 'journal' && content.journal && (
+              <JournalCardView journal={content.journal} />
             )}
             {sanitizedHtml ? (
               <EmailFrame
