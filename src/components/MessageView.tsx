@@ -9,7 +9,8 @@ import { queryTerms, termsRegExp } from '../lib/highlight'
 import { EmailFrame } from './EmailFrame'
 import { ImageLightbox } from './ImageLightbox'
 import { AttachmentBar } from './attachments/AttachmentBar'
-import { Printer } from './icons'
+import { HeadersDialog } from './HeadersDialog'
+import { Code, Printer } from './icons'
 
 export function MessageView({
   sourceId,
@@ -21,6 +22,7 @@ export function MessageView({
   content: MessageContent
 }) {
   const [preview, setPreview] = useState<string | null>(null)
+  const [showHeaders, setShowHeaders] = useState(false)
   const searchQuery = useApp((s) => s.searchQuery)
   const terms = useMemo(() => queryTerms(searchQuery), [searchQuery])
   const [ocrMatch, setOcrMatch] = useState<OcrMatchResult>({
@@ -97,16 +99,27 @@ export function MessageView({
       <div className="border-b border-slate-800 px-6 py-4">
         <div className="flex items-start justify-between gap-3">
           <h1 className="min-w-0 text-lg font-semibold text-slate-100">{content.subject}</h1>
-          {!exportSelectionActive && (
-            <button
-              onClick={() => exportSingle(sourceId, messageId)}
-              disabled={exporting}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700/60 disabled:opacity-60"
-              data-tip="Save this email as PDF"
-            >
-              <Printer className="h-4 w-4" /> PDF
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {content.headers && (
+              <button
+                onClick={() => setShowHeaders(true)}
+                className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700/60"
+                data-tip="View the message's original headers"
+              >
+                <Code className="h-4 w-4" /> Headers
+              </button>
+            )}
+            {!exportSelectionActive && (
+              <button
+                onClick={() => exportSingle(sourceId, messageId)}
+                disabled={exporting}
+                className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700/60 disabled:opacity-60"
+                data-tip="Save this email as PDF"
+              >
+                <Printer className="h-4 w-4" /> PDF
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-3 space-y-1 text-sm">
           <HeaderLine label="From">
@@ -161,6 +174,9 @@ export function MessageView({
         )}
       </div>
       {preview && <ImageLightbox src={preview} onClose={() => setPreview(null)} />}
+      {showHeaders && (
+        <HeadersDialog headers={content.headers} onClose={() => setShowHeaders(false)} />
+      )}
     </section>
   )
 }
