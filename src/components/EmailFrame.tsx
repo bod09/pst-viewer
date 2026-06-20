@@ -140,6 +140,21 @@ export function EmailFrame({
     const iframe = ref.current
     if (!iframe) return
     const timers: number[] = []
+    let healTimer = 0
+    const reloadAttempts = new WeakMap<HTMLImageElement, number>()
+    // A remote image that displayed fine can later drop out (some hosts rate-limit
+    // or expire links). Force a fresh request for the same URL, which the service
+    // worker serves from its image cache; capped so a dead image cannot loop.
+    const reloadIfBroken = (img: HTMLImageElement) => {
+      const src = img.getAttribute('src') ?? ''
+      if (!/^https?:/i.test(src) || !img.complete || img.naturalWidth > 0) return
+      const n = reloadAttempts.get(img) ?? 0
+      if (n >= 4) return
+      reloadAttempts.set(img, n + 1)
+      const url = img.src
+      img.src = ''
+      img.src = url
+    }
 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement | null
@@ -223,10 +238,30 @@ export function EmailFrame({
           head.appendChild(style)
         }
         doc.addEventListener('click', onClick)
-        // Re-measure as each image finishes (remote images arrive over time).
+        // Re-measure as each image finishes (remote images arrive over time),
+        // and auto-reload any remote image that errors out.
         for (const img of Array.from(doc.images || [])) {
           if (!img.complete) img.addEventListener('load', measure, { once: true })
+          // Only remote images can drop out; local cid/data images are stable.
+          if (!/^https?:/i.test(img.getAttribute('src') ?? '')) continue
+          // A successful (re)load clears the retry count, so the cap limits
+          // consecutive failures, not total drops over a long-open email.
+          img.addEventListener('load', () => reloadAttempts.delete(img))
+          img.addEventListener('error', () =>
+            window.setTimeout(() => {
+              reloadIfBroken(img)
+              measure()
+            }, 300),
+          )
+          reloadIfBroken(img) // catch images that already failed before setup ran
         }
+        // Backstop: periodically restore any remote image that has dropped out.
+        healTimer = window.setInterval(() => {
+          const d = iframe.contentDocument
+          if (!d) return
+          for (const img of Array.from(d.images || [])) reloadIfBroken(img)
+          measure()
+        }, 8000)
       }
       measure()
       highlight()
@@ -243,6 +278,7 @@ export function EmailFrame({
     return () => {
       iframe.removeEventListener('load', setup)
       for (const t of timers) clearTimeout(t)
+      clearInterval(healTimer)
     }
     // `terms` is captured via the stable `termsKey`; depending on the array
     // itself would re-run this effect on every render.
