@@ -21,7 +21,7 @@ No setup needed. Open the link, drop in a `.pst`, `.ost`, or `.zip`, and start r
 
 ## Features
 
-- **Open** `.pst`, `.ost`, and `.zip` files (zips are scanned automatically for mailboxes, including nested ones), by drag-and-drop or browse.
+- **Open** `.pst`, `.ost`, and `.zip` files (zips are scanned automatically for mailboxes, including nested ones), by drag-and-drop or browse. Password-protected mailboxes open too: an Outlook PST password gates Outlook's own UI, not the data, so none is needed to read the mailbox here.
 - **Multiple mailboxes** at once, with smart auto-labels and inline rename.
 - **1:1 email viewing**: full HTML rendering (and RTF-encapsulated HTML) with inline images, in a sandboxed frame. Remote images load like a normal mail client, with invisible tracking pixels (1x1 / hidden images) stripped. **Click any image to view it full screen** and zoom to actual size.
 - **Attachment previews**: images, PDF, text/code, audio, video, nested emails, **spreadsheets** (`.xlsx/.xls/.csv/.ods`), and **Word** (`.docx`). Anything else is one-click downloadable.
@@ -60,7 +60,6 @@ React + Vite + TypeScript + Tailwind. PST parsing via [`@hiraokahypertools/pst-e
 
 ## Known limitations
 
-- **Password-protected / encrypted** PSTs are not supported.
 - **PowerPoint (`.pptx`/`.ppt`)** and **OpenDocument text (`.odt`)** attachments are download-only (no reliable in-browser renderer).
 - Corrupt mailboxes show a clear per-source error; other loaded mailboxes keep working.
 - Search becomes available for a mailbox once its background indexing finishes (a progress indicator is shown).
