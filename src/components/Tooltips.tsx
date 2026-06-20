@@ -10,7 +10,7 @@ interface Tip {
 
 /**
  * One global, theme-styled tooltip. Any element with a `data-tip` attribute
- * gets a custom tooltip on hover — no native browser tooltips.
+ * gets a custom tooltip on hover, with no native browser tooltips.
  */
 export function Tooltips() {
   const [tip, setTip] = useState<Tip | null>(null)

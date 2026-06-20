@@ -124,7 +124,7 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-/** A random-access reader over a File — reads only the bytes asked for. */
+/** A random-access reader over a File: reads only the bytes asked for. */
 function makeReader(file: File): ReadFileApi {
   return {
     readFile: async (buffer, offset, length, position) => {
@@ -154,15 +154,6 @@ async function safeAsync<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-function longToNumber(value: unknown): number {
-  if (value == null) return 0
-  if (typeof value === 'number') return value
-  const maybe = value as { toNumber?: () => number }
-  if (typeof maybe.toNumber === 'function') return maybe.toNumber()
-  const n = Number(value)
-  return Number.isFinite(n) ? n : 0
-}
-
 function toMeta(m: IPSTMessage, folderId: string): MessageMeta {
   const delivery = safe(() => m.messageDeliveryTime, null)
   const submit = safe(() => m.clientSubmitTime, null)
@@ -179,7 +170,6 @@ function toMeta(m: IPSTMessage, folderId: string): MessageMeta {
     hasAttachments: safe(() => m.hasAttachments, false),
     isRead: safe(() => m.isRead, true),
     messageClass: safe(() => m.messageClass, ''),
-    size: safe(() => longToNumber(m.messageSize), 0),
   }
 }
 
@@ -627,7 +617,6 @@ const api = {
       rootFolder: rootNode,
       totalMessages,
       suggestedLabel: ownerName || stripExt(file.name),
-      ownerName,
     }
   },
 
@@ -649,44 +638,6 @@ const api = {
       }
     }
     return metas
-  },
-
-  /** Dev diagnostic: report which body formats a message actually has. */
-  async debugBody(
-    sourceId: string,
-    messageId: string,
-  ): Promise<{
-    htmlLen: number
-    textLen: number
-    rtfLen: number
-    rtfHead: string
-    props: string[]
-  } | null> {
-    const entry = sources.get(sourceId)
-    const m = entry?.messages.get(messageId)
-    if (!m) return null
-    const html = safe(() => m.bodyHTML, '')
-    const text = safe(() => m.body, '')
-    const rtf = safe(() => m.bodyRTF, '')
-    const props = safe(
-      () =>
-        m
-          .getAllProperties()
-          .map((p) => `${p.key.toString(16).padStart(4, '0')}:${p.type.toString(16)}`),
-      [],
-    )
-    return {
-      htmlLen: html.length,
-      textLen: text.length,
-      rtfLen: rtf.length,
-      rtfHead: rtf.slice(0, 240),
-      props,
-    }
-  },
-
-  /** Dev diagnostic: run the RTF de-encapsulator on a raw RTF string. */
-  async debugRtf(rtf: string): Promise<{ html: string; text: string }> {
-    return deEncapsulateRtf(rtf)
   },
 
   /** Fetch full body + headers + inline images + attachment list for one message. */
@@ -882,17 +833,6 @@ const api = {
       attachmentIndexes: attachmentIndexes.sort((a, b) => a - b),
       bodyImageIndexes: bodyImageIndexes.sort((a, b) => a - b),
     }
-  },
-
-  /** Dev diagnostic: stored OCR text for a message's images, keyed by image. */
-  async debugOcr(sourceId: string, messageId: string): Promise<Record<string, string>> {
-    const entry = sources.get(sourceId)
-    if (!entry) return {}
-    const out: Record<string, string> = {}
-    for (const [key, text] of entry.ocr) {
-      if (key.split(':')[1] === messageId) out[key] = text
-    }
-    return out
   },
 
   /** Release a source, its PST handle, and its search-index entries. */

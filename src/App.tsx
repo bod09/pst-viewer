@@ -5,8 +5,6 @@ import { pst } from './worker/client'
 import { useApp } from './store/store'
 
 export default function App() {
-  const setWorkerStatus = useApp((s) => s.setWorkerStatus)
-
   // Dev-only: expose the store + worker so we can drive the app from tests.
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -16,21 +14,10 @@ export default function App() {
     }
   }, [])
 
-  // Prove the parsing worker + Comlink pipeline is alive.
+  // Warm up the parsing worker + Comlink pipeline early so the first file opens fast.
   useEffect(() => {
-    let alive = true
-    pst
-      .ping()
-      .then((r) => {
-        if (alive) setWorkerStatus(r === 'pong' ? 'ready' : 'error')
-      })
-      .catch(() => {
-        if (alive) setWorkerStatus('error')
-      })
-    return () => {
-      alive = false
-    }
-  }, [setWorkerStatus])
+    void pst.ping()
+  }, [])
 
   return (
     <>

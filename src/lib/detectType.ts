@@ -142,7 +142,7 @@ function sniff(bytes: Uint8Array): string {
     if (tag === 'WAVE') return 'wav'
     if (tag === 'AVI ') return 'avi'
   }
-  // ISO-BMFF (mp4/mov/m4a) — 'ftyp' at offset 4
+  // ISO-BMFF (mp4/mov/m4a): 'ftyp' at offset 4
   if (bytes.length >= 12 && String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]) === 'ftyp') {
     const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11])
     if (brand.startsWith('qt')) return 'mov'
@@ -168,7 +168,7 @@ export function detectType(
 ): DetectedType {
   const nameExt = extFromName(name)
 
-  // 1) Trust magic numbers when available — but keep the OOXML/Office ext from
+  // 1) Trust magic numbers when available, but keep the OOXML/Office ext from
   //    the filename, since a zip signature alone can't tell docx from xlsx.
   if (bytes && bytes.length >= 4) {
     const sig = sniff(bytes)

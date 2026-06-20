@@ -1,4 +1,4 @@
-/** Types that cross the Web Worker boundary — must be plain & serializable. */
+/** Types that cross the Web Worker boundary; must be plain & serializable. */
 
 export interface FolderNode {
   id: string
@@ -21,7 +21,6 @@ export interface MessageMeta {
   hasAttachments: boolean
   isRead: boolean
   messageClass: string
-  size: number
 }
 
 export interface SourceIndex {
@@ -29,7 +28,6 @@ export interface SourceIndex {
   totalMessages: number
   /** Best-effort human label for the mailbox (owner name, etc.). */
   suggestedLabel: string
-  ownerName: string
 }
 
 export interface RecipientInfo {

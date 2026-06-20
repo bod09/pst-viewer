@@ -7,7 +7,6 @@ import { getCachedOcr, putCachedOcr, hashImageBytes } from '../lib/ocrCache'
 import type { Worker as OcrWorker } from 'tesseract.js'
 import type { FolderNode, MessageContent, MessageMeta, OcrTarget, SearchHit, SourceIndex } from '../types'
 
-export type WorkerStatus = 'idle' | 'ready' | 'error'
 export type SourceStatus = 'parsing' | 'ready' | 'error'
 
 export interface Source {
@@ -31,7 +30,6 @@ interface Selection {
 }
 
 interface AppState {
-  workerStatus: WorkerStatus
   sources: Source[]
   selection: Selection
   messages: MessageMeta[]
@@ -53,8 +51,6 @@ interface AppState {
   listWidth: number
   setNavWidth: (w: number) => void
   setListWidth: (w: number) => void
-
-  setWorkerStatus: (s: WorkerStatus) => void
   addFiles: (files: File[]) => void
   removeSource: (id: string) => void
   clearSources: () => void
@@ -118,7 +114,7 @@ function dedupeLabel(label: string, fileName: string, sources: Source[], selfId:
   return `${withFile} (${i})`
 }
 
-/** The "no mailboxes loaded" state — resets all per-session state (but not
+/** The "no mailboxes loaded" state: resets all per-session state (but not
  *  persisted panel widths or worker status). */
 function freshState(): Partial<AppState> {
   return {
@@ -335,7 +331,6 @@ export const useApp = create<AppState>((set, get) => {
   }
 
   return {
-    workerStatus: 'idle',
     sources: [],
     selection: { sourceId: null, folderId: null, messageId: null },
     messages: [],
@@ -361,8 +356,6 @@ export const useApp = create<AppState>((set, get) => {
       writeNum(LIST_W_KEY, v)
       set({ listWidth: v })
     },
-
-    setWorkerStatus: (workerStatus) => set({ workerStatus }),
 
     addFiles: (files) => {
       for (const file of files) {
