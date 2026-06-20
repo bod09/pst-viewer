@@ -142,15 +142,23 @@ export function EmailFrame({
     const timers: number[] = []
     let healTimer = 0
     const reloadAttempts = new WeakMap<HTMLImageElement, number>()
-    // A remote image that displayed fine can later drop out (some hosts rate-limit
-    // or expire links). Force a fresh request for the same URL, which the service
-    // worker serves from its image cache; capped so a dead image cannot loop.
-    const reloadIfBroken = (img: HTMLImageElement) => {
+    const firstSeen = new WeakMap<HTMLImageElement, number>()
+    const STUCK_MS = 7000
+    // A remote image can fail even from a reliable host: the service worker that
+    // proxies these requests is shut down when idle, and the first request after
+    // that can either error or just hang (stay pending forever). Re-request the
+    // same URL, which wakes the worker and serves from its cache. Handles both a
+    // broken load AND one stuck pending too long; capped so a dead image cannot loop.
+    const healImage = (img: HTMLImageElement) => {
       const src = img.getAttribute('src') ?? ''
-      if (!/^https?:/i.test(src) || !img.complete || img.naturalWidth > 0) return
+      if (!/^https?:/i.test(src)) return
+      const broken = img.complete && img.naturalWidth === 0
+      const stuck = !img.complete && Date.now() - (firstSeen.get(img) ?? Date.now()) > STUCK_MS
+      if (!broken && !stuck) return
       const n = reloadAttempts.get(img) ?? 0
       if (n >= 4) return
       reloadAttempts.set(img, n + 1)
+      firstSeen.set(img, Date.now())
       const url = img.src
       img.src = ''
       img.src = url
@@ -244,22 +252,23 @@ export function EmailFrame({
           if (!img.complete) img.addEventListener('load', measure, { once: true })
           // Only remote images can drop out; local cid/data images are stable.
           if (!/^https?:/i.test(img.getAttribute('src') ?? '')) continue
+          firstSeen.set(img, Date.now())
           // A successful (re)load clears the retry count, so the cap limits
           // consecutive failures, not total drops over a long-open email.
           img.addEventListener('load', () => reloadAttempts.delete(img))
           img.addEventListener('error', () =>
             window.setTimeout(() => {
-              reloadIfBroken(img)
+              healImage(img)
               measure()
             }, 300),
           )
-          reloadIfBroken(img) // catch images that already failed before setup ran
+          healImage(img) // catch images that already failed before setup ran
         }
-        // Backstop: periodically restore any remote image that has dropped out.
+        // Backstop: periodically restore any remote image that errored or stuck.
         healTimer = window.setInterval(() => {
           const d = iframe.contentDocument
           if (!d) return
-          for (const img of Array.from(d.images || [])) reloadIfBroken(img)
+          for (const img of Array.from(d.images || [])) healImage(img)
           measure()
         }, 8000)
       }
