@@ -2,6 +2,7 @@ import * as Comlink from 'comlink'
 import MiniSearch from 'minisearch'
 import { queryTerms } from '../lib/highlight'
 import { parseTnef, type TnefAttachment } from '../lib/tnef'
+import { extractSmime } from '../lib/smime'
 import {
   Consts,
   openPst,
@@ -835,6 +836,34 @@ async function buildMessageContent(
   const flagRaw = safe(() => m.getProperty(0x1090)?.value, 0)
   const flagVal = typeof flagRaw === 'number' ? flagRaw : 0
 
+  // S/MIME: when the email body is empty, recover it from a smime.p7m (opaque
+  // signed). Encrypted messages cannot be read without the recipient's key.
+  let smimeBody: { html: string | null; text: string | null } | null = null
+  let smimeNote: string | null = null
+  if (!bodies.html && !bodies.text) {
+    const p7mIdx = attachmentHandles.findIndex((a) => {
+      const n = (safe(() => a.longFilename, '') || safe(() => a.filename, '')).toLowerCase()
+      const mt = safe(() => a.mimeTag, '').toLowerCase()
+      return n === 'smime.p7m' || mt === 'application/pkcs7-mime' || mt === 'application/x-pkcs7-mime'
+    })
+    if (p7mIdx !== -1) {
+      const raw = safe(() => attachmentHandles[p7mIdx].fileData, undefined)
+      if (raw && raw.byteLength > 0) {
+        const res = await extractSmime(raw)
+        if (res.kind === 'signed') {
+          smimeBody = res.body
+          const at = attachments.findIndex((x) => x.index === p7mIdx)
+          if (at !== -1) attachments.splice(at, 1)
+        } else if (res.kind === 'encrypted') {
+          smimeNote =
+            "This is an encrypted S/MIME message. It cannot be read without the recipient's private key."
+        }
+      }
+    }
+  }
+  const finalHtml = bodies.html || smimeBody?.html || null
+  const finalText = bodies.text || tnefBody || smimeBody?.text || smimeNote || null
+
   return {
     itemKind: kind,
     categories: safe(() => m.colorCategories, [])
@@ -858,8 +887,8 @@ async function buildMessageContent(
     cc,
     bcc,
     date: (delivery ?? submit)?.getTime() ?? null,
-    html: bodies.html || null,
-    text: bodies.text || tnefBody || null,
+    html: finalHtml,
+    text: finalText,
     inlineImages,
     attachments,
     headers: safe(() => m.transportMessageHeaders, ''),
