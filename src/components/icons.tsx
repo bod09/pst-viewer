@@ -137,3 +137,122 @@ export function Code({ className }: IconProps) {
     </svg>
   )
 }
+
+export function Inbox({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path
+        d="M4 13 6 5a1 1 0 0 1 1-.8h10a1 1 0 0 1 1 .8l2 8v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5Z"
+        strokeLinejoin="round"
+      />
+      <path d="M4 13h4l1.5 2h5L16 13h4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function Send({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path d="M22 2 11 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7Z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function Drafts({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" strokeLinejoin="round" />
+      <path d="M18.5 3.5a2 2 0 0 1 3 3L14 14l-4 1 1-4 7.5-7.5Z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function Outbox({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path
+        d="M4 13h4l1.5 2h5L16 13h4v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5Z"
+        strokeLinejoin="round"
+      />
+      <path d="M12 11V3m0 0 3 3m-3-3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function Junk({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="m7 7 10 10" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Archive({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" strokeLinejoin="round" />
+      <path d="M10 12h4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Chat({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path
+        d="M20 11.5a7.5 7.5 0 0 1-10.7 6.8L4 20l1.7-4.5A7.5 7.5 0 1 1 20 11.5Z"
+        strokeLinejoin="round"
+      />
+      <path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Calendar({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 3v4M16 3v4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Users({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20a6 6 0 0 1 12 0" strokeLinecap="round" />
+      <path d="M16 5.2a3 3 0 0 1 0 5.6M21 20a6 6 0 0 0-4.5-5.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Tasks({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path d="M9 6h11M9 12h11M9 18h11" strokeLinecap="round" />
+      <path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function NoteIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path d="M5 4h14a1 1 0 0 1 1 1v9l-6 6H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M20 14h-5a1 1 0 0 0-1 1v5" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function Journal({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.7}>
+      <path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M9 3v18M5 8h4M5 12h4M5 16h4" strokeLinecap="round" />
+    </svg>
+  )
+}

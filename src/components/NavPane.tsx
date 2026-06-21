@@ -2,7 +2,52 @@ import { useRef, useState } from 'react'
 import { useApp, type Source } from '../store/store'
 import type { FolderNode } from '../types'
 import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
-import { Alert, Caret, FolderIcon, Pencil, Plus, Spinner, Trash } from './icons'
+import {
+  Alert,
+  Archive,
+  Calendar,
+  Caret,
+  Chat,
+  Drafts,
+  FolderIcon,
+  Inbox,
+  Journal,
+  Junk,
+  NoteIcon,
+  Outbox,
+  Pencil,
+  Plus,
+  Send,
+  Spinner,
+  Tasks,
+  Trash,
+  Users,
+} from './icons'
+
+/** Pick a folder icon: by name for the well-known mail folders (which all share
+ *  the IPF.Note class), then by container class for the item-type folders. */
+function folderIcon(node: FolderNode) {
+  const name = node.name.trim().toLowerCase()
+  const cls = (node.containerClass || '').toLowerCase()
+
+  if (name === 'inbox') return Inbox
+  if (name === 'sent items' || name === 'sent' || name === 'sent mail') return Send
+  if (name === 'deleted items' || name === 'deleted' || name === 'trash') return Trash
+  if (name === 'drafts' || name === 'draft') return Drafts
+  if (name === 'outbox') return Outbox
+  if (name === 'junk email' || name === 'junk e-mail' || name === 'junk' || name === 'spam')
+    return Junk
+  if (name === 'archive') return Archive
+  if (name === 'conversation history') return Chat
+
+  if (cls.startsWith('ipf.appointment') || name === 'calendar') return Calendar
+  if (cls.startsWith('ipf.contact') || name === 'contacts') return Users
+  if (cls.startsWith('ipf.task') || name === 'tasks') return Tasks
+  if (cls.startsWith('ipf.stickynote') || name === 'notes') return NoteIcon
+  if (cls.startsWith('ipf.journal') || name === 'journal') return Journal
+
+  return FolderIcon
+}
 
 export function NavPane() {
   const sources = useApp((s) => s.sources)
@@ -184,6 +229,7 @@ function FolderRow({
   const toggleFolder = useApp((s) => s.toggleFolder)
   const selectFolder = useApp((s) => s.selectFolder)
   const hasChildren = node.children.length > 0
+  const Icon = folderIcon(node)
 
   return (
     <li>
@@ -209,7 +255,7 @@ function FolderRow({
         ) : (
           <span className="w-[18px] shrink-0" />
         )}
-        <FolderIcon className="h-4 w-4 shrink-0 text-slate-400" />
+        <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
         </span>
