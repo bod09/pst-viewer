@@ -209,24 +209,28 @@ function SourceTree({ source }: { source: Source }) {
             {source.label}
           </span>
         )}
-        {source.status === 'parsing' && <Spinner className="h-3.5 w-3.5 text-sky-400" />}
-        {source.status === 'error' && <Alert className="h-4 w-4 text-rose-400" />}
-        {source.status === 'ready' && !editing && (
-          <button
-            onClick={startEdit}
-            className="text-slate-400 opacity-0 transition hover:text-slate-200 group-hover:opacity-100"
-            data-tip="Rename"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+        {source.status === 'parsing' && <Spinner className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
+        {source.status === 'error' && <Alert className="h-4 w-4 shrink-0 text-rose-400" />}
+        {!editing && (
+          <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+            {source.status === 'ready' && (
+              <button
+                onClick={startEdit}
+                className="text-slate-400 transition hover:text-slate-200"
+                data-tip="Rename"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              onClick={() => removeSource(source.id)}
+              className="text-slate-400 transition hover:text-rose-400"
+              data-tip="Remove mailbox"
+            >
+              <Trash className="h-4 w-4" />
+            </button>
+          </div>
         )}
-        <button
-          onClick={() => removeSource(source.id)}
-          className="text-slate-400 opacity-0 transition hover:text-rose-400 group-hover:opacity-100"
-          data-tip="Remove mailbox"
-        >
-          <Trash className="h-4 w-4" />
-        </button>
       </div>
 
       {source.status === 'parsing' && (
@@ -249,13 +253,25 @@ function SourceTree({ source }: { source: Source }) {
             Reading images… {source.ocrProgress.done}/{source.ocrProgress.total}
           </p>
         )}
-      {source.status === 'ready' && source.index && (
-        <ul className="ml-3 space-y-px border-l border-slate-700/60 pl-2">
-          {sortFolders(source.index.rootFolder.children).map((child) => (
-            <FolderRow key={child.id} sourceId={source.id} node={child} depth={0} />
-          ))}
-        </ul>
-      )}
+      {source.status === 'ready' &&
+        source.index &&
+        (() => {
+          const children = sortFolders(source.index.rootFolder.children)
+          const gutter = children.some((c) => c.children.length > 0)
+          return (
+            <ul className="ml-5 space-y-px border-l border-slate-700/60 pl-1.5">
+              {children.map((child) => (
+                <FolderRow
+                  key={child.id}
+                  sourceId={source.id}
+                  node={child}
+                  depth={0}
+                  gutter={gutter}
+                />
+              ))}
+            </ul>
+          )
+        })()}
     </div>
   )
 }
@@ -264,10 +280,12 @@ function FolderRow({
   sourceId,
   node,
   depth,
+  gutter,
 }: {
   sourceId: string
   node: FolderNode
   depth: number
+  gutter: boolean
 }) {
   const expanded = useApp((s) => s.expanded[`${sourceId}:${node.id}`] ?? false)
   const selected = useApp(
@@ -277,6 +295,8 @@ function FolderRow({
   const selectFolder = useApp((s) => s.selectFolder)
   const hasChildren = node.children.length > 0
   const Icon = folderIcon(node)
+  const childNodes = sortFolders(node.children)
+  const childGutter = childNodes.some((c) => c.children.length > 0)
 
   return (
     <li>
@@ -289,19 +309,22 @@ function FolderRow({
         }`}
         style={{ paddingLeft: depth * 14 + 2 }}
       >
-        {hasChildren ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              toggleFolder(sourceId, node.id)
-            }}
-            className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-200"
-          >
-            <Caret className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-          </button>
-        ) : (
-          <span className="w-[18px] shrink-0" />
-        )}
+        {gutter &&
+          (hasChildren ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFolder(sourceId, node.id)
+              }}
+              className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-200"
+            >
+              <Caret
+                className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              />
+            </button>
+          ) : (
+            <span className="w-[18px] shrink-0" />
+          ))}
         <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
@@ -314,9 +337,15 @@ function FolderRow({
       </div>
 
       {expanded && hasChildren && (
-        <ul>
-          {sortFolders(node.children).map((child) => (
-            <FolderRow key={child.id} sourceId={sourceId} node={child} depth={depth + 1} />
+        <ul className="space-y-px">
+          {childNodes.map((child) => (
+            <FolderRow
+              key={child.id}
+              sourceId={sourceId}
+              node={child}
+              depth={depth + 1}
+              gutter={childGutter}
+            />
           ))}
         </ul>
       )}
