@@ -250,7 +250,7 @@ function SourceTree({ source }: { source: Source }) {
           </p>
         )}
       {source.status === 'ready' && source.index && (
-        <ul>
+        <ul className="ml-3 space-y-px border-l border-slate-700/60 pl-2">
           {sortFolders(source.index.rootFolder.children).map((child) => (
             <FolderRow key={child.id} sourceId={source.id} node={child} depth={0} />
           ))}
@@ -284,10 +284,10 @@ function FolderRow({
         onClick={() => selectFolder(sourceId, node.id)}
         className={`flex cursor-pointer items-center gap-1 rounded-md py-1 pr-2 text-sm transition ${
           selected
-            ? 'border-l-2 border-l-sky-400 bg-sky-500/15 font-medium text-sky-100'
-            : 'border-l-2 border-l-transparent text-slate-300 hover:bg-slate-800/60'
+            ? 'bg-sky-500/15 font-medium text-sky-100'
+            : 'text-slate-300 hover:bg-slate-800/60'
         }`}
-        style={{ paddingLeft: depth * 14 + 6 }}
+        style={{ paddingLeft: depth * 14 + 2 }}
       >
         {hasChildren ? (
           <button
