@@ -7,6 +7,7 @@ import { Paperclip, Spinner } from './icons'
 
 export function MessageList() {
   const messages = useApp((s) => s.messages)
+  const unreadable = useApp((s) => s.messagesUnreadable)
   const loading = useApp((s) => s.messagesLoading)
   const sourceId = useApp((s) => s.selection.sourceId)
   const folderId = useApp((s) => s.selection.folderId)
@@ -33,6 +34,13 @@ export function MessageList() {
           <span className="text-[11px] text-slate-400">{messages.length}</span>
         )}
       </div>
+
+      {unreadable > 0 && (
+        <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-300">
+          {unreadable} {unreadable === 1 ? 'message' : 'messages'} here could not be read. The file
+          may be damaged; everything readable is still shown.
+        </div>
+      )}
 
       {!folderId ? (
         <Centered>Select a folder</Centered>

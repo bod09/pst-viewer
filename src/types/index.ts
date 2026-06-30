@@ -30,6 +30,13 @@ export interface SourceIndex {
   suggestedLabel: string
 }
 
+/** A folder's messages plus how many of its items could not be read (damage). */
+export interface FolderMessages {
+  messages: MessageMeta[]
+  /** Count of messages skipped because they could not be parsed, 0 when clean. */
+  unreadable: number
+}
+
 export interface RecipientInfo {
   name: string
   email: string

@@ -17,6 +17,8 @@ export interface Source {
   label: string
   status: SourceStatus
   error?: string
+  /** Raw low-level parser error behind a friendly `error`, shown on hover. */
+  errorDetail?: string
   index?: SourceIndex
   indexProgress?: { done: number; total: number }
   indexed?: boolean
@@ -34,6 +36,8 @@ interface AppState {
   sources: Source[]
   selection: Selection
   messages: MessageMeta[]
+  /** Count of messages in the open folder that could not be read (file damage). */
+  messagesUnreadable: number
   messagesLoading: boolean
   messageContent: MessageContent | null
   contentLoading: boolean
@@ -123,6 +127,7 @@ function freshState(): Partial<AppState> {
     sources: [],
     selection: { sourceId: null, folderId: null, messageId: null },
     messages: [],
+    messagesUnreadable: 0,
     messagesLoading: false,
     messageContent: null,
     contentLoading: false,
@@ -191,10 +196,16 @@ export const useApp = create<AppState>((set, get) => {
           })
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
+        const raw = err instanceof Error ? err.message : String(err)
+        // The parser fails hard when a file's core structures are damaged. Give
+        // the user something actionable rather than a low-level reader message.
+        const message =
+          'This file could not be opened as a mailbox. It may be corrupt, incomplete, ' +
+          'or not a PST/OST. If you know it is a mailbox, repair it first with Microsoft’s ' +
+          'Inbox Repair Tool (scanpst.exe) and open the repaired copy.'
         set((s) => ({
           sources: s.sources.map((src) =>
-            src.id === id ? { ...src, status: 'error', error: message } : src,
+            src.id === id ? { ...src, status: 'error', error: message, errorDetail: raw } : src,
           ),
         }))
       })
@@ -344,6 +355,7 @@ export const useApp = create<AppState>((set, get) => {
     sources: [],
     selection: { sourceId: null, folderId: null, messageId: null },
     messages: [],
+    messagesUnreadable: 0,
     messagesLoading: false,
     messageContent: null,
     contentLoading: false,
@@ -419,22 +431,23 @@ export const useApp = create<AppState>((set, get) => {
       set({
         selection: { sourceId, folderId, messageId: null },
         messages: [],
+        messagesUnreadable: 0,
         messagesLoading: true,
         messageContent: null,
         contentLoading: false,
       })
       pst
         .getFolderMessages(sourceId, folderId)
-        .then((messages) => {
+        .then(({ messages, unreadable }) => {
           const sel = get().selection
           if (sel.sourceId !== sourceId || sel.folderId !== folderId) return
           messages.sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
-          set({ messages, messagesLoading: false })
+          set({ messages, messagesUnreadable: unreadable, messagesLoading: false })
         })
         .catch(() => {
           const sel = get().selection
           if (sel.sourceId === sourceId && sel.folderId === folderId) {
-            set({ messages: [], messagesLoading: false })
+            set({ messages: [], messagesUnreadable: 0, messagesLoading: false })
           }
         })
     },

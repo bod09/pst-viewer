@@ -63,7 +63,7 @@ React + Vite + TypeScript + Tailwind. PST parsing via [`@hiraokahypertools/pst-e
 
 - **PowerPoint (`.pptx`/`.ppt`)** and **OpenDocument text (`.odt`)** attachments are download-only (no reliable in-browser renderer).
 - **Encrypted S/MIME** messages can't be read without the recipient's private key (signed S/MIME is decoded and shown).
-- Corrupt mailboxes show a clear per-source error; other loaded mailboxes keep working.
+- **Corrupt or damaged mailboxes**: a partly-damaged file still opens and shows everything that is readable; messages that cannot be parsed are skipped and counted (a "N messages could not be read" note appears on the affected folder). A badly damaged file (broken header, truncated, or damaged internal index) cannot be opened at all: this is a read-only viewer, not a repair tool. To recover one of those, repair it first with Microsoft's free Inbox Repair Tool (`scanpst.exe`, bundled with Outlook), then open the repaired copy here. Either way, other loaded mailboxes keep working.
 - Search becomes available for a mailbox once its background indexing finishes (a progress indicator is shown).
 - **Text inside images can be misread by OCR**, especially when it is very small or low-contrast. It also becomes searchable a little after the rest of a mailbox, since it is read in the background (a "Reading images" progress indicator shows while it runs).
 - **Privacy browsers with canvas fingerprinting protection** (some hardened Chromium forks) scramble canvas pixel data, which breaks the image sharpening OCR relies on, so text inside images may not be searchable there. Body and text search still work everywhere. For image OCR, use a standard Chromium, or allow canvas/fingerprinting for the site.

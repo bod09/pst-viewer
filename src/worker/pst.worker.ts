@@ -25,6 +25,7 @@ import type {
   ContactCard,
   DistListCard,
   EmbeddedMessageResult,
+  FolderMessages,
   FolderNode,
   InlineImage,
   JournalCard,
@@ -993,24 +994,36 @@ const api = {
     }
   },
 
-  /** Load metadata for every message in one folder. */
-  async getFolderMessages(sourceId: string, folderId: string): Promise<MessageMeta[]> {
+  /** Load metadata for every message in one folder, reporting any that could
+   *  not be read (so a damaged file shows what survives, plus a salvage count). */
+  async getFolderMessages(sourceId: string, folderId: string): Promise<FolderMessages> {
     const entry = sources.get(sourceId)
-    if (!entry) return []
+    if (!entry) return { messages: [], unreadable: 0 }
     const folder = entry.folders.get(folderId)
-    if (!folder) return []
+    if (!folder) return { messages: [], unreadable: 0 }
 
-    const emails = await safeAsync(() => folder.getEmails(), [] as IPSTMessage[])
+    let emails: IPSTMessage[] = []
+    let enumFailed = false
+    try {
+      emails = await folder.getEmails()
+    } catch {
+      enumFailed = true
+    }
     const metas: MessageMeta[] = []
+    let failed = 0
     for (const m of emails) {
       try {
         entry.messages.set(String(m.primaryNodeId), m)
         metas.push(toMeta(m, folderId))
       } catch {
         // Skip an individual unreadable message rather than failing the folder.
+        failed++
       }
     }
-    return metas
+    // If the whole table was unreadable, fall back to the folder's declared count
+    // so the user still learns the contents are damaged.
+    const unreadable = enumFailed ? Math.max(safe(() => folder.contentCount, 0), 1) : failed
+    return { messages: metas, unreadable }
   },
 
   /** Fetch full body + headers + inline images + attachment list for one message. */

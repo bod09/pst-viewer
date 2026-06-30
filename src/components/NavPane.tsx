@@ -237,7 +237,10 @@ function SourceTree({ source }: { source: Source }) {
         <p className="px-3 pb-1 text-[11px] text-slate-400">Reading folders…</p>
       )}
       {source.status === 'error' && (
-        <p className="px-3 pb-1 text-[11px] text-rose-400" data-tip={source.error}>
+        <p
+          className="px-3 pb-1 text-[11px] leading-snug text-rose-400"
+          data-tip={source.errorDetail || source.error}
+        >
           {source.error || 'Could not open this file.'}
         </p>
       )}
