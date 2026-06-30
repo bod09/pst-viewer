@@ -31,7 +31,7 @@ jobs:
           # Project site is served from https://<user>.github.io/pst-viewer/
           # Change this if you rename the repo or use a custom domain (then '/').
           BASE_PATH: /pst-viewer/
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
