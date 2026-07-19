@@ -23,7 +23,18 @@ jobs:
         if: >-
           steps.meta.outputs.update-type == 'version-update:semver-patch' ||
           steps.meta.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --squash "$PR_URL"
+        # Retry a few times: enabling auto-merge occasionally hits a transient
+        # GitHub API error, which would otherwise strand a safe update.
+        run: |
+          for attempt in 1 2 3; do
+            if gh pr merge --auto --squash "$PR_URL"; then
+              exit 0
+            fi
+            echo "Attempt $attempt to enable auto-merge failed; retrying in 20s..."
+            sleep 20
+          done
+          echo "Could not enable auto-merge after 3 attempts."
+          exit 1
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
