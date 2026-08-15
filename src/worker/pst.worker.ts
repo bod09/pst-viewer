@@ -1067,7 +1067,6 @@ const api = {
       )
     }
 
-    const folderId = 'msgfolder'
     const entry: SourceEntry = {
       file: { close: async () => {} } as unknown as IPSTFile,
       folders: new Map(),
@@ -1078,8 +1077,40 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
     }
-    if (failed) entry.extraUnreadable = new Map([[folderId, failed]])
-    entry.folders.set(folderId, createMsgFolder(folderId, 'Messages', messages))
+
+    // Standalone files carry no folder tree, so bucket items into Outlook-like
+    // folders by item type (a saved contact lands under Contacts, and so on).
+    const BUCKETS: Record<ReturnType<typeof itemKindOf>, { id: string; name: string; cls: string }> = {
+      email: { id: 'msgfolder', name: 'Messages', cls: 'IPF.Note' },
+      contact: { id: 'msgcontacts', name: 'Contacts', cls: 'IPF.Contact' },
+      distlist: { id: 'msgcontacts', name: 'Contacts', cls: 'IPF.Contact' },
+      appointment: { id: 'msgcalendar', name: 'Calendar', cls: 'IPF.Appointment' },
+      task: { id: 'msgtasks', name: 'Tasks', cls: 'IPF.Task' },
+      note: { id: 'msgnotes', name: 'Notes', cls: 'IPF.StickyNote' },
+      journal: { id: 'msgjournal', name: 'Journal', cls: 'IPF.Journal' },
+    }
+    const grouped = new Map<string, { name: string; cls: string; items: IPSTMessage[] }>()
+    for (const m of messages) {
+      const b = BUCKETS[itemKindOf(safe(() => m.messageClass, ''))]
+      const g = grouped.get(b.id) ?? { name: b.name, cls: b.cls, items: [] }
+      g.items.push(m)
+      grouped.set(b.id, g)
+    }
+
+    const children: FolderNode[] = []
+    for (const id of ['msgfolder', 'msgcalendar', 'msgcontacts', 'msgtasks', 'msgnotes', 'msgjournal']) {
+      const g = grouped.get(id)
+      if (!g) continue
+      entry.folders.set(id, createMsgFolder(id, g.name, g.items))
+      children.push({
+        id,
+        name: g.name,
+        containerClass: g.cls,
+        messageCount: g.items.length,
+        children: [],
+      })
+    }
+    if (failed && children.length) entry.extraUnreadable = new Map([[children[0].id, failed]])
     sources.set(sourceId, entry)
 
     const label =
@@ -1090,15 +1121,7 @@ const api = {
         name: label,
         containerClass: '',
         messageCount: 0,
-        children: [
-          {
-            id: folderId,
-            name: 'Messages',
-            containerClass: 'IPF.Note',
-            messageCount: messages.length,
-            children: [],
-          },
-        ],
+        children,
       },
       totalMessages: messages.length,
       suggestedLabel: label,
