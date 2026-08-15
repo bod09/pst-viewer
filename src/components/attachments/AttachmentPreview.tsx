@@ -47,6 +47,8 @@ export function AttachmentPreview({ sourceId, messageId, meta, onClose }: Previe
         <div className="min-h-0 flex-1">
           {meta.isEmbeddedMessage ? (
             <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} />
+          ) : /\.msg$/i.test(meta.name) ? (
+            <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} attachedMsg />
           ) : (
             <FileView sourceId={sourceId} messageId={messageId} meta={meta} />
           )}
@@ -338,10 +340,13 @@ function EmbeddedView({
   sourceId,
   messageId,
   index,
+  attachedMsg = false,
 }: {
   sourceId: string
   messageId: string
   index: number
+  /** The attachment is a regular .msg file rather than a true embedded message. */
+  attachedMsg?: boolean
 }) {
   const [result, setResult] = useState<EmbeddedMessageResult | null>(null)
   const [error, setError] = useState(false)
@@ -350,8 +355,9 @@ function EmbeddedView({
     let alive = true
     setResult(null)
     setError(false)
-    pst
-      .getEmbeddedMessageContent(sourceId, messageId, index)
+    ;(attachedMsg
+      ? pst.openAttachedMsg(sourceId, messageId, index)
+      : pst.getEmbeddedMessageContent(sourceId, messageId, index))
       .then((r) => {
         if (!alive) return
         if (!r) setError(true)
@@ -363,7 +369,7 @@ function EmbeddedView({
     return () => {
       alive = false
     }
-  }, [sourceId, messageId, index])
+  }, [sourceId, messageId, index, attachedMsg])
 
   if (error) return <Centered>Could not open this embedded message.</Centered>
   if (!result) {

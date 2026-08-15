@@ -161,7 +161,15 @@ function SourceTree({ source }: { source: Source }) {
   const renameSource = useApp((s) => s.renameSource)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(source.label)
-  const isZip = source.fileName.toLowerCase().endsWith('.zip')
+  const name = source.fileName.toLowerCase()
+  const badge = name.endsWith('.zip')
+    ? 'ZIP'
+    : name.endsWith('.ost')
+      ? 'OST'
+      : /\.msg( files)?$/.test(name)
+        ? 'MSG'
+        : 'PST'
+  const isZip = badge === 'ZIP'
 
   const startEdit = () => {
     setDraft(source.label)
@@ -186,7 +194,7 @@ function SourceTree({ source }: { source: Source }) {
             isZip ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'
           }`}
         >
-          {isZip ? 'ZIP' : 'PST'}
+          {badge}
         </span>
         {editing ? (
           <input

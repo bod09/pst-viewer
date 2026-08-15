@@ -55,6 +55,7 @@ const EXT_MIME: Record<string, string> = {
   htm: 'text/html',
   ics: 'text/calendar',
   eml: 'message/rfc822',
+  msg: 'application/vnd.ms-outlook',
   // audio
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
@@ -85,7 +86,7 @@ const ARCHIVE = new Set(['zip', '7z', 'rar', 'gz', 'bz2'])
 
 export function categoryForExt(ext: string): PreviewCategory {
   if (ext === 'pdf') return 'pdf'
-  if (ext === 'eml') return 'email'
+  if (ext === 'eml' || ext === 'msg') return 'email'
   if (IMAGE.has(ext)) return 'image'
   if (TEXT.has(ext)) return 'text'
   if (AUDIO.has(ext)) return 'audio'
@@ -176,8 +177,12 @@ export function detectType(
       const ext = OFFICE.has(nameExt) ? nameExt : 'zip'
       return { ext, mime: EXT_MIME[ext] ?? 'application/zip', category: categoryForExt(ext) }
     }
+    // An OLE signature alone can't tell doc/xls/ppt/msg apart; use the name.
     if (sig === 'doc' && OFFICE.has(nameExt)) {
       return { ext: nameExt, mime: EXT_MIME[nameExt]!, category: 'office' }
+    }
+    if (sig === 'doc' && nameExt === 'msg') {
+      return { ext: 'msg', mime: EXT_MIME.msg, category: 'email' }
     }
     if (sig) {
       return { ext: sig, mime: EXT_MIME[sig] ?? declaredMime ?? '', category: categoryForExt(sig) }

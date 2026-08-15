@@ -141,20 +141,17 @@ function freshState(): Partial<AppState> {
 }
 
 export const useApp = create<AppState>((set, get) => {
-  /** Open one PST/OST File: register a source, parse it, then index it. */
-  const startSource = (file: File) => {
+  /** Register a source and run the shared open → index → OCR flow. */
+  const openSource = (
+    seed: { fileName: string; size: number; label: string },
+    open: (id: string) => Promise<SourceIndex>,
+    failMessage: string,
+  ) => {
     const id = uid()
-    const source: Source = {
-      id,
-      fileName: file.name,
-      size: file.size,
-      label: stripExt(file.name),
-      status: 'parsing',
-    }
+    const source: Source = { id, ...seed, status: 'parsing' }
     set((s) => ({ sources: [...s.sources, source] }))
 
-    pst
-      .openSource(id, file)
+    open(id)
       .then((index) => {
         set((s) => ({
           sources: s.sources.map((src) =>
@@ -163,7 +160,7 @@ export const useApp = create<AppState>((set, get) => {
                   ...src,
                   status: 'ready' as const,
                   index,
-                  label: dedupeLabel(index.suggestedLabel || src.label, file.name, s.sources, id),
+                  label: dedupeLabel(index.suggestedLabel || src.label, seed.fileName, s.sources, id),
                 }
               : src,
           ),
@@ -197,18 +194,46 @@ export const useApp = create<AppState>((set, get) => {
       })
       .catch((err: unknown) => {
         const raw = err instanceof Error ? err.message : String(err)
-        // The parser fails hard when a file's core structures are damaged. Give
-        // the user something actionable rather than a low-level reader message.
-        const message =
-          'This file could not be opened as a mailbox. It may be corrupt, incomplete, ' +
-          'or not a PST/OST. If you know it is a mailbox, repair it first with Microsoft’s ' +
-          'Inbox Repair Tool (scanpst.exe) and open the repaired copy.'
         set((s) => ({
           sources: s.sources.map((src) =>
-            src.id === id ? { ...src, status: 'error', error: message, errorDetail: raw } : src,
+            src.id === id ? { ...src, status: 'error', error: failMessage, errorDetail: raw } : src,
           ),
         }))
       })
+  }
+
+  /** Open one PST/OST File: register a source, parse it, then index it. */
+  const startSource = (file: File) =>
+    openSource(
+      { fileName: file.name, size: file.size, label: stripExt(file.name) },
+      (id) => pst.openSource(id, file),
+      // The parser fails hard when a file's core structures are damaged. Give
+      // the user something actionable rather than a low-level reader message.
+      'This file could not be opened as a mailbox. It may be corrupt, incomplete, ' +
+        'or not a PST/OST. If you know it is a mailbox, repair it first with Microsoft’s ' +
+        'Inbox Repair Tool (scanpst.exe) and open the repaired copy.',
+    )
+
+  /** Open a batch of standalone .msg files as one synthetic mailbox. */
+  const startMsgSource = (files: File[]) => {
+    if (!files.length) return
+    const seed =
+      files.length === 1
+        ? { fileName: files[0].name, size: files[0].size, label: stripExt(files[0].name) }
+        : {
+            fileName: `${files.length} .msg files`,
+            size: files.reduce((n, f) => n + f.size, 0),
+            label: 'Messages',
+          }
+    openSource(
+      seed,
+      (id) => pst.openMsgSource(id, files),
+      (files.length === 1
+        ? 'This file could not be opened as an Outlook message.'
+        : 'None of these files could be opened as Outlook messages.') +
+        ' It may be corrupt, or a different format saved with a .msg name ' +
+        '(an .eml, for example, is not a .msg).',
+    )
   }
 
   /** Scan a zip for PST/OST files and open each one found. */
@@ -228,9 +253,9 @@ export const useApp = create<AppState>((set, get) => {
     }))
 
     scanZipForPsts(file)
-      .then(({ psts, otherFiles }) => {
+      .then(({ psts, msgs, otherFiles }) => {
         set((s) => ({ sources: s.sources.filter((x) => x.id !== scanId) }))
-        if (psts.length === 0) {
+        if (psts.length === 0 && msgs.length === 0) {
           const sample = otherFiles.slice(0, 5).join(', ')
           const detail = otherFiles.length
             ? ` It contains ${otherFiles.length} other file${otherFiles.length === 1 ? '' : 's'}` +
@@ -245,13 +270,14 @@ export const useApp = create<AppState>((set, get) => {
                 size: file.size,
                 label: stripExt(file.name),
                 status: 'error',
-                error: `No PST or OST files found in this zip.${detail}`,
+                error: `No PST, OST, or MSG files found in this zip.${detail}`,
               },
             ],
           }))
           return
         }
         for (const entry of psts) startSource(entry.file)
+        startMsgSource(msgs.map((entry) => entry.file))
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
@@ -380,10 +406,15 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     addFiles: (files) => {
+      // Group .msg files dropped together into one "Messages" mailbox instead
+      // of creating a source per file.
+      const msgs: File[] = []
       for (const file of files) {
         if (/\.zip$/i.test(file.name)) handleZip(file)
+        else if (/\.msg$/i.test(file.name)) msgs.push(file)
         else startSource(file)
       }
+      startMsgSource(msgs)
     },
 
     removeSource: (id) => {

@@ -16,6 +16,8 @@
   "type": "module",
   "dependencies": {
     "@hiraokahypertools/pst-extractor": "^0.5.0-alpha.2",
+    "@kenjiuno/decompressrtf": "^0.1.4",
+    "@kenjiuno/msgreader": "^1.28.0",
     "@tanstack/react-virtual": "^3.14.9",
     "comlink": "^4.4.2",
     "docx-preview": "^0.4.0",

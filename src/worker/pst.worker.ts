@@ -4,6 +4,13 @@ import { queryTerms } from '../lib/highlight'
 import { parseTnef, type TnefAttachment } from '../lib/tnef'
 import { extractSmime } from '../lib/smime'
 import {
+  createMsgFolder,
+  msgAppointmentCard,
+  msgContactCard,
+  msgFieldsOf,
+  parseMsg,
+} from './msg'
+import {
   Consts,
   openPst,
   PSTAppointment,
@@ -63,6 +70,8 @@ interface SourceEntry {
   searchIds: Set<string>
   /** Attachments recovered from a winmail.dat (TNEF), keyed by message id. */
   tnef: Map<string, TnefAttachment[]>
+  /** For .msg sources: files that failed to parse, counted per folder. */
+  extraUnreadable?: Map<string, number>
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -415,12 +424,16 @@ function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text: strin
   let skipChars = 0
   const n = rtf.length
   let i = 0
+  // The RTF's own \ansicpgN header names the code page of its \'xx bytes; it
+  // beats the caller's hint (PR_INTERNET_CPID can be a transport-only encoding
+  // like iso-2022-jp while the RTF text is really e.g. cp932).
+  let hexCp = cp
 
   const flushHex = () => {
     if (!hex.length) return
     if (st.htmltag || (!st.htmlrtf && !st.suppress)) {
       try {
-        out.push(new TextDecoder(codepageToLabel(cp), { fatal: false }).decode(new Uint8Array(hex)))
+        out.push(new TextDecoder(codepageToLabel(hexCp), { fatal: false }).decode(new Uint8Array(hex)))
       } catch {
         out.push(new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(hex)))
       }
@@ -489,8 +502,25 @@ function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text: strin
       }
 
       switch (word) {
+        // Destination groups whose content is not document text (the font and
+        // color tables leak as literal "Arial;Times;..." text otherwise).
+        case 'fonttbl':
+        case 'colortbl':
+        case 'stylesheet':
+        case 'info':
+        case 'listtable':
+        case 'listoverridetable':
+        case 'pict':
+        case 'themedata':
+        case 'colorschememapping':
+        case 'generator':
+          st = { ...st, suppress: true }
+          break
         case 'htmlrtf':
           st = { ...st, htmlrtf: param !== 0 }
+          break
+        case 'ansicpg':
+          if (param) hexCp = param
           break
         case 'uc':
           st = { ...st, ucSkip: param ?? 1 }
@@ -890,9 +920,16 @@ async function buildMessageContent(
 
   // Build the contact / dist-list cards up front so the view title can fall back
   // to their name (contacts often have no PR_SUBJECT), and the card body need not
-  // repeat the name the header already shows.
-  const contactCard = kind === 'contact' ? buildContactCard(m) : undefined
-  const distlistCard = kind === 'distlist' ? buildDistListCard(m) : undefined
+  // repeat the name the header already shows. A .msg-backed message has no PST
+  // named-property machinery, so its cards come straight from the parsed fields.
+  const msgFields = msgFieldsOf(m)
+  const contactCard =
+    kind === 'contact'
+      ? msgFields
+        ? msgContactCard(msgFields, safe(() => m.subject, ''))
+        : safe(() => buildContactCard(m), undefined)
+      : undefined
+  const distlistCard = kind === 'distlist' ? safe(() => buildDistListCard(m), undefined) : undefined
 
   return {
     itemKind: kind,
@@ -924,10 +961,18 @@ async function buildMessageContent(
     attachments,
     headers: safe(() => m.transportMessageHeaders, ''),
     contact: contactCard,
-    appointment: kind === 'appointment' ? buildAppointmentCard(m) : undefined,
+    appointment:
+      kind === 'appointment'
+        ? msgFields
+          ? msgAppointmentCard(
+              msgFields,
+              safeStr(() => m.sentRepresentingName) || safeStr(() => m.senderName),
+            )
+          : safe(() => buildAppointmentCard(m), undefined)
+        : undefined,
     distlist: distlistCard,
-    task: kind === 'task' ? buildTaskCard(m) : undefined,
-    journal: kind === 'journal' ? buildJournalCard(m) : undefined,
+    task: kind === 'task' ? safe(() => buildTaskCard(m), undefined) : undefined,
+    journal: kind === 'journal' ? safe(() => buildJournalCard(m), undefined) : undefined,
   }
 }
 
@@ -994,6 +1039,69 @@ const api = {
     }
   },
 
+  /**
+   * Open one or more standalone .msg files as a single synthetic mailbox with
+   * one "Messages" folder. Unparseable files are skipped and surfaced through
+   * the folder's unreadable count; throws only when nothing could be read.
+   */
+  async openMsgSource(sourceId: string, files: File[]): Promise<SourceIndex> {
+    sources.delete(sourceId)
+
+    const messages: IPSTMessage[] = []
+    let failed = 0
+    for (let i = 0; i < files.length; i++) {
+      try {
+        messages.push(parseMsg(await files[i].arrayBuffer(), `msg${i}`))
+      } catch {
+        failed++
+      }
+    }
+    if (messages.length === 0) {
+      throw new Error(
+        files.length === 1
+          ? 'The file could not be parsed as an Outlook message.'
+          : 'None of the .msg files could be parsed as Outlook messages.',
+      )
+    }
+
+    const folderId = 'msgfolder'
+    const entry: SourceEntry = {
+      file: { close: async () => {} } as unknown as IPSTFile,
+      folders: new Map(),
+      messages: new Map(),
+      attachments: new Map(),
+      ocr: new Map(),
+      bodyImageCount: new Map(),
+      searchIds: new Set(),
+      tnef: new Map(),
+    }
+    if (failed) entry.extraUnreadable = new Map([[folderId, failed]])
+    entry.folders.set(folderId, createMsgFolder(folderId, 'Messages', messages))
+    sources.set(sourceId, entry)
+
+    const label =
+      files.length === 1 ? prettyFileName(files[0].name) : `Messages (${files.length})`
+    return {
+      rootFolder: {
+        id: 'msgstore',
+        name: label,
+        containerClass: '',
+        messageCount: 0,
+        children: [
+          {
+            id: folderId,
+            name: 'Messages',
+            containerClass: 'IPF.Note',
+            messageCount: messages.length,
+            children: [],
+          },
+        ],
+      },
+      totalMessages: messages.length,
+      suggestedLabel: label,
+    }
+  },
+
   /** Load metadata for every message in one folder, reporting any that could
    *  not be read (so a damaged file shows what survives, plus a salvage count). */
   async getFolderMessages(sourceId: string, folderId: string): Promise<FolderMessages> {
@@ -1022,7 +1130,9 @@ const api = {
     }
     // If the whole table was unreadable, fall back to the folder's declared count
     // so the user still learns the contents are damaged.
-    const unreadable = enumFailed ? Math.max(safe(() => folder.contentCount, 0), 1) : failed
+    const unreadable = enumFailed
+      ? Math.max(safe(() => folder.contentCount, 0), 1)
+      : failed + (entry.extraUnreadable?.get(folderId) ?? 0)
     return { messages: metas, unreadable }
   },
 
@@ -1084,6 +1194,36 @@ const api = {
     const embId = `${parentMessageId}/emb${index}`
     entry.messages.set(embId, embedded)
     const content = await buildMessageContent(embedded, embId, entry)
+    return { id: embId, content }
+  },
+
+  /** Parse a .msg file attached as a regular file (not embedded) and return its
+   *  content, registered like an embedded message so its own attachments and
+   *  nested messages resolve. Negative index = a TNEF-recovered attachment. */
+  async openAttachedMsg(
+    sourceId: string,
+    parentMessageId: string,
+    index: number,
+  ): Promise<EmbeddedMessageResult | null> {
+    const entry = sources.get(sourceId)
+    if (!entry) return null
+    let raw: ArrayBuffer | undefined
+    if (index < 0) {
+      raw = entry.tnef.get(parentMessageId)?.[-1 - index]?.data
+    } else {
+      const a = entry.attachments.get(parentMessageId)?.[index]
+      raw = a ? safe(() => a.fileData, undefined) : undefined
+    }
+    if (!raw || raw.byteLength === 0) return null
+    const embId = `${parentMessageId}/msg${index}`
+    let msg: IPSTMessage
+    try {
+      msg = parseMsg(raw, embId)
+    } catch {
+      return null
+    }
+    entry.messages.set(embId, msg)
+    const content = await buildMessageContent(msg, embId, entry)
     return { id: embId, content }
   },
 

@@ -9,11 +9,14 @@ export interface ExtractedPst {
 export interface ZipScanResult {
   /** Every PST/OST found, at any folder depth and inside nested zips. */
   psts: ExtractedPst[]
-  /** Names of other (non-PST) files found, for a helpful "wrong zip" message. */
+  /** Every standalone .msg message found. */
+  msgs: ExtractedPst[]
+  /** Names of other (non-mailbox) files found, for a helpful "wrong zip" message. */
   otherFiles: string[]
 }
 
 const PST_ENTRY = /\.(pst|ost)$/i
+const MSG_ENTRY = /\.msg$/i
 const ZIP_ENTRY = /\.zip$/i
 // Guard against zip bombs / pathological nesting when recursing into zips.
 const MAX_DEPTH = 4
@@ -33,6 +36,7 @@ function isJunkEntry(name: string): boolean {
  */
 export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
   const psts: ExtractedPst[] = []
+  const msgs: ExtractedPst[] = []
   const otherFiles: string[] = []
 
   const scan = async (buf: Uint8Array, depth: number): Promise<void> => {
@@ -42,13 +46,13 @@ export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
         {
           filter: (f: UnzipFileInfo) => {
             if (isJunkEntry(f.name)) return false
-            const isPst = PST_ENTRY.test(f.name)
+            const isMailbox = PST_ENTRY.test(f.name) || MSG_ENTRY.test(f.name)
             const isZip = ZIP_ENTRY.test(f.name)
-            if (!isPst && !isZip && otherFiles.length < OTHER_FILES_CAP) {
+            if (!isMailbox && !isZip && otherFiles.length < OTHER_FILES_CAP) {
               otherFiles.push(f.name.split('/').pop() || f.name)
             }
-            // Decompress PSTs always; nested zips only while within the depth cap.
-            return isPst || (isZip && depth < MAX_DEPTH)
+            // Decompress mailboxes always; nested zips only within the depth cap.
+            return isMailbox || (isZip && depth < MAX_DEPTH)
           },
         },
         (err, out) => (err ? reject(err) : resolve(out)),
@@ -58,9 +62,11 @@ export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
     for (const path of Object.keys(data)) {
       const bytes = data[path]
       if (!bytes || bytes.length === 0) continue
+      const name = path.split('/').pop() || path
       if (PST_ENTRY.test(path)) {
-        const name = path.split('/').pop() || path
         psts.push({ name, path, file: new File([bytes], name) })
+      } else if (MSG_ENTRY.test(path)) {
+        msgs.push({ name, path, file: new File([bytes], name) })
       } else if (ZIP_ENTRY.test(path) && depth < MAX_DEPTH) {
         await scan(bytes, depth + 1)
       }
@@ -68,5 +74,5 @@ export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
   }
 
   await scan(new Uint8Array(await zipFile.arrayBuffer()), 0)
-  return { psts, otherFiles }
+  return { psts, msgs, otherFiles }
 }
