@@ -93,7 +93,7 @@ export function AppShell() {
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-sky-500/10 backdrop-blur-sm">
           <div className="rounded-2xl border-2 border-dashed border-sky-400 bg-slate-900/80 px-10 py-8 text-lg font-medium text-sky-200">
-            Drop to add PST / OST / MSG / ZIP files
+            Drop to add PST / OST / MSG / EML / ZIP files
           </div>
         </div>
       )}

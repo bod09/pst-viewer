@@ -9,14 +9,14 @@ export interface ExtractedPst {
 export interface ZipScanResult {
   /** Every PST/OST found, at any folder depth and inside nested zips. */
   psts: ExtractedPst[]
-  /** Every standalone .msg message found. */
+  /** Every standalone .msg/.eml message found. */
   msgs: ExtractedPst[]
   /** Names of other (non-mailbox) files found, for a helpful "wrong zip" message. */
   otherFiles: string[]
 }
 
 const PST_ENTRY = /\.(pst|ost)$/i
-const MSG_ENTRY = /\.msg$/i
+const MSG_ENTRY = /\.(msg|eml)$/i
 const ZIP_ENTRY = /\.zip$/i
 // Guard against zip bombs / pathological nesting when recursing into zips.
 const MAX_DEPTH = 4

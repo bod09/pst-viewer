@@ -1,4 +1,4 @@
-export const ACCEPTED_EXTENSIONS = ['.pst', '.ost', '.msg', '.zip'] as const
+export const ACCEPTED_EXTENSIONS = ['.pst', '.ost', '.msg', '.eml', '.zip'] as const
 export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(',')
 
 export function isAcceptedFile(name: string): boolean {

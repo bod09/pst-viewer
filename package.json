@@ -26,6 +26,7 @@
     "minisearch": "^7.2.0",
     "node-forge": "^1.4.0",
     "pdfjs-dist": "^6.2.108",
+    "postal-mime": "^3.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0",

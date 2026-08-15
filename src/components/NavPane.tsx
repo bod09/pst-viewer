@@ -166,9 +166,11 @@ function SourceTree({ source }: { source: Source }) {
     ? 'ZIP'
     : name.endsWith('.ost')
       ? 'OST'
-      : /\.msg( files)?$/.test(name)
-        ? 'MSG'
-        : 'PST'
+      : /\.eml( files)?$/.test(name)
+        ? 'EML'
+        : /\.msg( files)?$|message files$/.test(name)
+          ? 'MSG'
+          : 'PST'
   const isZip = badge === 'ZIP'
 
   const startEdit = () => {

@@ -10,6 +10,7 @@ import {
   msgFieldsOf,
   parseMsg,
 } from './msg'
+import { isCfbFile, parseEml } from './eml'
 import {
   Consts,
   openPst,
@@ -1040,7 +1041,8 @@ const api = {
   },
 
   /**
-   * Open one or more standalone .msg files as a single synthetic mailbox with
+   * Open one or more standalone message files (.msg or .eml, told apart by the
+   * CFB magic rather than the extension) as a single synthetic mailbox with
    * one "Messages" folder. Unparseable files are skipped and surfaced through
    * the folder's unreadable count; throws only when nothing could be read.
    */
@@ -1051,7 +1053,8 @@ const api = {
     let failed = 0
     for (let i = 0; i < files.length; i++) {
       try {
-        messages.push(parseMsg(await files[i].arrayBuffer(), `msg${i}`))
+        const data = await files[i].arrayBuffer()
+        messages.push(isCfbFile(data) ? parseMsg(data, `msg${i}`) : await parseEml(data, `msg${i}`))
       } catch {
         failed++
       }
@@ -1059,8 +1062,8 @@ const api = {
     if (messages.length === 0) {
       throw new Error(
         files.length === 1
-          ? 'The file could not be parsed as an Outlook message.'
-          : 'None of the .msg files could be parsed as Outlook messages.',
+          ? 'The file could not be parsed as an email message.'
+          : 'None of the files could be parsed as email messages.',
       )
     }
 
@@ -1197,10 +1200,11 @@ const api = {
     return { id: embId, content }
   },
 
-  /** Parse a .msg file attached as a regular file (not embedded) and return its
-   *  content, registered like an embedded message so its own attachments and
-   *  nested messages resolve. Negative index = a TNEF-recovered attachment. */
-  async openAttachedMsg(
+  /** Parse a .msg or .eml file attached as a regular file (not embedded) and
+   *  return its content, registered like an embedded message so its own
+   *  attachments and nested messages resolve. The format is told apart by the
+   *  CFB magic. Negative index = a TNEF-recovered attachment. */
+  async openAttachedEmail(
     sourceId: string,
     parentMessageId: string,
     index: number,
@@ -1218,7 +1222,7 @@ const api = {
     const embId = `${parentMessageId}/msg${index}`
     let msg: IPSTMessage
     try {
-      msg = parseMsg(raw, embId)
+      msg = isCfbFile(raw) ? parseMsg(raw, embId) : await parseEml(raw, embId)
     } catch {
       return null
     }

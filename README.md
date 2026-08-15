@@ -1,6 +1,6 @@
 # PST Viewer
 
-A fast, private, **fully in-browser** viewer for Outlook **`.pst` / `.ost`** mailboxes and standalone **`.msg`** messages (and `.zip` archives containing them). Everything runs locally on your device: no server, no Python, no build tools to install for end users, and **nothing is ever uploaded**.
+A fast, private, **fully in-browser** viewer for Outlook **`.pst` / `.ost`** mailboxes and standalone **`.msg` / `.eml`** messages (and `.zip` archives containing them). Everything runs locally on your device: no server, no Python, no build tools to install for end users, and **nothing is ever uploaded**.
 
 Installable as an offline app (PWA): load the site once and it keeps working with no internet.
 
@@ -8,7 +8,7 @@ Installable as an offline app (PWA): load the site once and it keeps working wit
 
 **Live app: https://bod09.github.io/pst-viewer/**
 
-No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, or `.zip`, and start reading. Nothing is uploaded; everything runs in your browser (see [Privacy](#privacy)). If you would rather run or host it yourself, see [Run it](#run-it) and [Deploy](#deploy).
+No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, `.eml`, or `.zip`, and start reading. Nothing is uploaded; everything runs in your browser (see [Privacy](#privacy)). If you would rather run or host it yourself, see [Run it](#run-it) and [Deploy](#deploy).
 
 ## Screenshots
 
@@ -21,7 +21,7 @@ No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, or `.zip`, and
 
 ## Features
 
-- **Open** `.pst`, `.ost`, `.msg`, and `.zip` files (zips are scanned automatically for mailboxes and messages, including nested ones), by drag-and-drop or browse. Standalone `.msg` messages dropped together are grouped into one "Messages" mailbox, and `.msg` files attached to an email open inline like any other message. Password-protected mailboxes open too: an Outlook PST password gates Outlook's own UI, not the data, so none is needed to read the mailbox here.
+- **Open** `.pst`, `.ost`, `.msg`, `.eml`, and `.zip` files (zips are scanned automatically for mailboxes and messages, including nested ones), by drag-and-drop or browse. Standalone `.msg`/`.eml` messages dropped together are grouped into one "Messages" mailbox, and `.msg`/`.eml` files attached to an email open inline like any other message. Password-protected mailboxes open too: an Outlook PST password gates Outlook's own UI, not the data, so none is needed to read the mailbox here.
 - **Multiple mailboxes** at once, with smart auto-labels and inline rename.
 - **1:1 email viewing**: full HTML rendering (and RTF-encapsulated HTML) with inline images, in a sandboxed frame. Remote images load like a normal mail client, with invisible tracking pixels (1x1 / hidden images) stripped. **Click any image to view it full screen**, then zoom to actual size and drag to pan. A **Headers** button shows the message's full original transport headers. Colour categories, follow-up flags, importance, and sensitivity show as chips, and `winmail.dat` (TNEF) and S/MIME signed messages are unpacked to reveal their real body and attachments.
 - **Attachment previews**: images, PDF, text/code, audio, video, nested emails, **spreadsheets** (`.xlsx/.xls/.csv/.ods`), and **Word** (`.docx`). Anything else is one-click downloadable.
@@ -57,7 +57,7 @@ There is no server. When you open a file, the browser reads it **directly from y
 
 ## Tech
 
-React + Vite + TypeScript + Tailwind. PST parsing via [`@hiraokahypertools/pst-extractor`](https://www.npmjs.com/package/@hiraokahypertools/pst-extractor) and `.msg` parsing via [`@kenjiuno/msgreader`](https://www.npmjs.com/package/@kenjiuno/msgreader), both in a Web Worker. Search via MiniSearch, PDF rendering via pdf.js, spreadsheets via SheetJS, Word via docx-preview, OCR via Tesseract.js, zip handling via fflate, HTML sanitizing via DOMPurify, S/MIME (PKCS#7) parsing via node-forge. TNEF (winmail.dat) and MIME are parsed in-house. PWA via vite-plugin-pwa (Workbox).
+React + Vite + TypeScript + Tailwind. PST parsing via [`@hiraokahypertools/pst-extractor`](https://www.npmjs.com/package/@hiraokahypertools/pst-extractor), `.msg` parsing via [`@kenjiuno/msgreader`](https://www.npmjs.com/package/@kenjiuno/msgreader), and `.eml` parsing via [`postal-mime`](https://www.npmjs.com/package/postal-mime), all in a Web Worker. Search via MiniSearch, PDF rendering via pdf.js, spreadsheets via SheetJS, Word via docx-preview, OCR via Tesseract.js, zip handling via fflate, HTML sanitizing via DOMPurify, S/MIME (PKCS#7) parsing via node-forge. TNEF (winmail.dat) and MIME are parsed in-house. PWA via vite-plugin-pwa (Workbox).
 
 ## Known limitations
 

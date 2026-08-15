@@ -31,7 +31,8 @@ export function DropZone() {
           Drag &amp; drop a{' '}
           <span className="font-medium text-slate-200">.pst</span>,{' '}
           <span className="font-medium text-slate-200">.ost</span>,{' '}
-          <span className="font-medium text-slate-200">.msg</span>, or{' '}
+          <span className="font-medium text-slate-200">.msg</span>,{' '}
+          <span className="font-medium text-slate-200">.eml</span>, or{' '}
           <span className="font-medium text-slate-200">.zip</span> file, or click to browse
         </p>
 

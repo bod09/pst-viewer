@@ -214,14 +214,16 @@ export const useApp = create<AppState>((set, get) => {
         'Inbox Repair Tool (scanpst.exe) and open the repaired copy.',
     )
 
-  /** Open a batch of standalone .msg files as one synthetic mailbox. */
+  /** Open a batch of standalone .msg/.eml files as one synthetic mailbox. */
   const startMsgSource = (files: File[]) => {
     if (!files.length) return
+    const exts = new Set(files.map((f) => (/\.eml$/i.test(f.name) ? '.eml' : '.msg')))
+    const batchName = exts.size === 1 ? `${files.length} ${[...exts][0]} files` : `${files.length} message files`
     const seed =
       files.length === 1
         ? { fileName: files[0].name, size: files[0].size, label: stripExt(files[0].name) }
         : {
-            fileName: `${files.length} .msg files`,
+            fileName: batchName,
             size: files.reduce((n, f) => n + f.size, 0),
             label: 'Messages',
           }
@@ -229,10 +231,9 @@ export const useApp = create<AppState>((set, get) => {
       seed,
       (id) => pst.openMsgSource(id, files),
       (files.length === 1
-        ? 'This file could not be opened as an Outlook message.'
-        : 'None of these files could be opened as Outlook messages.') +
-        ' It may be corrupt, or a different format saved with a .msg name ' +
-        '(an .eml, for example, is not a .msg).',
+        ? 'This file could not be opened as an email message.'
+        : 'None of these files could be opened as email messages.') +
+        ' It may be corrupt, or not really an Outlook .msg / RFC822 .eml file.',
     )
   }
 
@@ -270,7 +271,7 @@ export const useApp = create<AppState>((set, get) => {
                 size: file.size,
                 label: stripExt(file.name),
                 status: 'error',
-                error: `No PST, OST, or MSG files found in this zip.${detail}`,
+                error: `No PST, OST, MSG, or EML files found in this zip.${detail}`,
               },
             ],
           }))
@@ -406,12 +407,12 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     addFiles: (files) => {
-      // Group .msg files dropped together into one "Messages" mailbox instead
-      // of creating a source per file.
+      // Group .msg/.eml files dropped together into one "Messages" mailbox
+      // instead of creating a source per file.
       const msgs: File[] = []
       for (const file of files) {
         if (/\.zip$/i.test(file.name)) handleZip(file)
-        else if (/\.msg$/i.test(file.name)) msgs.push(file)
+        else if (/\.(msg|eml)$/i.test(file.name)) msgs.push(file)
         else startSource(file)
       }
       startMsgSource(msgs)
