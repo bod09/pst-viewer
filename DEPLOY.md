@@ -2,8 +2,9 @@
 
 PST Viewer is a **static site** (a single-page app with a service worker). There is
 no backend, no database, and nothing to upload at runtime: mailboxes are read and
-processed entirely in the visitor's browser. To deploy it, you build it once and
-serve the resulting folder of files.
+processed entirely in the visitor's browser. To deploy it, either grab the
+**prebuilt Docker image** ([Option B](#option-b-docker-prebuilt-image-hardened-by-default) -
+no Node needed), or build it once and serve the resulting folder of files.
 
 > **HTTPS is required** for the offline / installable (PWA) features. Every option
 > below either provides HTTPS automatically or assumes you have a certificate.
@@ -49,7 +50,72 @@ root, edit the workflow's `BASE_PATH` to `/` (and add a `CNAME`).
 
 ---
 
-## Option B: Caddy (recommended for self-hosting)
+## Option B: Docker (prebuilt image, hardened by default)
+
+Every push to `main` publishes a ready-built image to GitHub Container Registry
+(via `.github/workflows/docker.yml`), so this path needs **no Node and no build
+step**:
+
+```bash
+docker run -d --name pst-viewer -p 8080:8080 \
+  --read-only --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges \
+  ghcr.io/bod09/pst-viewer:latest
+```
+
+Or with compose (this file ships in the repo as `docker/compose.yaml`):
+
+```yaml
+services:
+  pst-viewer:
+    image: ghcr.io/bod09/pst-viewer:latest
+    ports:
+      - "8080:8080"
+    read_only: true          # immutable container filesystem
+    tmpfs:
+      - /tmp                 # nginx scratch space (pid file, temp buffers)
+    cap_drop:
+      - ALL                  # no Linux capabilities at all
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    restart: unless-stopped
+```
+
+Then open <http://localhost:8080>.
+
+**The hardening is the point.** This app's promise is that mailboxes never
+leave your device - and this setup makes that *verifiable* instead of taken on
+trust, while everything (search, OCR, previews, offline) still works:
+
+- The image's nginx serves a **Content-Security-Policy** under which your own
+  browser refuses to let page scripts contact any other server
+  (`connect-src 'self'`) or load third-party code (`script-src 'self'`).
+  The one deliberate exception is images referenced inside emails you open
+  (`img-src https: http:` - the remote-image feature). For a fully airtight
+  build, remove those two tokens from `img-src` in
+  `docker/security-headers.conf` and rebuild; remote mail images then simply
+  show as broken.
+- The container runs as a **non-root user** (nginx-unprivileged base) with
+  **every Linux capability dropped**, a **read-only root filesystem** (only
+  `/tmp` is writable, and it lives in memory), `no-new-privileges`, and a PID
+  limit. A compromise of the web server has nothing to escalate into.
+
+**HTTPS:** the container speaks plain HTTP on 8080. `http://localhost:8080`
+counts as a secure context, so everything including the installable/offline
+PWA works for local use. To serve other machines, put it behind your HTTPS
+reverse proxy (Caddy, Traefik, Nginx); PWA features require HTTPS on
+non-localhost origins.
+
+**Build it yourself** instead of pulling (identical result):
+`docker build -t pst-viewer .` in the repo root. Forks automatically publish
+their own image at `ghcr.io/<your-user>/pst-viewer` - after the first workflow
+run, set the package to public in the package's settings on GitHub so
+anonymous `docker pull` works.
+
+---
+
+## Option C: Caddy (recommended for self-hosting)
 
 `npm run deploy` assembles a drop-in `deploy/` folder (`site/` + `Caddyfile` +
 this guide). Copy it to your server, set your domain in the `Caddyfile`, and run
@@ -70,7 +136,7 @@ hash with `caddy hash-password`) or limit by IP / VPN.
 
 ---
 
-## Option C: Nginx
+## Option D: Nginx
 
 Serve the build folder and fall back to `index.html`:
 
@@ -95,7 +161,7 @@ as-is (the app decompresses it itself).
 
 ---
 
-## Option D: Netlify / Vercel / Cloudflare Pages
+## Option E: Netlify / Vercel / Cloudflare Pages
 
 Connect the repo (or drag-and-drop the `dist/` folder for a manual deploy):
 
@@ -110,7 +176,7 @@ for Netlify; the others detect Vite automatically.)
 
 ---
 
-## Option E: Any static host / object storage (S3, Azure Blob, etc.)
+## Option F: Any static host / object storage (S3, Azure Blob, etc.)
 
 Upload the contents of `dist/` and serve `index.html` as the default document.
 Put it behind HTTPS (a CDN like CloudFront / Cloudflare in front is fine).
