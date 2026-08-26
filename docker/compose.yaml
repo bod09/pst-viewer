@@ -1,17 +1,13 @@
-# Hardened by default - and the app still works, which is the point:
-# the container runs as a non-root user with no capabilities, cannot write to
-# its own filesystem, and the CSP it serves makes the *browser* block page
-# scripts from contacting any other server. Privacy you can verify, not trust.
 services:
   pst-viewer:
     image: ghcr.io/bod09/pst-viewer:latest
     ports:
       - "8080:8080"
-    read_only: true          # immutable container filesystem
+    read_only: true
     tmpfs:
-      - /tmp                 # nginx scratch space (pid file, temp buffers)
+      - /tmp                 # nginx pid file and temp buffers
     cap_drop:
-      - ALL                  # no Linux capabilities at all
+      - ALL
     security_opt:
       - no-new-privileges:true
     pids_limit: 64

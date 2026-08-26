@@ -1,8 +1,7 @@
 name: Docker image
 
-# Build and publish the container image to GitHub Container Registry on every
-# push to main, so `docker pull ghcr.io/<owner>/pst-viewer:latest` always has
-# the current app. Works unchanged in forks (the image name follows the repo).
+# Build and publish the container image to ghcr.io/<owner>/pst-viewer on every
+# push to main. The image name follows the repo, so forks publish their own.
 on:
   push:
     branches: [main]

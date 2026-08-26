@@ -71,11 +71,11 @@ services:
     image: ghcr.io/bod09/pst-viewer:latest
     ports:
       - "8080:8080"
-    read_only: true          # immutable container filesystem
+    read_only: true
     tmpfs:
-      - /tmp                 # nginx scratch space (pid file, temp buffers)
+      - /tmp                 # nginx pid file and temp buffers
     cap_drop:
-      - ALL                  # no Linux capabilities at all
+      - ALL
     security_opt:
       - no-new-privileges:true
     pids_limit: 64
@@ -84,34 +84,29 @@ services:
 
 Then open <http://localhost:8080>.
 
-**The hardening is the point.** This app's promise is that mailboxes never
-leave your device - and this setup makes that *verifiable* instead of taken on
-trust, while everything (search, OCR, previews, offline) still works:
+The image is hardened by default, and the app is fully functional under it.
+Because the privacy claim ("mailboxes never leave your device") matters here,
+the restrictions are enforceable rather than a matter of trust:
 
-- The image's nginx serves a **Content-Security-Policy** under which your own
-  browser refuses to let page scripts contact any other server
-  (`connect-src 'self'`) or load third-party code (`script-src 'self'`).
-  The one deliberate exception is images referenced inside emails you open
-  (`img-src https: http:` - the remote-image feature). For a fully airtight
-  build, remove those two tokens from `img-src` in
-  `docker/security-headers.conf` and rebuild; remote mail images then simply
-  show as broken.
-- The container runs as a **non-root user** (nginx-unprivileged base) with
-  **every Linux capability dropped**, a **read-only root filesystem** (only
-  `/tmp` is writable, and it lives in memory), `no-new-privileges`, and a PID
-  limit. A compromise of the web server has nothing to escalate into.
+- nginx serves a **Content-Security-Policy** under which the browser blocks
+  page scripts from contacting any other server (`connect-src 'self'`) and
+  from loading third-party code (`script-src 'self'`). The one exception is
+  images referenced inside emails you open (`img-src https: http:`); to block
+  those too, remove the two tokens in `docker/security-headers.conf` and
+  rebuild.
+- The container runs as a non-root user with all Linux capabilities dropped, a
+  read-only root filesystem (only an in-memory `/tmp` is writable),
+  `no-new-privileges`, and a PID limit.
 
-**HTTPS:** the container speaks plain HTTP on 8080. `http://localhost:8080`
-counts as a secure context, so everything including the installable/offline
-PWA works for local use. To serve other machines, put it behind your HTTPS
-reverse proxy (Caddy, Traefik, Nginx); PWA features require HTTPS on
-non-localhost origins.
+**HTTPS:** the container serves plain HTTP on 8080. `http://localhost:8080` is
+a secure context, so everything including the installable/offline PWA works
+locally. To serve other machines, put it behind an HTTPS reverse proxy (Caddy,
+Traefik, Nginx); PWA features require HTTPS on non-localhost origins.
 
-**Build it yourself** instead of pulling (identical result):
-`docker build -t pst-viewer .` in the repo root. Forks automatically publish
-their own image at `ghcr.io/<your-user>/pst-viewer` - after the first workflow
-run, set the package to public in the package's settings on GitHub so
-anonymous `docker pull` works.
+**Building it yourself** gives an identical result: `docker build -t pst-viewer .`
+in the repo root. Forks publish their own image at
+`ghcr.io/<your-user>/pst-viewer`; if the package comes out private, set it to
+public in its settings on GitHub so anonymous `docker pull` works.
 
 ---
 

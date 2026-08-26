@@ -49,7 +49,11 @@ npm run preview    # serve the build at http://localhost:4173
 
 ## Deploy
 
-The build is a static site, so you can host the contents of `dist/` on any static host (Netlify, Vercel, GitHub Pages, Cloudflare Pages, or any web server). No backend required. Once a visitor loads it, the service worker caches it for offline use. See [DEPLOY.md](DEPLOY.md) for a ready-made Caddy setup (`npm run deploy` assembles a drop-in `deploy/` folder).
+The build is a static site, so you can host the contents of `dist/` on any static host (Netlify, Vercel, GitHub Pages, Cloudflare Pages, or any web server). No backend required. Once a visitor loads it, the service worker caches it for offline use.
+
+A prebuilt **Docker image** is published automatically to `ghcr.io/bod09/pst-viewer` on every release — one `docker compose up`, no Node or build step, hardened by default (non-root, read-only, CSP).
+
+See [DEPLOY.md](DEPLOY.md) for all options: GitHub Pages, Docker, Caddy (`npm run deploy` assembles a drop-in `deploy/` folder), Nginx, Netlify/Vercel/Cloudflare, and object storage.
 
 ## Privacy
 
