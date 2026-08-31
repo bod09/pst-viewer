@@ -55,6 +55,39 @@ A prebuilt **Docker image** is published automatically to `ghcr.io/bod09/pst-vie
 
 See [DEPLOY.md](DEPLOY.md) for all options: GitHub Pages, Docker, Caddy (`npm run deploy` assembles a drop-in `deploy/` folder), Nginx, Netlify/Vercel/Cloudflare, and object storage.
 
+## Branding
+
+The app reads `branding.json` from the web root at startup, so a deployment
+can be rebranded by replacing that one file - no rebuild:
+
+```json
+{
+  "name": "Acme Mail Archive",
+  "tagline": "Internal use only",
+  "logo": "logo.svg",
+  "accent": "#7c3aed"
+}
+```
+
+- `name` - shown in the header and the browser tab
+- `tagline` - the short line under the name
+- `logo` - image URL for the header logo (place the file next to the app, or
+  use a `data:` URI); empty keeps the default icon
+- `accent` - any CSS colour; the UI's accent shades are derived from it
+
+With Docker, mount your files over the defaults:
+
+```yaml
+    volumes:
+      - ./branding.json:/usr/share/nginx/html/branding.json:ro
+      - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
+```
+
+For a static host, overwrite `branding.json` (and add your logo) in the
+deployed folder. To also rebrand the installed PWA (its name and icons come
+from the web app manifest at install time), replace `manifest.webmanifest` and
+the `pwa-*.png` icons the same way.
+
 ## Privacy
 
 There is no server. When you open a file, the browser reads it **directly from your disk** (in small slices, so even multi-gigabyte mailboxes work) and all parsing, rendering, search, OCR, and PDF export happen on your device. Your mailbox is never uploaded. Like a normal mail client, an email that references **remote images** will fetch those from the sender's servers when you view it (invisible tracking pixels are stripped, but a visible remote image can still tell the sender you opened it). Each remote image is fetched only once and then cached locally in your browser, so re-viewing it does not ping the sender again. Apart from that, the only network use is loading the app itself.

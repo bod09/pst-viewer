@@ -52,6 +52,14 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
+            // Runtime branding file: network-first so a changed deployment
+            // shows up on next load, cached so offline installs keep it.
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin && url.pathname.endsWith('/branding.json'),
+            handler: 'NetworkFirst',
+            options: { cacheName: 'branding' },
+          },
+          {
             // Cache remote email images locally, the way an email client proxies
             // them. The service worker can store cross-origin ("opaque")
             // responses, so each remote image loads once then is served from the
