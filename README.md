@@ -15,7 +15,7 @@ No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, `.eml`, or `.z
 | | |
 | --- | --- |
 | ![Read email with attachments](screenshots/mailbox.png) | ![Search every mailbox at once](screenshots/search.png) |
-| ![Preview attachments like PDFs inline](screenshots/preview.png) | ![Drop in a PST, OST or ZIP to open it](screenshots/landing.png) |
+| ![Preview attachments like PDFs inline](screenshots/preview.png) | ![Drop in a mailbox or message file to open it](screenshots/landing.png) |
 
 *(Sample data shown is fictional.)*
 
@@ -51,14 +51,31 @@ npm run preview    # serve the build at http://localhost:4173
 
 The build is a static site, so you can host the contents of `dist/` on any static host (Netlify, Vercel, GitHub Pages, Cloudflare Pages, or any web server). No backend required. Once a visitor loads it, the service worker caches it for offline use.
 
-A prebuilt **Docker image** is published automatically to `ghcr.io/bod09/pst-viewer` on every release — one `docker compose up`, no Node or build step, hardened by default (non-root, read-only, CSP).
+A prebuilt **Docker image** is published automatically to `ghcr.io/bod09/pst-viewer` — one `docker compose up`, no Node or build step, hardened by default (non-root, read-only, CSP).
 
 See [DEPLOY.md](DEPLOY.md) for all options: GitHub Pages, Docker, Caddy (`npm run deploy` assembles a drop-in `deploy/` folder), Nginx, Netlify/Vercel/Cloudflare, and object storage.
 
 ## Branding
 
-The app reads `branding.json` from the web root at startup, so a deployment
-can be rebranded by replacing that one file - no rebuild:
+A deployment can be rebranded (name, tagline, logo, accent colour) with no
+rebuild.
+
+**Docker** - set environment variables. The logo is a URL: mount an image
+file next to the app, point at a hosted one, or use a `data:` URI.
+
+```yaml
+    environment:
+      BRAND_NAME: "Acme Mail Archive"
+      BRAND_TAGLINE: "Internal use only"
+      BRAND_ACCENT: "#7c3aed"
+      BRAND_LOGO: "/logo.svg"
+    volumes:
+      - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
+```
+
+**Any static host** - overwrite `branding.json` in the deployed folder (in
+Docker this also works, mounted over `/usr/share/nginx/html/branding.json`;
+environment variables take precedence):
 
 ```json
 {
@@ -71,32 +88,11 @@ can be rebranded by replacing that one file - no rebuild:
 
 - `name` - shown in the header and the browser tab
 - `tagline` - the short line under the name
-- `logo` - image URL for the header logo (place the file next to the app, or
-  use a `data:` URI); empty keeps the default icon
+- `logo` - image URL for the header logo; empty keeps the default icon
 - `accent` - any CSS colour; the UI's accent shades are derived from it
 
-With Docker, plain environment variables do the same thing - `BRAND_NAME`,
-`BRAND_TAGLINE`, `BRAND_ACCENT`, and `BRAND_LOGO` (a URL: mount an image next
-to the app, point at a hosted one, or use a `data:` URI). Env vars take
-precedence over the file:
-
-```yaml
-    environment:
-      BRAND_NAME: "Acme Mail Archive"
-      BRAND_ACCENT: "#7c3aed"
-      BRAND_LOGO: "/logo.svg"
-    volumes:
-      - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
-```
-
-Mounting a full `branding.json` over
-`/usr/share/nginx/html/branding.json` works as well.
-
-For a static host, overwrite `branding.json` (and add your logo) in the
-deployed folder.
-
 The installable app (PWA) is renamed too: in Docker, `BRAND_NAME` is applied
-to the web app manifest automatically; on a static host, edit the `name` and
+to the web app manifest automatically; on a static host, edit `name` and
 `short_name` in `manifest.webmanifest`. The install icons are the `pwa-*.png`
 files - replace them (or mount over them) to change the icon art.
 

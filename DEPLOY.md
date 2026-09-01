@@ -20,7 +20,7 @@ npm run build      # outputs static files to dist/
 
 Upload the **contents of `dist/`** to any static host. That's the whole app.
 
-### The one gotcha: base path
+### Base path
 
 - **Root of a domain** (e.g. `https://mail.example.com/`) - use the normal
   `npm run build`. This is the default and works for Caddy, Nginx, Netlify,
@@ -84,9 +84,7 @@ services:
 
 Then open <http://localhost:8080>.
 
-The image is hardened by default, and the app is fully functional under it.
-Because the privacy claim ("mailboxes never leave your device") matters here,
-the restrictions are enforceable rather than a matter of trust:
+The image is hardened by default, and the app is fully functional under it:
 
 - nginx serves a **Content-Security-Policy** under which the browser blocks
   page scripts from contacting any other server (`connect-src 'self'`) and
@@ -124,7 +122,7 @@ public in its settings on GitHub so anonymous `docker pull` works.
 
 ---
 
-## Option C: Caddy (recommended for self-hosting)
+## Option C: Caddy (without Docker)
 
 `npm run deploy` assembles a drop-in `deploy/` folder (`site/` + `Caddyfile` +
 this guide). Copy it to your server, set your domain in the `Caddyfile`, and run
@@ -192,7 +190,7 @@ Put it behind HTTPS (a CDN like CloudFront / Cloudflare in front is fine).
 
 ---
 
-## Serving notes (rarely needed, but good to know)
+## Serving notes
 
 - `.wasm` files must be served as `application/wasm`, and `.mjs` as JavaScript.
   Modern static servers and CDNs do this out of the box.
