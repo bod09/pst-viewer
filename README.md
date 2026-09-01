@@ -75,13 +75,22 @@ can be rebranded by replacing that one file - no rebuild:
   use a `data:` URI); empty keeps the default icon
 - `accent` - any CSS colour; the UI's accent shades are derived from it
 
-With Docker, mount your files over the defaults:
+With Docker, plain environment variables do the same thing - `BRAND_NAME`,
+`BRAND_TAGLINE`, `BRAND_ACCENT`, and `BRAND_LOGO` (a URL: mount an image next
+to the app, point at a hosted one, or use a `data:` URI). Env vars take
+precedence over the file:
 
 ```yaml
+    environment:
+      BRAND_NAME: "Acme Mail Archive"
+      BRAND_ACCENT: "#7c3aed"
+      BRAND_LOGO: "/logo.svg"
     volumes:
-      - ./branding.json:/usr/share/nginx/html/branding.json:ro
       - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
 ```
+
+Mounting a full `branding.json` over
+`/usr/share/nginx/html/branding.json` works as well.
 
 For a static host, overwrite `branding.json` (and add your logo) in the
 deployed folder. To also rebrand the installed PWA (its name and icons come

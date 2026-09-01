@@ -15,4 +15,5 @@ RUN sed -i 's/worker_processes  auto;/worker_processes  8;/' /etc/nginx/nginx.co
     && grep -q 'worker_processes  8;' /etc/nginx/nginx.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/security-headers.conf /etc/nginx/security-headers.conf
+COPY --chmod=755 docker/branding-entrypoint.sh /docker-entrypoint.d/40-branding.sh
 COPY --from=build /app/dist /usr/share/nginx/html
