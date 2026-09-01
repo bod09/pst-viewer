@@ -31,7 +31,8 @@ export default defineConfig({
       manifest: {
         name: 'PST Viewer',
         short_name: 'PST Viewer',
-        description: 'View Outlook PST/OST mailboxes locally in your browser. Nothing is uploaded.',
+        description:
+          'View Outlook PST/OST mailboxes and MSG/EML messages locally in your browser. Nothing is uploaded.',
         theme_color: '#0b1220',
         background_color: '#020617',
         display: 'standalone',

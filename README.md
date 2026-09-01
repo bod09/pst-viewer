@@ -93,9 +93,12 @@ Mounting a full `branding.json` over
 `/usr/share/nginx/html/branding.json` works as well.
 
 For a static host, overwrite `branding.json` (and add your logo) in the
-deployed folder. To also rebrand the installed PWA (its name and icons come
-from the web app manifest at install time), replace `manifest.webmanifest` and
-the `pwa-*.png` icons the same way.
+deployed folder.
+
+The installable app (PWA) is renamed too: in Docker, `BRAND_NAME` is applied
+to the web app manifest automatically; on a static host, edit the `name` and
+`short_name` in `manifest.webmanifest`. The install icons are the `pwa-*.png`
+files - replace them (or mount over them) to change the icon art.
 
 ## Privacy
 
