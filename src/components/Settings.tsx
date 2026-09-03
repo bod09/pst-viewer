@@ -55,10 +55,12 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 function SettingsDialog({ onClose }: { onClose: () => void }) {
   const ocrEnabled = useApp((s) => s.ocrEnabled)
   const setOcrEnabled = useApp((s) => s.setOcrEnabled)
+  const showEmptyFolders = useApp((s) => s.showEmptyFolders)
+  const setShowEmptyFolders = useApp((s) => s.setShowEmptyFolders)
 
   return (
     <Dialog title="Settings" onClose={onClose} size="sm">
-      <div className="p-5">
+      <div className="space-y-5 p-5">
         <div className="flex items-center justify-between gap-6">
           <div>
             <div className="text-sm font-medium text-slate-100">
@@ -70,6 +72,16 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           <Toggle checked={ocrEnabled} onChange={setOcrEnabled} />
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <div className="text-sm font-medium text-slate-100">Show empty folders</div>
+            <div className="mt-1 text-xs leading-relaxed text-slate-400">
+              Outlook creates the full folder set in every mailbox. Turn on to also list the
+              folders that contain no messages.
+            </div>
+          </div>
+          <Toggle checked={showEmptyFolders} onChange={setShowEmptyFolders} />
         </div>
       </div>
     </Dialog>

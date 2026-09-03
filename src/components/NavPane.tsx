@@ -98,6 +98,17 @@ function sortFolders(nodes: FolderNode[]): FolderNode[] {
   )
 }
 
+function subtreeMessages(node: FolderNode): number {
+  return node.messageCount + node.children.reduce((n, c) => n + subtreeMessages(c), 0)
+}
+
+/** Sorted children, dropping folders whose whole subtree holds no messages
+ *  unless the "show empty folders" preference is on. */
+function visibleChildren(nodes: FolderNode[], showEmpty: boolean): FolderNode[] {
+  const kept = showEmpty ? nodes : nodes.filter((n) => subtreeMessages(n) > 0)
+  return sortFolders(kept)
+}
+
 export function NavPane() {
   const sources = useApp((s) => s.sources)
   const [mailboxesOpen, setMailboxesOpen] = useState(true)
@@ -160,6 +171,7 @@ function NavAddFiles() {
 function SourceTree({ source }: { source: Source }) {
   const removeSource = useApp((s) => s.removeSource)
   const renameSource = useApp((s) => s.renameSource)
+  const showEmpty = useApp((s) => s.showEmptyFolders)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(source.label)
   const name = source.fileName.toLowerCase()
@@ -279,7 +291,7 @@ function SourceTree({ source }: { source: Source }) {
         )}
       {source.status === 'ready' && source.index && (
         <ul className="ml-5">
-          {sortFolders(source.index.rootFolder.children).map((child) => (
+          {visibleChildren(source.index.rootFolder.children, showEmpty).map((child) => (
             <FolderRow key={child.id} sourceId={source.id} node={child} depth={0} />
           ))}
         </ul>
@@ -295,7 +307,8 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
   )
   const toggleFolder = useApp((s) => s.toggleFolder)
   const selectFolder = useApp((s) => s.selectFolder)
-  const childNodes = sortFolders(node.children)
+  const showEmpty = useApp((s) => s.showEmptyFolders)
+  const childNodes = visibleChildren(node.children, showEmpty)
   const hasChildren = childNodes.length > 0
   const Icon = folderIcon(node)
 
@@ -310,23 +323,23 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
         }`}
         style={{ paddingLeft: depth * 14 + 6 }}
       >
-        {/* Expandable folders show a collapse/expand chevron in place of the
-            folder icon; leaf folders show their type icon. Same width either
-            way so names line up, and no separate gutter pushing rows in. */}
-        {hasChildren ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              toggleFolder(sourceId, node.id)
-            }}
-            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-200"
-            data-tip={expanded ? 'Collapse' : 'Expand'}
-          >
-            <Caret className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-          </button>
-        ) : (
-          <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
-        )}
+        {/* A fixed chevron gutter (empty for leaf folders) so every row keeps
+            its type icon and names line up. */}
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          {hasChildren && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFolder(sourceId, node.id)
+              }}
+              className="flex h-4 w-4 items-center justify-center rounded text-slate-400 hover:text-slate-200"
+              data-tip={expanded ? 'Collapse' : 'Expand'}
+            >
+              <Caret className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+            </button>
+          )}
+        </span>
+        <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
         </span>

@@ -59,6 +59,9 @@ interface AppState {
   /** Persisted preference: read text inside images (OCR) to make it searchable. */
   ocrEnabled: boolean
   setOcrEnabled: (v: boolean) => void
+  /** Persisted preference: show folders that contain no messages. */
+  showEmptyFolders: boolean
+  setShowEmptyFolders: (v: boolean) => void
   addFiles: (files: File[]) => void
   removeSource: (id: string) => void
   clearSources: () => void
@@ -88,6 +91,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 const NAV_W_KEY = 'pstviewer.navWidth'
 const LIST_W_KEY = 'pstviewer.listWidth'
 const OCR_KEY = 'pstviewer.ocrEnabled'
+const EMPTY_FOLDERS_KEY = 'pstviewer.showEmptyFolders'
 
 function readBool(key: string, def: boolean): boolean {
   try {
@@ -443,6 +447,11 @@ export const useApp = create<AppState>((set, get) => {
     setOcrEnabled: (v) => {
       writeBool(OCR_KEY, v)
       set({ ocrEnabled: v })
+    },
+    showEmptyFolders: readBool(EMPTY_FOLDERS_KEY, false),
+    setShowEmptyFolders: (v) => {
+      writeBool(EMPTY_FOLDERS_KEY, v)
+      set({ showEmptyFolders: v })
     },
 
     setNavWidth: (w) => {
