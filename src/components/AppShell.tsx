@@ -76,7 +76,7 @@ export function AppShell() {
                 style={{ width: listWidth }}
                 className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-800"
               >
-                <div className="shrink-0 border-b border-slate-800 bg-slate-900/40 p-2">
+                <div className="flex h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900/40 px-2">
                   <SearchBar />
                 </div>
                 <div className="min-h-0 flex-1">
