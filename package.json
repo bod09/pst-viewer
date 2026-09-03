@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && node scripts/make-deploy.mjs"
+    "deploy": "npm run build && node scripts/make-deploy.mjs",
+    "postinstall": "patch-package"
   },
   "keywords": [],
   "author": "",
@@ -39,6 +40,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
+    "patch-package": "^8.0.1",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.3.1",
     "typescript": "^7.0.2",

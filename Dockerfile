@@ -2,7 +2,10 @@
 FROM docker.io/library/node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY patches ./patches
+# The grep guards that patch-package really applied the pst-extractor patch.
+RUN npm ci \
+    && grep -q childrenByParent node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
 COPY . .
 RUN npm run build
 

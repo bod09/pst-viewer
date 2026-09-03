@@ -1,0 +1,33 @@
+diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js b/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
+index 6b48cc5..d0e9191 100644
+--- a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
++++ b/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
+@@ -453,6 +453,17 @@ export async function openLowPst(api) {
+     const node_btree_count = trait.readId(view, trait.SECOND_POINTER_COUNT);
+     const node_btree = trait.readId(view, trait.SECOND_POINTER);
+     await loadNodeTree(node_btree, node_btree_count, 0x21, Infinity);
++    // Index children once so getChildren() is O(children) instead of scanning
++    // the file-wide node map on every call (which stalls large folder opens).
++    const childrenByParent = new Map;
++    for (const node of nodeMap.values()) {
++        let siblings = childrenByParent.get(node.parentNodeId);
++        if (siblings === undefined) {
++            siblings = [];
++            childrenByParent.set(node.parentNodeId, siblings);
++        }
++        siblings.push(node);
++    }
+     async function loadMainBlockTo(blockId, consumer) {
+         if (blockId === 0) {
+             return;
+@@ -601,8 +612,8 @@ export async function openLowPst(api) {
+         return {
+             nodeId: (ptr.nodeId),
+             getParent: () => getOneNodeBy((ptr.parentNodeId)),
+-            getChildren: () => Array.from(nodeMap.values())
+-                .filter(it => it.parentNodeId === ptr.nodeId && it.nodeId !== ptr.nodeId)
++            getChildren: () => (childrenByParent.get(ptr.nodeId) ?? [])
++                .filter(it => it.nodeId !== ptr.nodeId)
+                 .map(it => getOneNodeBy(it.nodeId))
+                 .filter(it => it !== undefined),
+             getSubNode: () => getSubNodeOf(ptr.nodeId),
