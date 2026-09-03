@@ -4,6 +4,7 @@ import { useApp } from '../store/store'
 import type { SearchHit } from '../types'
 import { formatDateShort } from '../lib/format'
 import { Paperclip, Spinner } from './icons'
+import { SelectAvatar } from './SelectAvatar'
 
 export function SearchResults() {
   const results = useApp((s) => s.searchResults)
@@ -126,19 +127,12 @@ const HitRow = memo(function HitRow({
         selected ? 'border-l-sky-400 bg-sky-500/15' : 'border-l-transparent hover:bg-slate-800/40'
       }`}
     >
-      <label
-        className="flex cursor-pointer items-center pl-3 pr-1"
-        data-tip="Select for PDF export"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <input
-          type="checkbox"
-          checked={exportChecked}
-          onChange={() => onToggleExport(hit.sourceId, hit.messageId)}
-          className="h-4 w-4 cursor-pointer accent-sky-500"
-        />
-      </label>
-      <button onClick={() => onOpen(hit)} className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pr-3 text-left">
+      <SelectAvatar
+        name={hit.from || hit.subject || '?'}
+        checked={exportChecked}
+        onToggle={() => onToggleExport(hit.sourceId, hit.messageId)}
+      />
+      <button onClick={() => onOpen(hit)} className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2 pr-3 text-left">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm text-slate-200" data-tip={hit.subject}>
             {hit.subject || '(no subject)'}

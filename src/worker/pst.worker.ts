@@ -80,6 +80,8 @@ interface SourceEntry {
   fingerprint?: string
   /** Cached search docs found for this file, consumed by indexSource. */
   cachedDocs?: SearchDoc[] | null
+  /** People seen in this source (key: lowercased label), for suggestions. */
+  people?: Map<string, { label: string; count: number }>
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -97,6 +99,9 @@ interface SearchDoc {
   ocr: string
   date: number | null
   hasAttachments: boolean
+  importance: 'high' | 'low' | null
+  flagged: boolean
+  unread: boolean
 }
 
 const searchIndex = new MiniSearch<SearchDoc>({
@@ -108,6 +113,41 @@ const searchIndex = new MiniSearch<SearchDoc>({
 
 /** Keep the indexed docs so OCR text can be merged in later (replace). */
 const searchDocs = new Map<string, SearchDoc>()
+
+/** Tiny always-in-memory copy of every doc's filterable fields (no bodies),
+ *  so field filters and filter-only queries work after docs are released. */
+interface MetaDoc {
+  id: string
+  sourceId: string
+  messageId: string
+  folderId: string
+  subject: string
+  from: string
+  to: string
+  date: number | null
+  hasAttachments: boolean
+  importance: 'high' | 'low' | null
+  flagged: boolean
+  unread: boolean
+}
+const metaDocs = new Map<string, MetaDoc>()
+
+function metaOf(d: SearchDoc): MetaDoc {
+  return {
+    id: d.id,
+    sourceId: d.sourceId,
+    messageId: d.messageId,
+    folderId: d.folderId,
+    subject: d.subject,
+    from: d.from,
+    to: d.to,
+    date: d.date,
+    hasAttachments: d.hasAttachments,
+    importance: d.importance ?? null,
+    flagged: d.flagged ?? false,
+    unread: d.unread ?? false,
+  }
+}
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i
 function isImageAttachment(name: string, mime: string): boolean {
@@ -344,6 +384,37 @@ async function buildSearchDoc(
   const delivery = safe(() => m.messageDeliveryTime, null)
   const submit = safe(() => m.clientSubmitTime, null)
 
+  // displayTo/CC usually carry names only; add recipient addresses so
+  // to:/person: filters match either form.
+  const recipients = await safeAsync(() => m.getRecipients(), [])
+  const recipientAddresses = recipients
+    .map((r) => safe(() => r.smtpAddress, '') || safe(() => r.emailAddress, ''))
+    .filter(Boolean)
+    .join(' ')
+
+  // Collect the people involved for search autocompletion.
+  entry.people ??= new Map()
+  const addPerson = (name: string, email: string) => {
+    const nm = cleanStr(name)
+    const em = (email || '').trim()
+    const label = nm && em.includes('@') ? `${nm} <${em}>` : nm || (em.includes('@') ? em : '')
+    if (!label) return
+    const key = label.toLowerCase()
+    const p = entry.people!.get(key)
+    if (p) p.count++
+    else entry.people!.set(key, { label, count: 1 })
+  }
+  addPerson(
+    safe(() => m.senderName, ''),
+    safe(() => m.senderEmailAddress, ''),
+  )
+  for (const r of recipients) {
+    addPerson(
+      safe(() => r.displayName, ''),
+      safe(() => r.smtpAddress, '') || safe(() => r.emailAddress, ''),
+    )
+  }
+
   return {
     id: `${sourceId}:${msgId}`,
     sourceId,
@@ -351,12 +422,18 @@ async function buildSearchDoc(
     folderId,
     subject: safe(() => m.subject, ''),
     from: `${safe(() => m.senderName, '')} ${safe(() => m.senderEmailAddress, '')}`.trim(),
-    to: `${safe(() => m.displayTo, '')} ${safe(() => m.displayCC, '')}`.trim(),
+    to: `${safe(() => m.displayTo, '')} ${safe(() => m.displayCC, '')} ${recipientAddresses}`.trim(),
     body,
     attachments,
     ocr: '',
     date: (delivery ?? submit)?.getTime() ?? null,
     hasAttachments: safe(() => m.hasAttachments, false),
+    importance: (() => {
+      const v = safe(() => m.importance, 1)
+      return v === 2 ? ('high' as const) : v === 0 ? ('low' as const) : null
+    })(),
+    flagged: safe(() => m.getProperty(0x1090)?.value, 0) === 2,
+    unread: !safe(() => m.isRead, true),
   }
 }
 
@@ -1106,7 +1183,11 @@ const api = {
     // A previous session's finished search index for this exact file (same
     // name/size/mtime) lets indexSource skip re-reading every message.
     entry.fingerprint = fingerprintOf(file)
-    entry.cachedDocs = (await getCachedIndex(entry.fingerprint)) ?? null
+    const cached = await getCachedIndex(entry.fingerprint)
+    entry.cachedDocs = cached?.docs ?? null
+    if (cached?.people.length) {
+      entry.people = new Map(cached.people.map(([label, count]) => [label.toLowerCase(), { label, count }]))
+    }
 
     let totalMessages = 0
     const sum = (n: FolderNode) => {
@@ -1369,6 +1450,7 @@ const api = {
         if (searchIndex.has(doc.id)) continue
         docs.push(doc)
         entry.searchIds.add(doc.id)
+        metaDocs.set(doc.id, metaOf(doc))
       }
       entry.cachedDocs = null
       if (docs.length) searchIndex.addAll(docs)
@@ -1395,6 +1477,7 @@ const api = {
           docs.push(doc)
           searchDocs.set(id, doc)
           entry.searchIds.add(id)
+          metaDocs.set(id, metaOf(doc))
         } catch {
           // skip an unreadable message
         }
@@ -1457,27 +1540,144 @@ const api = {
     return results
   },
 
-  /** Fuzzy full-text search across all indexed sources. */
+  /** People suggestions for the search filters, most-seen first. */
+  async suggestPeople(q: string, limit = 8): Promise<string[]> {
+    const needle = q.trim().toLowerCase()
+    const agg = new Map<string, { label: string; count: number }>()
+    for (const entry of sources.values()) {
+      for (const [key, p] of entry.people ?? []) {
+        if (needle && !key.includes(needle)) continue
+        const a = agg.get(key)
+        if (a) a.count += p.count
+        else agg.set(key, { ...p })
+      }
+    }
+    return [...agg.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit)
+      .map((p) => p.label)
+  },
+
+  /**
+   * Search across all indexed sources. Plain words are fuzzy (typo-tolerant),
+   * digit-bearing terms exact. The query also understands:
+   *   "quoted text"       exact phrase
+   *   from: to: subject:  field contains the value
+   *   person:x            from OR to contains the value
+   *   has:attachment      only messages with attachments
+   *   is:high|low|flagged|unread
+   *   before:/after:      date bound (YYYY-MM-DD)
+   */
   async search(query: string, limit = 100): Promise<SearchHit[]> {
     const q = query.trim()
     if (!q) return []
-    // Terms with a digit (numbers, ids, reference codes) are specific, so match
-    // them exactly. Fuzzy matching on an id finds near-misses that are rarely
-    // wanted and, worse, do not contain the typed text so nothing highlights.
-    // Plain words stay fuzzy for typo tolerance.
-    const results = searchIndex.search(q, {
-      combineWith: 'AND',
-      fuzzy: (term) => (/\d/.test(term) ? false : 0.2),
+
+    // Parse: quoted phrases, key:value filters (value may be quoted), terms.
+    const phrases: string[] = []
+    const terms: string[] = []
+    const filters: Record<string, string[]> = {}
+    const TOKEN = /(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]*)"|(\S+)/g
+    const KEYS = new Set(['from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after'])
+    let tok: RegExpExecArray | null
+    while ((tok = TOKEN.exec(q))) {
+      const key = (tok[1] ?? tok[3])?.toLowerCase()
+      const val = tok[2] ?? tok[4]
+      if (key && KEYS.has(key) && val) {
+        ;(filters[key] ??= []).push(val.toLowerCase())
+      } else if (tok[5] !== undefined) {
+        if (tok[5].trim()) phrases.push(tok[5].toLowerCase())
+      } else {
+        terms.push(tok[6] ?? `${key}:${val}`)
+      }
+    }
+
+    // Candidates: full-text over free terms plus the words inside phrases
+    // (exact words, adjacency verified later); with neither, every message.
+    const ftQuery = [...terms, ...phrases.flatMap((p) => p.split(/\s+/))].join(' ')
+    let candidates: { meta: MetaDoc; score: number }[]
+    if (ftQuery.trim()) {
+      const phraseWords = new Set(phrases.flatMap((p) => p.split(/\s+/)))
+      candidates = searchIndex
+        .search(ftQuery, {
+          combineWith: 'AND',
+          fuzzy: (term) => (/\d/.test(term) || phraseWords.has(term) ? false : 0.2),
+          prefix: (term) => !phraseWords.has(term),
+        })
+        .map((r) => ({ meta: metaDocs.get(r.id as string), score: r.score }))
+        .filter((c): c is { meta: MetaDoc; score: number } => c.meta !== undefined)
+    } else {
+      candidates = [...metaDocs.values()].map((meta) => ({ meta, score: 0 }))
+    }
+
+    // Field filters over the in-memory metadata.
+    const has = (hay: string, needles: string[] | undefined) =>
+      !needles || needles.every((n) => hay.toLowerCase().includes(n))
+    const dateBound = (v: string[] | undefined) => {
+      const t = v ? Date.parse(v[v.length - 1]) : NaN
+      return Number.isNaN(t) ? null : t
+    }
+    const before = dateBound(filters.before)
+    const after = dateBound(filters.after)
+    candidates = candidates.filter(({ meta }) => {
+      if (!has(meta.from, filters.from)) return false
+      if (!has(meta.to, filters.to)) return false
+      if (!has(meta.subject, filters.subject)) return false
+      if (filters.person && !filters.person.every((p) =>
+        meta.from.toLowerCase().includes(p) || meta.to.toLowerCase().includes(p))) return false
+      if (filters.has?.some((h) => h.startsWith('attach')) && !meta.hasAttachments) return false
+      if (filters.is) {
+        for (const f of filters.is) {
+          if (f === 'high' && meta.importance !== 'high') return false
+          if (f === 'low' && meta.importance !== 'low') return false
+          if (f === 'flagged' && !meta.flagged) return false
+          if (f === 'unread' && !meta.unread) return false
+        }
+      }
+      if (before !== null && (meta.date === null || meta.date >= before)) return false
+      if (after !== null && (meta.date === null || meta.date < after)) return false
+      return true
     })
-    return results.slice(0, limit).map((r) => ({
-      sourceId: r.sourceId as string,
-      messageId: r.messageId as string,
-      folderId: r.folderId as string,
-      subject: r.subject as string,
-      from: r.from as string,
-      date: (r.date as number | null) ?? null,
-      hasAttachments: Boolean(r.hasAttachments),
-      score: r.score,
+
+    // Exact phrases: verify adjacency against the real text. Docs still in
+    // memory are checked directly; released ones load from the on-device
+    // index cache, per source, once per search.
+    if (phrases.length) {
+      const hayOf = (d: { subject: string; from: string; to: string; body?: string; attachments?: string; ocr?: string }) =>
+        `${d.subject}\n${d.from}\n${d.to}\n${d.body ?? ''}\n${d.attachments ?? ''}\n${d.ocr ?? ''}`.toLowerCase()
+      const perSource = new Map<string, Map<string, string>>()
+      const verified: typeof candidates = []
+      for (const c of candidates) {
+        let hay: string | undefined
+        const inMem = searchDocs.get(c.meta.id)
+        if (inMem) {
+          hay = hayOf(inMem)
+        } else {
+          let m = perSource.get(c.meta.sourceId)
+          if (!m) {
+            m = new Map()
+            const fp = sources.get(c.meta.sourceId)?.fingerprint
+            if (fp) {
+              for (const d of (await getCachedIndex(fp))?.docs ?? []) m.set(d.messageId, hayOf(d))
+            }
+            perSource.set(c.meta.sourceId, m)
+          }
+          hay = m.get(c.meta.messageId) ?? hayOf(c.meta)
+        }
+        if (phrases.every((p) => hay!.includes(p))) verified.push(c)
+      }
+      candidates = verified
+    }
+
+    if (!ftQuery.trim()) candidates.sort((a, b) => (b.meta.date ?? 0) - (a.meta.date ?? 0))
+    return candidates.slice(0, limit).map(({ meta, score }) => ({
+      sourceId: meta.sourceId,
+      messageId: meta.messageId,
+      folderId: meta.folderId,
+      subject: meta.subject,
+      from: meta.from,
+      date: meta.date,
+      hasAttachments: meta.hasAttachments,
+      score,
     }))
   },
 
@@ -1570,9 +1770,17 @@ const api = {
       const docs = [...entry.searchIds]
         .map((id) => searchDocs.get(id))
         .filter((d): d is SearchDoc => d !== undefined)
-      if (docs.length) await putCachedIndex(entry.fingerprint, docs)
+      if (docs.length) {
+        const people: [string, number][] = [...(entry.people?.values() ?? [])].map((p) => [
+          p.label,
+          p.count,
+        ])
+        await putCachedIndex(entry.fingerprint, docs, people)
+      }
+      for (const id of entry.searchIds) searchDocs.delete(id)
     }
-    for (const id of entry.searchIds) searchDocs.delete(id)
+    // Sources without a fingerprint (standalone .msg/.eml batches) keep their
+    // docs in memory: they are small, and exact-phrase search needs the text.
   },
 
   /** Release a source, its PST handle, and its search-index entries. */
@@ -1585,6 +1793,7 @@ const api = {
     for (const id of entry.searchIds) {
       if (searchIndex.has(id)) searchIndex.discard(id)
       searchDocs.delete(id)
+      metaDocs.delete(id)
     }
     await safeAsync(() => entry.file.close(), undefined)
   },

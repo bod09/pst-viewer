@@ -110,3 +110,37 @@ input[type="search"]::-webkit-search-decoration {
   background: #f1f5f9;
   font-weight: 600;
 }
+
+/* App-styled checkbox (message export selection etc.): matches the slate
+   surfaces and takes the accent colour, unlike the native control. */
+.pstv-check {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  border-radius: 0.28rem;
+  border: 1px solid var(--color-slate-600);
+  background-color: color-mix(in oklab, var(--color-slate-800) 60%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.pstv-check:hover {
+  border-color: var(--color-slate-400);
+}
+.pstv-check:checked {
+  border-color: var(--color-sky-500);
+  background-color: var(--color-sky-500);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+}
+
+/* Tailwind v4 resets buttons to the default cursor; clickable things should
+   look clickable. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Native date pickers follow the app's dark theme. */
+input[type='date'] {
+  color-scheme: dark;
+}

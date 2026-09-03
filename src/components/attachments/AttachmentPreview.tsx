@@ -3,7 +3,8 @@ import type { AttachmentMeta, EmbeddedMessageResult } from '../../types'
 import { pst } from '../../worker/client'
 import { detectType, type DetectedType } from '../../lib/detectType'
 import { pdfjs } from '../../lib/pdf'
-import { Close, Download, FileGeneric, Spinner } from '../icons'
+import { Download, FileGeneric, Spinner } from '../icons'
+import { Dialog } from '../Dialog'
 import { MessageView } from '../MessageView'
 
 interface PreviewProps {
@@ -14,47 +15,16 @@ interface PreviewProps {
 }
 
 export function AttachmentPreview({ sourceId, messageId, meta, onClose }: PreviewProps) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
-      onClick={onClose}
-    >
-      <div
-        className="flex h-full max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
-          <span className="min-w-0 truncate text-sm font-medium text-slate-200" data-tip={meta.name}>
-            {meta.name}
-          </span>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-            data-tip="Close (Esc)"
-          >
-            <Close className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1">
-          {meta.isEmbeddedMessage ? (
-            <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} />
-          ) : /\.(msg|eml)$/i.test(meta.name) || /^message\/rfc822$/i.test(meta.mime) ? (
-            <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} attachedMsg />
-          ) : (
-            <FileView sourceId={sourceId} messageId={messageId} meta={meta} />
-          )}
-        </div>
-      </div>
-    </div>
+    <Dialog title={meta.name} onClose={onClose} size="lg" fillHeight>
+      {meta.isEmbeddedMessage ? (
+        <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} />
+      ) : /\.(msg|eml)$/i.test(meta.name) || /^message\/rfc822$/i.test(meta.mime) ? (
+        <EmbeddedView sourceId={sourceId} messageId={messageId} index={meta.index} attachedMsg />
+      ) : (
+        <FileView sourceId={sourceId} messageId={messageId} meta={meta} />
+      )}
+    </Dialog>
   )
 }
 

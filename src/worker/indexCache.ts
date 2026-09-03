@@ -26,11 +26,25 @@ export interface CachedSearchDoc {
   ocr: string
   date: number | null
   hasAttachments: boolean
+  importance: 'high' | 'low' | null
+  flagged: boolean
+  unread: boolean
 }
+
+/** Bump when the entry shape changes; older entries are treated as misses. */
+const ENTRY_VERSION = 3
 
 interface Entry {
   docs: CachedSearchDoc[]
+  /** People seen in the mailbox: [display label, message count]. */
+  people?: [string, number][]
   exp: number
+  v?: number
+}
+
+export interface CachedIndex {
+  docs: CachedSearchDoc[]
+  people: [string, number][]
 }
 
 export function fingerprintOf(file: File): string {
@@ -74,8 +88,8 @@ function openDb(): Promise<IDBDatabase | null> {
   return dbPromise
 }
 
-/** Cached search docs for a file fingerprint, or undefined. Slides the expiry. */
-export async function getCachedIndex(fp: string): Promise<CachedSearchDoc[] | undefined> {
+/** Cached index for a file fingerprint, or undefined. Slides the expiry. */
+export async function getCachedIndex(fp: string): Promise<CachedIndex | undefined> {
   const db = await openDb()
   if (!db) return undefined
   return new Promise((resolve) => {
@@ -86,15 +100,15 @@ export async function getCachedIndex(fp: string): Promise<CachedSearchDoc[] | un
       req.onsuccess = () => {
         const v = req.result as Entry | undefined
         const now = Date.now()
-        if (v && Array.isArray(v.docs) && typeof v.exp === 'number' && v.exp >= now) {
+        if (v && v.v === ENTRY_VERSION && Array.isArray(v.docs) && typeof v.exp === 'number' && v.exp >= now) {
           if (now - (v.exp - MAX_AGE_MS) > DAY_MS) {
             try {
-              store.put({ docs: v.docs, exp: now + MAX_AGE_MS }, fp)
+              store.put({ ...v, exp: now + MAX_AGE_MS }, fp)
             } catch {
               /* ignore */
             }
           }
-          resolve(v.docs)
+          resolve({ docs: v.docs, people: v.people ?? [] })
         } else {
           resolve(undefined)
         }
@@ -106,14 +120,21 @@ export async function getCachedIndex(fp: string): Promise<CachedSearchDoc[] | un
   })
 }
 
-/** Store the finished search docs for a file fingerprint. Best-effort. */
-export async function putCachedIndex(fp: string, docs: CachedSearchDoc[]): Promise<void> {
+/** Store the finished search docs and people list for a file fingerprint. */
+export async function putCachedIndex(
+  fp: string,
+  docs: CachedSearchDoc[],
+  people: [string, number][],
+): Promise<void> {
   const db = await openDb()
   if (!db) return
   return new Promise((resolve) => {
     try {
       const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put({ docs, exp: Date.now() + MAX_AGE_MS } satisfies Entry, fp)
+      tx.objectStore(STORE).put(
+        { docs, people, exp: Date.now() + MAX_AGE_MS, v: ENTRY_VERSION } satisfies Entry,
+        fp,
+      )
       tx.oncomplete = () => resolve()
       tx.onerror = () => resolve()
       tx.onabort = () => resolve()

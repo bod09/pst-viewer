@@ -3,6 +3,7 @@ import { useApp, type Source } from '../store/store'
 import type { FolderNode } from '../types'
 import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
 import { BrandHeader } from './BrandHeader'
+import { SettingsButton } from './Settings'
 import {
   Alert,
   Archive,
@@ -105,6 +106,7 @@ export function NavPane() {
     <nav className="flex h-full min-h-0 flex-col border-r border-slate-800 bg-slate-900/40">
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-800 px-3">
         <BrandHeader />
+        <SettingsButton className="ml-auto" />
       </div>
 
       <button
@@ -130,7 +132,6 @@ function NavAddFiles() {
   const input = useRef<HTMLInputElement>(null)
   return (
     <div className="shrink-0">
-      <OcrToggle />
       <div className="border-t border-slate-800 p-2">
       <button
         onClick={() => input.current?.click()}
@@ -153,25 +154,6 @@ function NavAddFiles() {
       />
       </div>
     </div>
-  )
-}
-
-function OcrToggle() {
-  const ocrEnabled = useApp((s) => s.ocrEnabled)
-  const setOcrEnabled = useApp((s) => s.setOcrEnabled)
-  return (
-    <label
-      className="flex cursor-pointer items-center gap-2 px-3 pb-2 text-xs text-slate-400 hover:text-slate-200"
-      data-tip="Reads text in pictures so it shows up in search. Turn off to skip it - reading images makes opening a mailbox take longer."
-    >
-      <input
-        type="checkbox"
-        checked={ocrEnabled}
-        onChange={(e) => setOcrEnabled(e.target.checked)}
-        className="h-3.5 w-3.5 accent-sky-500"
-      />
-      OCR images for search
-    </label>
   )
 }
 

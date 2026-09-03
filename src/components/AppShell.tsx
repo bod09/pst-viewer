@@ -10,6 +10,7 @@ import { Resizer } from './Resizer'
 import { dragHasFiles, filterAccepted } from '../lib/files'
 import { Printer, Spinner } from './icons'
 import { BrandHeader } from './BrandHeader'
+import { SettingsButton } from './Settings'
 
 export function AppShell() {
   const sources = useApp((s) => s.sources)
@@ -107,6 +108,9 @@ function EmptyState() {
     <div className="relative h-full">
       <div className="absolute left-4 top-3 z-10 flex items-center gap-2.5">
         <BrandHeader />
+      </div>
+      <div className="absolute right-4 top-3 z-10">
+        <SettingsButton />
       </div>
       <DropZone />
     </div>

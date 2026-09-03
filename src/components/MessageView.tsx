@@ -17,7 +17,8 @@ import {
   JournalCardView,
   TaskCardView,
 } from './ItemCard'
-import { Code, Download, Printer } from './icons'
+import { Code, Download, Printer, Search } from './icons'
+import { Dialog } from './Dialog'
 
 export function MessageView({
   sourceId,
@@ -290,14 +291,14 @@ function showAddress(name: string, email: string): boolean {
 
 type LookupFn = (q: { name: string; email: string }) => void
 
-/** A clickable person: opens the matching contact card, if one exists. */
+/** A person in the header; clicking opens the person actions dialog. */
 function Person({ name, email, onLookup }: { name: string; email: string; onLookup: LookupFn }) {
   const raw = !showAddress(name, email) && email && email !== name ? email : undefined
   return (
     <button
       onClick={() => onLookup({ name, email })}
-      className="text-left text-slate-200 hover:underline"
-      data-tip={raw ?? 'Look up in contacts'}
+      className="-mx-1 rounded px-1 text-left text-slate-200 transition hover:bg-slate-800"
+      data-tip={raw}
     >
       {name || email || '(unknown sender)'}
       {showAddress(name, email) && <span className="text-slate-400"> &lt;{email}&gt;</span>}
@@ -318,7 +319,7 @@ function Recipients({ list, onLookup }: { list: RecipientInfo[]; onLookup: Looku
   )
 }
 
-/** Modal: find the clicked person in the loaded mailboxes' contact folders. */
+/** Person actions: jump to their messages, and view their contact card. */
 function ContactLookup({
   query,
   onClose,
@@ -329,6 +330,8 @@ function ContactLookup({
   const [matches, setMatches] = useState<ContactMatch[] | null>(null)
   const [picked, setPicked] = useState<ContactMatch | null>(null)
   const [card, setCard] = useState<MessageContent | null>(null)
+  const setSearchQuery = useApp((s) => s.setSearchQuery)
+  const runSearch = useApp((s) => s.runSearch)
 
   useEffect(() => {
     let alive = true
@@ -358,64 +361,53 @@ function ContactLookup({
     }
   }, [picked])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const showMessages = () => {
+    const key = query.email.includes('@') ? query.email : query.name
+    setSearchQuery(`person:"${key}"`)
+    runSearch()
+    onClose()
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={onClose}>
-      <div
-        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
-          <span className="truncate text-sm font-medium text-slate-200">
-            {query.name || query.email} — contacts
-          </span>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-            data-tip="Close (Esc)"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="scroll-clear min-h-0 flex-1 overflow-auto">
-          {matches === null && (
-            <div className="p-8 text-center text-sm text-slate-400">Searching contacts…</div>
-          )}
-          {matches !== null && matches.length === 0 && (
-            <div className="p-8 text-center text-sm text-slate-400">
-              No matching contact in the loaded mailboxes.
-            </div>
-          )}
-          {matches !== null && matches.length > 1 && !picked && (
-            <div className="p-3">
-              {matches.map((m) => (
-                <button
-                  key={`${m.sourceId}:${m.messageId}`}
-                  onClick={() => setPicked(m)}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/70"
-                >
-                  {m.name}
-                  {m.email && <span className="text-slate-400"> &lt;{m.email}&gt;</span>}
-                </button>
-              ))}
-            </div>
-          )}
-          {picked && card && (
-            <MessageView sourceId={picked.sourceId} messageId={picked.messageId} content={card} />
-          )}
-          {picked && !card && matches !== null && (
-            <div className="p-8 text-center text-sm text-slate-400">Loading contact…</div>
-          )}
-        </div>
+    <Dialog title={query.name || query.email} onClose={onClose}>
+      <div className="border-b border-slate-800 p-3">
+        <button
+          onClick={showMessages}
+          className="flex w-full items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-700/60"
+        >
+          <Search className="h-4 w-4 text-slate-400" />
+          Show all messages with this person
+        </button>
       </div>
-    </div>
+      {matches === null && (
+        <div className="p-6 text-center text-sm text-slate-400">Checking contacts…</div>
+      )}
+      {matches !== null && matches.length === 0 && (
+        <div className="p-6 text-center text-sm text-slate-400">
+          Not in the loaded mailboxes' contacts.
+        </div>
+      )}
+      {matches !== null && matches.length > 1 && !picked && (
+        <div className="p-3">
+          {matches.map((m) => (
+            <button
+              key={`${m.sourceId}:${m.messageId}`}
+              onClick={() => setPicked(m)}
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/70"
+            >
+              {m.name}
+              {m.email && <span className="text-slate-400"> &lt;{m.email}&gt;</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {picked && card && (
+        <MessageView sourceId={picked.sourceId} messageId={picked.messageId} content={card} />
+      )}
+      {picked && !card && matches !== null && (
+        <div className="p-6 text-center text-sm text-slate-400">Loading contact…</div>
+      )}
+    </Dialog>
   )
 }
 

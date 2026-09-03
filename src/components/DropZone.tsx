@@ -4,8 +4,6 @@ import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
 
 export function DropZone() {
   const addFiles = useApp((s) => s.addFiles)
-  const ocrEnabled = useApp((s) => s.ocrEnabled)
-  const setOcrEnabled = useApp((s) => s.setOcrEnabled)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const onPicked = (e: ChangeEvent<HTMLInputElement>) => {
@@ -43,19 +41,6 @@ export function DropZone() {
         </span>
       </button>
 
-      <label
-        className="absolute bottom-6 flex cursor-pointer items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
-        onClick={(e) => e.stopPropagation()}
-        data-tip="Reads text in pictures so it shows up in search. Turn off to skip it - reading images makes opening a mailbox take longer."
-      >
-        <input
-          type="checkbox"
-          checked={ocrEnabled}
-          onChange={(e) => setOcrEnabled(e.target.checked)}
-          className="h-4 w-4 accent-sky-500"
-        />
-        Make text in images searchable (OCR)
-      </label>
 
       <input
         ref={fileInput}
