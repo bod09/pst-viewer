@@ -17,7 +17,7 @@ export function DropZone() {
       <button
         type="button"
         onClick={() => fileInput.current?.click()}
-        className="group flex min-h-[22rem] w-full max-w-xl flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-900/40 p-12 text-center shadow-2xl transition hover:border-sky-500/60 hover:bg-slate-900/70 focus:outline-none focus-visible:border-sky-500"
+        className="group flex min-h-[22rem] w-full max-w-xl flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-900/40 p-12 text-center transition hover:border-sky-500/60 hover:bg-slate-900/70 focus:outline-none focus-visible:border-sky-500"
       >
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800/80 transition group-hover:bg-slate-800">
           <svg viewBox="0 0 24 24" className="h-8 w-8 text-sky-400" fill="none" stroke="currentColor" strokeWidth={1.8}>

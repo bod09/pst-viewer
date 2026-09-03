@@ -301,7 +301,9 @@ function SourceTree({ source }: { source: Source }) {
 }
 
 function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNode; depth: number }) {
-  const expanded = useApp((s) => s.expanded[`${sourceId}:${node.id}`] ?? false)
+  // Expanded by default: a folder is only ever collapsed by the user, so
+  // nothing in a freshly opened mailbox is hidden.
+  const expanded = useApp((s) => s.expanded[`${sourceId}:${node.id}`] ?? true)
   const selected = useApp(
     (s) => s.selection.sourceId === sourceId && s.selection.folderId === node.id,
   )
@@ -316,30 +318,34 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
     <li>
       <div
         onClick={() => selectFolder(sourceId, node.id)}
-        className={`flex cursor-pointer items-center gap-1.5 rounded-r-md border-l-2 py-1 pr-2 text-sm transition ${
+        className={`group/row flex cursor-pointer items-center gap-1.5 rounded-r-md border-l-2 py-1 pr-2 text-sm transition ${
           selected
-            ? 'border-l-sky-400 bg-sky-500/15 font-medium text-sky-100'
+            ? 'border-l-sky-400 bg-sky-500/15 font-medium text-slate-100'
             : 'border-l-slate-700/60 text-slate-300 hover:bg-slate-800/60'
         }`}
         style={{ paddingLeft: depth * 14 + 6 }}
       >
-        {/* A fixed chevron gutter (empty for leaf folders) so every row keeps
-            its type icon and names line up. */}
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-          {hasChildren && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleFolder(sourceId, node.id)
-              }}
-              className="flex h-4 w-4 items-center justify-center rounded text-slate-400 hover:text-slate-200"
-              data-tip={expanded ? 'Collapse' : 'Expand'}
-            >
-              <Caret className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-            </button>
-          )}
-        </span>
-        <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
+        {/* One icon slot, no gutter: expandable folders show their type icon
+            and swap to the expand chevron while the row is hovered. */}
+        {hasChildren ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleFolder(sourceId, node.id)
+            }}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-200"
+            data-tip={expanded ? 'Collapse' : 'Expand'}
+          >
+            <Icon
+              className={`h-4 w-4 group-hover/row:hidden ${selected ? 'text-sky-300' : 'text-slate-400'}`}
+            />
+            <Caret
+              className={`hidden h-3.5 w-3.5 transition-transform group-hover/row:block ${expanded ? 'rotate-90' : ''}`}
+            />
+          </button>
+        ) : (
+          <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-sky-300' : 'text-slate-400'}`} />
+        )}
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
         </span>

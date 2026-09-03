@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../store/store'
+import { getUserAccent, setUserAccent, getUserTheme, setUserTheme } from '../lib/branding'
 import { Dialog } from './Dialog'
 
 export function GearIcon({ className }: { className?: string }) {
@@ -83,7 +84,91 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
           <Toggle checked={showEmptyFolders} onChange={setShowEmptyFolders} />
         </div>
+        <ColorRow
+          title="Theme"
+          description="The overall look: backgrounds, panels and text."
+          presets={THEME_PRESETS}
+          defaultSwatch="oklch(27.9% 0.042 257)"
+          read={getUserTheme}
+          write={setUserTheme}
+        />
+        <ColorRow
+          title="Accent"
+          description="Used for highlights, buttons and selection."
+          presets={ACCENT_PRESETS}
+          defaultSwatch="oklch(68.5% 0.169 237.3)"
+          read={getUserAccent}
+          write={setUserAccent}
+        />
       </div>
     </Dialog>
+  )
+}
+
+// Restrained, corporate-friendly tones: default blue, indigo, teal, bronze,
+// burgundy, steel.
+const ACCENT_PRESETS = ['', '#4f46e5', '#0d9488', '#b45309', '#9f1239', '#64748b']
+// Theme presets: default slate, paper light, graphite, deep navy, forest,
+// warm charcoal.
+const THEME_PRESETS = ['', '#eef1f5', '#2e2e33', '#1b2a44', '#1d3229', '#2b2320']
+
+function ColorRow({
+  title,
+  description,
+  presets,
+  defaultSwatch,
+  read,
+  write,
+}: {
+  title: string
+  description: string
+  presets: string[]
+  defaultSwatch: string
+  read: () => string
+  write: (v: string) => void
+}) {
+  const [value, setValue] = useState(read())
+  const pick = (color: string) => {
+    write(color)
+    setValue(color)
+  }
+  const isCustom = value !== '' && !presets.includes(value)
+  const ring = (on: boolean) =>
+    on
+      ? 'ring-2 ring-slate-200 ring-offset-2 ring-offset-slate-900'
+      : 'hover:ring-2 hover:ring-slate-500 hover:ring-offset-2 hover:ring-offset-slate-900'
+
+  return (
+    <div>
+      <div className="text-sm font-medium text-slate-100">{title}</div>
+      <div className="mt-1 text-xs leading-relaxed text-slate-400">{description}</div>
+      <div className="mt-2.5 flex items-center gap-2.5">
+        {presets.map((c) => (
+          <button
+            key={c || 'default'}
+            onClick={() => pick(c)}
+            data-tip={c ? undefined : 'Default'}
+            className={`h-6 w-6 rounded-full transition ${ring(value === c)}`}
+            style={{ backgroundColor: c || defaultSwatch }}
+          />
+        ))}
+        <label
+          data-tip="Custom colour"
+          className={`relative h-6 w-6 cursor-pointer overflow-hidden rounded-full transition ${ring(isCustom)}`}
+          style={{
+            background: isCustom
+              ? value
+              : 'conic-gradient(#e11d48, #d97706, #059669, #0891b2, #7c3aed, #e11d48)',
+          }}
+        >
+          <input
+            type="color"
+            value={isCustom ? value : '#38bdf8'}
+            onChange={(e) => pick(e.target.value)}
+            className="absolute inset-0 cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
+    </div>
   )
 }

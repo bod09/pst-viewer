@@ -13,13 +13,14 @@ esc() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-if [ -n "${BRAND_NAME:-}${BRAND_TAGLINE:-}${BRAND_LOGO:-}${BRAND_ACCENT:-}" ]; then
+if [ -n "${BRAND_NAME:-}${BRAND_TAGLINE:-}${BRAND_LOGO:-}${BRAND_ACCENT:-}${BRAND_THEME:-}" ]; then
   cat > /tmp/branding.json <<JSON
 {
   "name": "$(esc "${BRAND_NAME:-PST Viewer}")",
   "tagline": "$(esc "${BRAND_TAGLINE:-Local · Offline · Private}")",
   "logo": "$(esc "${BRAND_LOGO:-}")",
-  "accent": "$(esc "${BRAND_ACCENT:-}")"
+  "accent": "$(esc "${BRAND_ACCENT:-}")",
+  "theme": "$(esc "${BRAND_THEME:-}")"
 }
 JSON
 else

@@ -110,6 +110,7 @@ full `branding.json` works too - see the Branding section in README.md.)
       BRAND_NAME: "Acme Mail Archive"
       BRAND_TAGLINE: "Internal use only"
       BRAND_ACCENT: "#7c3aed"
+      BRAND_THEME: "#1e293b"
       BRAND_LOGO: "/logo.svg"
     volumes:
       - ./logo.svg:/usr/share/nginx/html/logo.svg:ro

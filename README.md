@@ -57,8 +57,9 @@ See [DEPLOY.md](DEPLOY.md) for all options: GitHub Pages, Docker, Caddy (`npm ru
 
 ## Branding
 
-A deployment can be rebranded (name, tagline, logo, accent colour) with no
-rebuild.
+A deployment can be rebranded (name, tagline, logo, accent and theme colours)
+with no rebuild. Users can still pick their own colours in Settings, which win
+on their device.
 
 **Docker** - set environment variables. The logo is a URL: mount an image
 file next to the app, point at a hosted one, or use a `data:` URI.
@@ -68,6 +69,7 @@ file next to the app, point at a hosted one, or use a `data:` URI.
       BRAND_NAME: "Acme Mail Archive"
       BRAND_TAGLINE: "Internal use only"
       BRAND_ACCENT: "#7c3aed"
+      BRAND_THEME: "#1e293b"
       BRAND_LOGO: "/logo.svg"
     volumes:
       - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
@@ -82,7 +84,8 @@ environment variables take precedence):
   "name": "Acme Mail Archive",
   "tagline": "Internal use only",
   "logo": "logo.svg",
-  "accent": "#7c3aed"
+  "accent": "#7c3aed",
+  "theme": "#1e293b"
 }
 ```
 
@@ -90,6 +93,8 @@ environment variables take precedence):
 - `tagline` - the short line under the name
 - `logo` - image URL for the header logo; empty keeps the default icon
 - `accent` - any CSS colour; the UI's accent shades are derived from it
+- `theme` - base colour for backgrounds and panels; its hue, vividness and
+  lightness set the whole scheme (a light colour gives a light theme)
 
 The installable app (PWA) is renamed too: in Docker, `BRAND_NAME` is applied
 to the web app manifest automatically; on a static host, edit `name` and

@@ -129,7 +129,7 @@ function ExportBar() {
 
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm">
-      <span className="text-sky-100">
+      <span className="text-slate-100">
         <span className="font-semibold">{count}</span> message{count === 1 ? '' : 's'} selected
       </span>
       <div className="flex flex-wrap items-center gap-2">

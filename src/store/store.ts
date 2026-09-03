@@ -42,6 +42,9 @@ interface AppState {
   messageContent: MessageContent | null
   contentLoading: boolean
   expanded: Record<string, boolean>
+  /** Folder key expanded only because it was selected while collapsed; it
+   *  re-collapses when the selection leaves its subtree. */
+  autoExpanded: string | null
 
   searchQuery: string
   searchResults: SearchHit[]
@@ -125,6 +128,22 @@ function writeNum(key: string, n: number) {
   }
 }
 
+/** Whether targetId is ancestorId itself or lives anywhere inside its subtree. */
+function folderContains(root: FolderNode, ancestorId: string, targetId: string): boolean {
+  const find = (n: FolderNode): FolderNode | null => {
+    if (n.id === ancestorId) return n
+    for (const c of n.children) {
+      const hit = find(c)
+      if (hit) return hit
+    }
+    return null
+  }
+  const anc = find(root)
+  if (!anc) return false
+  const has = (n: FolderNode): boolean => n.id === targetId || n.children.some(has)
+  return has(anc)
+}
+
 function firstFolderWithMessages(node: FolderNode): string | null {
   for (const child of node.children) {
     if (child.messageCount > 0) return child.id
@@ -156,6 +175,7 @@ function freshState(): Partial<AppState> {
     messageContent: null,
     contentLoading: false,
     expanded: {},
+    autoExpanded: null,
     searchQuery: '',
     searchResults: [],
     searching: false,
@@ -433,6 +453,7 @@ export const useApp = create<AppState>((set, get) => {
     messageContent: null,
     contentLoading: false,
     expanded: {},
+    autoExpanded: null,
     searchQuery: '',
     searchResults: [],
     searching: false,
@@ -515,17 +536,51 @@ export const useApp = create<AppState>((set, get) => {
     toggleFolder: (sourceId, folderId) =>
       set((s) => {
         const key = fkey(sourceId, folderId)
-        return { expanded: { ...s.expanded, [key]: !s.expanded[key] } }
+        // Folders render expanded when unset, so the first toggle collapses.
+        // A manual toggle makes the state deliberate, ending any auto-expand.
+        return {
+          expanded: { ...s.expanded, [key]: !(s.expanded[key] ?? true) },
+          autoExpanded: s.autoExpanded === key ? null : s.autoExpanded,
+        }
       }),
 
     selectFolder: (sourceId, folderId) => {
-      set({
-        selection: { sourceId, folderId, messageId: null },
-        messages: [],
-        messagesUnreadable: 0,
-        messagesLoading: true,
-        messageContent: null,
-        contentLoading: false,
+      set((s) => {
+        const key = fkey(sourceId, folderId)
+        const expanded = { ...s.expanded }
+        let autoExpanded = s.autoExpanded
+
+        // A deliberately collapsed folder that was only opened by selection
+        // closes again once the selection moves out of its subtree.
+        if (autoExpanded && autoExpanded !== key) {
+          const [aSrc, aId] = [
+            autoExpanded.slice(0, autoExpanded.indexOf(':')),
+            autoExpanded.slice(autoExpanded.indexOf(':') + 1),
+          ]
+          const root = s.sources.find((x) => x.id === aSrc)?.index?.rootFolder
+          const stillInside =
+            aSrc === sourceId && root ? folderContains(root, aId, folderId) : false
+          if (!stillInside) {
+            expanded[autoExpanded] = false
+            autoExpanded = null
+          }
+        }
+        // Selecting a collapsed folder reveals its subfolders, temporarily.
+        if ((s.expanded[key] ?? true) === false) {
+          expanded[key] = true
+          autoExpanded = key
+        }
+
+        return {
+          selection: { sourceId, folderId, messageId: null },
+          messages: [],
+          messagesUnreadable: 0,
+          messagesLoading: true,
+          messageContent: null,
+          contentLoading: false,
+          expanded,
+          autoExpanded,
+        }
       })
       pst
         .getFolderMessages(sourceId, folderId)
