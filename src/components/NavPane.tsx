@@ -129,7 +129,9 @@ function NavAddFiles() {
   const addFiles = useApp((s) => s.addFiles)
   const input = useRef<HTMLInputElement>(null)
   return (
-    <div className="shrink-0 border-t border-slate-800 p-2">
+    <div className="shrink-0">
+      <OcrToggle />
+      <div className="border-t border-slate-800 p-2">
       <button
         onClick={() => input.current?.click()}
         className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700/60"
@@ -137,7 +139,6 @@ function NavAddFiles() {
         <Plus className="h-4 w-4" />
         Add files
       </button>
-      <OcrToggle />
       <input
         ref={input}
         type="file"
@@ -150,6 +151,7 @@ function NavAddFiles() {
           e.target.value = ''
         }}
       />
+      </div>
     </div>
   )
 }
@@ -159,8 +161,8 @@ function OcrToggle() {
   const setOcrEnabled = useApp((s) => s.setOcrEnabled)
   return (
     <label
-      className="mt-1.5 flex cursor-pointer items-center gap-2 px-1 text-xs text-slate-400 hover:text-slate-200"
-      data-tip="Reads text in pictures so you can search for it. Takes effect for files opened from now on."
+      className="flex cursor-pointer items-center gap-2 px-3 pb-2 text-xs text-slate-400 hover:text-slate-200"
+      data-tip="Reads text in pictures so it shows up in search. Turn off to skip it - reading images makes opening a mailbox take longer."
     >
       <input
         type="checkbox"

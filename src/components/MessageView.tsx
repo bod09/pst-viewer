@@ -164,7 +164,7 @@ export function MessageView({
           <div className="mt-3 space-y-1 text-sm">
             <HeaderLine label="From">
               <span className="text-slate-200">{from}</span>
-              {content.fromEmail && content.fromName && (
+              {showAddress(content.fromName, content.fromEmail) && (
                 <span className="text-slate-400"> &lt;{content.fromEmail}&gt;</span>
               )}
             </HeaderLine>
@@ -275,14 +275,22 @@ function HighlightedText({ text, terms }: { text: string; terms: string[] }) {
   return <>{nodes}</>
 }
 
+// Old internal Exchange mail has no SMTP addresses: recipients carry an X.500
+// directory path (/O=.../CN=...) or a bare word doubling the display name.
+// Only a real email address earns the "Name <address>" form; everything else
+// shows the name alone (with the raw value on hover).
+function showAddress(name: string, email: string): boolean {
+  return Boolean(email) && email.includes('@') && email.toLowerCase() !== name.toLowerCase()
+}
+
 function Recipients({ list }: { list: RecipientInfo[] }) {
   return (
     <>
       {list.map((r, i) => (
-        <span key={`${r.email}-${i}`}>
+        <span key={`${r.email}-${i}`} data-tip={!showAddress(r.name, r.email) && r.email && r.email !== r.name ? r.email : undefined}>
           {i > 0 && '; '}
           {r.name || r.email}
-          {r.name && r.email ? ` <${r.email}>` : ''}
+          {showAddress(r.name, r.email) ? ` <${r.email}>` : ''}
         </span>
       ))}
     </>
