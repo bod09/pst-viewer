@@ -56,6 +56,9 @@ interface AppState {
   listWidth: number
   setNavWidth: (w: number) => void
   setListWidth: (w: number) => void
+  /** Persisted preference: read text inside images (OCR) to make it searchable. */
+  ocrEnabled: boolean
+  setOcrEnabled: (v: boolean) => void
   addFiles: (files: File[]) => void
   removeSource: (id: string) => void
   clearSources: () => void
@@ -84,6 +87,23 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 
 const NAV_W_KEY = 'pstviewer.navWidth'
 const LIST_W_KEY = 'pstviewer.listWidth'
+const OCR_KEY = 'pstviewer.ocrEnabled'
+
+function readBool(key: string, def: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key)
+    return v === null ? def : v === 'true'
+  } catch {
+    return def
+  }
+}
+function writeBool(key: string, v: boolean) {
+  try {
+    localStorage.setItem(key, String(v))
+  } catch {
+    /* ignore */
+  }
+}
 function readNum(key: string, def: number): number {
   try {
     const v = localStorage.getItem(key)
@@ -310,6 +330,15 @@ export const useApp = create<AppState>((set, get) => {
     let worker: OcrWorker | null = null
     try {
       while (ocrQueue.length) {
+        if (!get().ocrEnabled) {
+          // OCR switched off: finish the sources without an OCR pass.
+          for (const id of ocrQueue.splice(0)) {
+            if (!hasSource(id)) continue
+            patchSource(id, { ocrDone: true, ocrProgress: undefined })
+            void pst.releaseSearchDocs(id)
+          }
+          break
+        }
         const sourceId = ocrQueue.shift() as string
         if (!hasSource(sourceId)) continue
         let targets: OcrTarget[] = []
@@ -332,7 +361,7 @@ export const useApp = create<AppState>((set, get) => {
         }
         patchSource(sourceId, { ocrProgress: { done: 0, total: targets.length } })
         for (let i = 0; i < targets.length; i++) {
-          if (!hasSource(sourceId)) break
+          if (!hasSource(sourceId) || !get().ocrEnabled) break
           const t = targets[i]
           try {
             const data =
@@ -374,6 +403,12 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
   const enqueueOcr = (sourceId: string) => {
+    if (!get().ocrEnabled) {
+      // Preference is off: mark done without reading, recognizing, or caching.
+      patchSource(sourceId, { ocrDone: true })
+      void pst.releaseSearchDocs(sourceId)
+      return
+    }
     if (!ocrQueue.includes(sourceId)) ocrQueue.push(sourceId)
     void drainOcr()
   }
@@ -394,6 +429,14 @@ export const useApp = create<AppState>((set, get) => {
     exporting: false,
     navWidth: readNum(NAV_W_KEY, 272),
     listWidth: readNum(LIST_W_KEY, 380),
+    ocrEnabled: readBool(OCR_KEY, true),
+
+    // Turning OCR back on applies to mailboxes opened from then on (a mailbox
+    // indexed while it was off has already released its staged search docs).
+    setOcrEnabled: (v) => {
+      writeBool(OCR_KEY, v)
+      set({ ocrEnabled: v })
+    },
 
     setNavWidth: (w) => {
       const v = clamp(w, 200, 520)

@@ -137,6 +137,7 @@ function NavAddFiles() {
         <Plus className="h-4 w-4" />
         Add files
       </button>
+      <OcrToggle />
       <input
         ref={input}
         type="file"
@@ -150,6 +151,25 @@ function NavAddFiles() {
         }}
       />
     </div>
+  )
+}
+
+function OcrToggle() {
+  const ocrEnabled = useApp((s) => s.ocrEnabled)
+  const setOcrEnabled = useApp((s) => s.setOcrEnabled)
+  return (
+    <label
+      className="mt-1.5 flex cursor-pointer items-center gap-2 px-1 text-xs text-slate-400 hover:text-slate-200"
+      data-tip="Reads text inside pictures so it becomes searchable. Changing this applies to mailboxes opened afterwards. Saved as your preference."
+    >
+      <input
+        type="checkbox"
+        checked={ocrEnabled}
+        onChange={(e) => setOcrEnabled(e.target.checked)}
+        className="h-3.5 w-3.5 accent-sky-500"
+      />
+      OCR images for search
+    </label>
   )
 }
 
