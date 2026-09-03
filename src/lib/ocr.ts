@@ -82,10 +82,62 @@ async function preprocessForOcr(blob: Blob): Promise<Blob> {
     ctx.filter = 'grayscale(1) contrast(1.25)'
     ctx.drawImage(bitmap, 0, 0, w, h)
     bitmap.close?.()
+    // Hand the engine an uncompressed bitmap. PNG compression of an enlarged
+    // image costs far more than the recognition itself (measured: about four
+    // fifths of all OCR time), and the engine only wants the pixels back.
+    const bmp = grayscaleBmp(ctx.getImageData(0, 0, w, h))
+    if (bmp) return bmp
     const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
     return out || blob
   } catch {
     return blob
+  }
+}
+
+/**
+ * Pack already-grayscale pixels into an 8-bit BMP (bottom-up rows, 4-byte
+ * aligned, 256-entry gray palette). Writing this is a copy rather than a
+ * compression pass, which is the whole point. Returns null if anything about
+ * the image is unexpected, so the caller can fall back to PNG.
+ */
+function grayscaleBmp(img: ImageData): Blob | null {
+  try {
+    const { width: w, height: h, data } = img
+    if (!w || !h) return null
+    const rowBytes = (w + 3) & ~3 // rows are padded to a 4-byte boundary
+    const pixelOffset = 14 + 40 + 256 * 4
+    const size = pixelOffset + rowBytes * h
+    const buf = new ArrayBuffer(size)
+    const view = new DataView(buf)
+    const bytes = new Uint8Array(buf)
+
+    view.setUint8(0, 0x42) // 'B'
+    view.setUint8(1, 0x4d) // 'M'
+    view.setUint32(2, size, true)
+    view.setUint32(10, pixelOffset, true)
+    view.setUint32(14, 40, true) // BITMAPINFOHEADER
+    view.setInt32(18, w, true)
+    view.setInt32(22, h, true)
+    view.setUint16(26, 1, true) // planes
+    view.setUint16(28, 8, true) // bits per pixel
+    view.setUint32(34, rowBytes * h, true)
+    view.setUint32(46, 256, true) // palette entries used
+
+    for (let i = 0; i < 256; i++) {
+      const p = 54 + i * 4
+      bytes[p] = i // blue
+      bytes[p + 1] = i // green
+      bytes[p + 2] = i // red
+    }
+    // BMP rows run bottom-up; the source is already gray so any channel does.
+    for (let y = 0; y < h; y++) {
+      let out = pixelOffset + (h - 1 - y) * rowBytes
+      let src = y * w * 4
+      for (let x = 0; x < w; x++, src += 4) bytes[out++] = data[src]
+    }
+    return new Blob([buf], { type: 'image/bmp' })
+  } catch {
+    return null
   }
 }
 
@@ -97,5 +149,49 @@ export async function recognizeImage(worker: TesseractWorker, blob: Blob): Promi
     return (result.data.text ?? '').replace(/\s+/g, ' ').trim()
   } catch {
     return ''
+  }
+}
+
+/**
+ * How many images to read at once.
+ *
+ * Recognition is CPU work that returns only a short string, so it scales with
+ * the machine's cores. Two are left free for the UI and the parsing worker,
+ * and the count is capped because each engine holds its own copy of the
+ * recognition model.
+ */
+export function ocrConcurrency(): number {
+  const cores = navigator.hardwareConcurrency || 2
+  return Math.max(1, Math.min(4, cores - 2))
+}
+
+/** A pool of recognition engines, one per lane of work. */
+export interface OcrPool {
+  workers: TesseractWorker[]
+  terminate: () => Promise<void>
+}
+
+/**
+ * Start `size` engines. Engines that fail to start are simply absent, so OCR
+ * still runs (just less parallel) rather than failing outright; null means
+ * none could start at all.
+ */
+export async function createOcrPool(size: number): Promise<OcrPool | null> {
+  const started = await Promise.all(
+    Array.from({ length: Math.max(1, size) }, () => createOcrWorker().catch(() => null)),
+  )
+  const workers = started.filter((w): w is TesseractWorker => w !== null)
+  if (!workers.length) return null
+  return {
+    workers,
+    terminate: async () => {
+      await Promise.all(
+        workers.map((w) =>
+          w.terminate().catch(() => {
+            /* already gone */
+          }),
+        ),
+      )
+    },
   }
 }

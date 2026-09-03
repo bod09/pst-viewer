@@ -363,7 +363,7 @@ export const useApp = create<AppState>((set, get) => {
     if (ocrActive) return
     ocrActive = true
     let lib: typeof import('../lib/ocr') | null = null
-    let worker: OcrWorker | null = null
+    let pool: import('../lib/ocr').OcrPool | null = null
     try {
       while (ocrQueue.length) {
         if (!get().ocrEnabled) {
@@ -389,51 +389,58 @@ export const useApp = create<AppState>((set, get) => {
           continue
         }
         if (!lib) lib = await import('../lib/ocr').catch(() => null)
-        if (!worker && lib) worker = await lib.createOcrWorker().catch(() => null)
-        if (!lib || !worker) {
+        if (!pool && lib) pool = await lib.createOcrPool(lib.ocrConcurrency()).catch(() => null)
+        if (!lib || !pool) {
           patchSource(sourceId, { ocrDone: true }) // engine unavailable; skip silently
           void pst.releaseSearchDocs(sourceId)
           continue
         }
+        const ocrLib = lib
+        const engines = pool.workers
         patchSource(sourceId, { ocrProgress: { done: 0, total: targets.length } })
-        for (let i = 0; i < targets.length; i++) {
-          if (!hasSource(sourceId) || !get().ocrEnabled) break
-          const t = targets[i]
-          try {
-            const data =
-              t.kind === 'body'
-                ? await pst.getBodyImageData(sourceId, t.messageId, t.ref)
-                : await pst.getAttachmentData(sourceId, t.messageId, t.ref)
-            // Skip tiny images: too small to hold readable text (see MIN_OCR_BYTES).
-            if (data && data.data.byteLength >= MIN_OCR_BYTES) {
-              // Reuse cached text (keyed by image content) so a re-opened
-              // mailbox, or an image shared across emails, is read only once.
-              const hash = await hashImageBytes(data.data)
-              let text = hash ? await getCachedOcr(hash) : undefined
-              if (text === undefined) {
-                const blob = new Blob([data.data], { type: data.mime || 'image/png' })
-                text = await lib.recognizeImage(worker, blob)
-                if (hash) await putCachedOcr(hash, text)
+
+        // One lane per engine, each taking the next image off the shared list,
+        // so several images are read at once on a multi-core machine.
+        let next = 0
+        let finished = 0
+        const lane = async (engine: OcrWorker) => {
+          for (;;) {
+            const i = next++
+            if (i >= targets.length) return
+            if (!hasSource(sourceId) || !get().ocrEnabled) return
+            const t = targets[i]
+            try {
+              const data =
+                t.kind === 'body'
+                  ? await pst.getBodyImageData(sourceId, t.messageId, t.ref)
+                  : await pst.getAttachmentData(sourceId, t.messageId, t.ref)
+              // Skip tiny images: too small to hold readable text (see MIN_OCR_BYTES).
+              if (data && data.data.byteLength >= MIN_OCR_BYTES) {
+                // Reuse cached text (keyed by image content) so a re-opened
+                // mailbox, or an image shared across emails, is read only once.
+                const hash = await hashImageBytes(data.data)
+                let text = hash ? await getCachedOcr(hash) : undefined
+                if (text === undefined) {
+                  const blob = new Blob([data.data], { type: data.mime || 'image/png' })
+                  text = await ocrLib.recognizeImage(engine, blob)
+                  if (hash) await putCachedOcr(hash, text)
+                }
+                if (text) await pst.addOcrText(sourceId, t.messageId, t.kind, t.ref, text)
               }
-              if (text) await pst.addOcrText(sourceId, t.messageId, t.kind, t.ref, text)
+            } catch {
+              /* skip unreadable image */
             }
-          } catch {
-            /* skip unreadable image */
+            finished++
+            patchSource(sourceId, { ocrProgress: { done: finished, total: targets.length } })
           }
-          patchSource(sourceId, { ocrProgress: { done: i + 1, total: targets.length } })
         }
+        await Promise.all(engines.map(lane))
         patchSource(sourceId, { ocrDone: true, ocrProgress: undefined })
         void pst.releaseSearchDocs(sourceId)
         if (get().searchQuery.trim()) get().runSearch()
       }
     } finally {
-      if (worker) {
-        try {
-          await worker.terminate()
-        } catch {
-          /* ignore */
-        }
-      }
+      if (pool) await pool.terminate()
       ocrActive = false
       if (ocrQueue.length) void drainOcr()
     }
