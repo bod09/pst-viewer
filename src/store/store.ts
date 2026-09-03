@@ -207,11 +207,11 @@ export const useApp = create<AppState>((set, get) => {
     openSource(
       { fileName: file.name, size: file.size, label: stripExt(file.name) },
       (id) => pst.openSource(id, file),
-      // The parser fails hard when a file's core structures are damaged. Give
-      // the user something actionable rather than a low-level reader message.
-      'This file could not be opened as a mailbox. It may be corrupt, incomplete, ' +
-        'or not a PST/OST. If you know it is a mailbox, repair it first with Microsoft’s ' +
-        'Inbox Repair Tool (scanpst.exe) and open the repaired copy.',
+      // Shown only after built-in recovery has also failed. Give the user
+      // something actionable rather than a low-level reader message.
+      'This file could not be opened as a mailbox, even with built-in recovery. ' +
+        'It may be too damaged, or not a PST/OST at all. As a last resort, Microsoft’s ' +
+        'Inbox Repair Tool (scanpst.exe) can sometimes reconstruct a damaged mailbox.',
     )
 
   /** Open a batch of standalone .msg/.eml files as one synthetic mailbox. */

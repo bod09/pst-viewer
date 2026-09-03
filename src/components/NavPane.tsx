@@ -169,6 +169,7 @@ function SourceTree({ source }: { source: Source }) {
           ? 'MSG'
           : 'PST'
   const isZip = badge === 'ZIP'
+  const recovered = source.index?.recovered === true
 
   const startEdit = () => {
     setDraft(source.label)
@@ -190,8 +191,17 @@ function SourceTree({ source }: { source: Source }) {
       <div className="group flex items-center gap-1.5 rounded-md px-2 py-1.5">
         <span
           className={`flex h-5 shrink-0 items-center rounded px-1 text-[9px] font-bold ${
-            isZip ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'
+            recovered
+              ? 'bg-amber-500/15 text-amber-300'
+              : isZip
+                ? 'bg-amber-500/15 text-amber-300'
+                : 'bg-sky-500/15 text-sky-300'
           }`}
+          data-tip={
+            recovered
+              ? 'This file is damaged and was opened with built-in recovery; anything unreadable is skipped.'
+              : undefined
+          }
         >
           {badge}
         </span>

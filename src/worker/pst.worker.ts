@@ -11,6 +11,7 @@ import {
   parseMsg,
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
+import { salvageOpenPst } from './salvage'
 import {
   Consts,
   openPst,
@@ -1059,7 +1060,18 @@ const api = {
   async openSource(sourceId: string, file: File): Promise<SourceIndex> {
     sources.delete(sourceId)
 
-    const pstFile = await openPst(makeReader(file))
+    // A cleanly-openable file takes the normal path; when its header or index
+    // b-trees are damaged, fall back to built-in recovery (see salvage.ts).
+    let pstFile: IPSTFile
+    let recovered = false
+    try {
+      pstFile = await openPst(makeReader(file))
+    } catch (primaryError) {
+      const attempt = await safeAsync(() => salvageOpenPst(file), null)
+      if (!attempt) throw primaryError
+      pstFile = attempt.pst
+      recovered = true
+    }
     const entry: SourceEntry = {
       file: pstFile,
       folders: new Map(),
@@ -1106,6 +1118,7 @@ const api = {
       rootFolder: rootNode,
       totalMessages,
       suggestedLabel: ownerName || prettyFileName(file.name),
+      recovered,
     }
   },
 

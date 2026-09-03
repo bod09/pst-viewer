@@ -28,6 +28,8 @@ export interface SourceIndex {
   totalMessages: number
   /** Best-effort human label for the mailbox (owner name, etc.). */
   suggestedLabel: string
+  /** The file was damaged and opened via built-in recovery. */
+  recovered?: boolean
 }
 
 /** A folder's messages plus how many of its items could not be read (damage). */
