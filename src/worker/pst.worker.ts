@@ -12,6 +12,7 @@ import {
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
+import { makeChunkedReader } from './chunkReader'
 import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
 import {
   Consts,
@@ -26,7 +27,6 @@ import {
   type IPSTFolder,
   type IPSTMessage,
   type IPSTTask,
-  type ReadFileApi,
 } from '@hiraokahypertools/pst-extractor'
 import type {
   AppointmentCard,
@@ -82,6 +82,8 @@ interface SourceEntry {
   cachedDocs?: SearchDoc[] | null
   /** People seen in this source (key: lowercased label), for suggestions. */
   people?: Map<string, { label: string; count: number }>
+  /** Memoised per-folder message lists (see folderEmails). */
+  emailLists: Map<string, IPSTMessage[]>
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -197,18 +199,18 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-/** A random-access reader over a File: reads only the bytes asked for. */
-function makeReader(file: File): ReadFileApi {
-  return {
-    readFile: async (buffer, offset, length, position) => {
-      const slice = file.slice(position, position + length)
-      const ab = await slice.arrayBuffer()
-      const src = new Uint8Array(ab)
-      new Uint8Array(buffer).set(src, offset)
-      return src.byteLength
-    },
-    close: async () => {},
-  }
+/** Enumerate a folder's messages once and reuse the list: the message list
+ *  and the background indexer both ask for the same folders, and each
+ *  enumeration re-reads the folder's tables from the file. */
+async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTMessage[]> {
+  const cached = entry.emailLists.get(folderId)
+  if (cached) return cached
+  const folder = entry.folders.get(folderId)
+  if (!folder) return []
+  const emails = await folder.getEmails()
+  for (const m of emails) safe(() => entry.messages.set(String(m.primaryNodeId), m), undefined)
+  entry.emailLists.set(folderId, emails)
+  return emails
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -1148,7 +1150,7 @@ const api = {
     let pstFile: IPSTFile
     let recovered = false
     try {
-      pstFile = await openPst(makeReader(file))
+      pstFile = await openPst(makeChunkedReader(file))
     } catch (primaryError) {
       const attempt = await safeAsync(() => salvageOpenPst(file), null)
       if (!attempt) throw primaryError
@@ -1164,6 +1166,7 @@ const api = {
       bodyImageCount: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
+      emailLists: new Map(),
     }
     sources.set(sourceId, entry)
 
@@ -1250,6 +1253,7 @@ const api = {
       bodyImageCount: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
+      emailLists: new Map(),
     }
 
     // Standalone files carry no folder tree, so bucket items into Outlook-like
@@ -1313,7 +1317,7 @@ const api = {
     let emails: IPSTMessage[] = []
     let enumFailed = false
     try {
-      emails = await folder.getEmails()
+      emails = await folderEmails(entry, folderId)
     } catch {
       enumFailed = true
     }
@@ -1321,7 +1325,6 @@ const api = {
     let failed = 0
     for (const m of emails) {
       try {
-        entry.messages.set(String(m.primaryNodeId), m)
         metas.push(toMeta(m, folderId))
       } catch {
         // Skip an individual unreadable message rather than failing the folder.
@@ -1462,13 +1465,12 @@ const api = {
     for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
     let done = 0
 
-    for (const [folderId, folder] of entry.folders) {
+    for (const folderId of entry.folders.keys()) {
       if (!sources.has(sourceId)) return { fromCache: false } // source removed mid-index
-      const emails = await safeAsync(() => folder.getEmails(), [])
+      const emails = await safeAsync(() => folderEmails(entry, folderId), [])
       const docs: SearchDoc[] = []
       for (const m of emails) {
         const msgId = String(m.primaryNodeId)
-        entry.messages.set(msgId, m)
         const id = `${sourceId}:${msgId}`
         done++
         if (searchIndex.has(id)) continue
@@ -1510,9 +1512,9 @@ const api = {
 
     const results: ContactMatch[] = []
     for (const [sourceId, entry] of sources) {
-      for (const folder of entry.folders.values()) {
+      for (const [folderId, folder] of entry.folders) {
         if (!safe(() => folder.containerClass, '').toLowerCase().startsWith('ipf.contact')) continue
-        const msgs = await safeAsync(() => folder.getEmails(), [])
+        const msgs = await safeAsync(() => folderEmails(entry, folderId), [])
         for (const m of msgs) {
           if (!safe(() => m.messageClass, '').toLowerCase().startsWith('ipm.contact')) continue
           const msgId = String(safe(() => m.primaryNodeId, 0))

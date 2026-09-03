@@ -70,7 +70,7 @@ interface AppState {
   clearSources: () => void
   renameSource: (id: string, label: string) => void
   toggleFolder: (sourceId: string, folderId: string) => void
-  selectFolder: (sourceId: string, folderId: string) => void
+  selectFolder: (sourceId: string, folderId: string) => Promise<void>
   selectMessage: (messageId: string | null) => void
 
   setSearchQuery: (q: string) => void
@@ -211,37 +211,42 @@ export const useApp = create<AppState>((set, get) => {
           expanded: { ...s.expanded, [fkey(id, index.rootFolder.id)]: true },
         }))
 
+        // Show the first folder's messages before the background indexer
+        // starts reading the whole file; both compete for the same reads.
+        let firstListing: Promise<void> = Promise.resolve()
         if (!get().selection.folderId) {
           const target = firstFolderWithMessages(index.rootFolder)
-          if (target) get().selectFolder(id, target)
+          if (target) firstListing = get().selectFolder(id, target)
         }
 
         // Background full-text indexing with progress.
-        void pst
-          .indexSource(
-            id,
-            Comlink.proxy((done: number, total: number) => {
+        void firstListing.then(() =>
+          pst
+            .indexSource(
+              id,
+              Comlink.proxy((done: number, total: number) => {
+                set((s) => ({
+                  sources: s.sources.map((src) =>
+                    src.id === id ? { ...src, indexProgress: { done, total } } : src,
+                  ),
+                }))
+              }),
+            )
+            .then((result) => {
               set((s) => ({
-                sources: s.sources.map((src) =>
-                  src.id === id ? { ...src, indexProgress: { done, total } } : src,
-                ),
+                sources: s.sources.map((src) => (src.id === id ? { ...src, indexed: true } : src)),
               }))
+              if (result?.fromCache) {
+                // Restored from the on-device index cache; its docs already
+                // carry any OCR text from the original pass.
+                patchSource(id, { ocrDone: true })
+                if (get().searchQuery.trim()) get().runSearch()
+              } else {
+                // Then OCR this mailbox's images so their text is searchable too.
+                enqueueOcr(id)
+              }
             }),
-          )
-          .then((result) => {
-            set((s) => ({
-              sources: s.sources.map((src) => (src.id === id ? { ...src, indexed: true } : src)),
-            }))
-            if (result?.fromCache) {
-              // Restored from the on-device index cache; its docs already
-              // carry any OCR text from the original pass.
-              patchSource(id, { ocrDone: true })
-              if (get().searchQuery.trim()) get().runSearch()
-            } else {
-              // Then OCR this mailbox's images so their text is searchable too.
-              enqueueOcr(id)
-            }
-          })
+        )
       })
       .catch((err: unknown) => {
         const raw = err instanceof Error ? err.message : String(err)
@@ -582,7 +587,7 @@ export const useApp = create<AppState>((set, get) => {
           autoExpanded,
         }
       })
-      pst
+      return pst
         .getFolderMessages(sourceId, folderId)
         .then(({ messages, unreadable }) => {
           const sel = get().selection

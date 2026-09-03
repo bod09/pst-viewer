@@ -1,4 +1,5 @@
 import { openPst, type IPSTFile, type ReadFileApi } from '@hiraokahypertools/pst-extractor'
+import { makeChunkedReader } from './chunkReader'
 
 /**
  * Built-in recovery for damaged PST/OST files.
@@ -306,6 +307,10 @@ export async function buildSalvage(file: File, encType: number | null): Promise<
   const overlay = new Uint8Array(pages.length * L.pageSize)
   pages.forEach((p, i) => overlay.set(p, i * L.pageSize))
 
+  // Reads outside the synthetic header/overlay hit the original file; go
+  // through the caching reader so browsing a recovered mailbox is not one
+  // file-thread round trip per block.
+  const base = makeChunkedReader(file)
   const reader: ReadFileApi = {
     readFile: async (buffer, offset, length, position) => {
       const out = new Uint8Array(buffer, offset, length)
@@ -325,15 +330,15 @@ export async function buildSalvage(file: File, encType: number | null): Promise<
         } else {
           const end = Math.min(position + length, file.size, overlayStart)
           if (pos >= end) break
-          const ab = await file.slice(pos, end).arrayBuffer()
-          out.set(new Uint8Array(ab), i)
-          produced = i + ab.byteLength
+          const got = await base.readFile(buffer, offset + i, end - pos, pos)
+          if (got === 0) break
+          produced = i + got
         }
         i = produced
       }
       return produced
     },
-    close: async () => {},
+    close: () => base.close(),
   }
 
   return {
