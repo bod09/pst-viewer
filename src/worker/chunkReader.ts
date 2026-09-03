@@ -17,9 +17,10 @@ import type { ReadFileApi } from '@hiraokahypertools/pst-extractor'
 const SLAB_SIZE = 256 * 1024
 const MAX_SLABS = 512 // 128 MiB cap per open file
 
-export function makeChunkedReader(file: File): ReadFileApi {
+export function makeChunkedReader(file: File, maxSlabs = MAX_SLABS): ReadFileApi {
   const cache = new Map<number, Uint8Array>()
   const loading = new Map<number, Promise<Uint8Array>>()
+  const lastSlab = Math.floor(Math.max(file.size - 1, 0) / SLAB_SIZE)
 
   const slab = (index: number): Promise<Uint8Array> => {
     const hit = cache.get(index)
@@ -39,7 +40,7 @@ export function makeChunkedReader(file: File): ReadFileApi {
         const bytes = new Uint8Array(ab)
         loading.delete(index)
         cache.set(index, bytes)
-        if (cache.size > MAX_SLABS) {
+        if (cache.size > maxSlabs) {
           const oldest = cache.keys().next().value
           if (oldest !== undefined) cache.delete(oldest)
         }
@@ -60,7 +61,14 @@ export function makeChunkedReader(file: File): ReadFileApi {
       let produced = 0
       for (let pos = position; pos < end; ) {
         const index = Math.floor(pos / SLAB_SIZE)
+        const cold = !cache.has(index)
         const bytes = await slab(index)
+        // Read-ahead: parser access is largely sequential (index pages, then
+        // messages in file order), so a cold slab predicts its neighbour will
+        // be wanted next. Fetch it in the background while parsing continues.
+        if (cold && index < lastSlab && !cache.has(index + 1) && !loading.has(index + 1)) {
+          slab(index + 1).catch(() => {})
+        }
         const rel = pos - index * SLAB_SIZE
         if (rel >= bytes.byteLength) break
         const n = Math.min(end - pos, bytes.byteLength - rel)
