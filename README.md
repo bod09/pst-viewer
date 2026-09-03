@@ -16,7 +16,6 @@ No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, `.eml`, or `.z
 | --- | --- |
 | ![Read email with attachments](screenshots/mailbox.png) | ![Search every mailbox at once](screenshots/search.png) |
 | ![Preview attachments like PDFs inline](screenshots/preview.png) | ![Drop in a mailbox or message file to open it](screenshots/landing.png) |
-| ![Every Outlook folder type, from mail to notes](screenshots/folders.png) | |
 
 *(Sample data shown is fictional.)*
 
