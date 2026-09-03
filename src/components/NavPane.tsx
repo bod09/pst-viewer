@@ -160,7 +160,7 @@ function OcrToggle() {
   return (
     <label
       className="mt-1.5 flex cursor-pointer items-center gap-2 px-1 text-xs text-slate-400 hover:text-slate-200"
-      data-tip="Reads text inside pictures so it becomes searchable. Changing this applies to mailboxes opened afterwards. Saved as your preference."
+      data-tip="Reads text in pictures so you can search for it. Takes effect for files opened from now on."
     >
       <input
         type="checkbox"

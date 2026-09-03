@@ -12,6 +12,7 @@ import {
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
+import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
 import {
   Consts,
   openPst,
@@ -74,6 +75,10 @@ interface SourceEntry {
   tnef: Map<string, TnefAttachment[]>
   /** For .msg sources: files that failed to parse, counted per folder. */
   extraUnreadable?: Map<string, number>
+  /** File identity for the on-device search-index cache (PST/OST only). */
+  fingerprint?: string
+  /** Cached search docs found for this file, consumed by indexSource. */
+  cachedDocs?: SearchDoc[] | null
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -1097,6 +1102,11 @@ const api = {
     const { tree: rootNode, ownerHint } = selectMailboxTree(fullTree, libraryTopId)
     pruneFolderHandles(entry, rootNode)
 
+    // A previous session's finished search index for this exact file (same
+    // name/size/mtime) lets indexSource skip re-reading every message.
+    entry.fingerprint = fingerprintOf(file)
+    entry.cachedDocs = (await getCachedIndex(entry.fingerprint)) ?? null
+
     let totalMessages = 0
     const sum = (n: FolderNode) => {
       totalMessages += n.messageCount
@@ -1344,16 +1354,33 @@ const api = {
   async indexSource(
     sourceId: string,
     onProgress?: (done: number, total: number) => void,
-  ): Promise<void> {
+  ): Promise<{ fromCache: boolean }> {
     const entry = sources.get(sourceId)
-    if (!entry) return
+    if (!entry) return { fromCache: false }
+
+    // Cache hit: register the stored docs (rewritten to this session's source
+    // id) and skip the walk entirely. OCR text from the original pass is
+    // already inside them, so no OCR pass is needed either.
+    if (entry.cachedDocs && entry.cachedDocs.length) {
+      const docs: SearchDoc[] = []
+      for (const d of entry.cachedDocs) {
+        const doc = { ...d, sourceId, id: `${sourceId}:${d.messageId}` }
+        if (searchIndex.has(doc.id)) continue
+        docs.push(doc)
+        entry.searchIds.add(doc.id)
+      }
+      entry.cachedDocs = null
+      if (docs.length) searchIndex.addAll(docs)
+      onProgress?.(docs.length, docs.length)
+      return { fromCache: true }
+    }
 
     let total = 0
     for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
     let done = 0
 
     for (const [folderId, folder] of entry.folders) {
-      if (!sources.has(sourceId)) return // source removed mid-index
+      if (!sources.has(sourceId)) return { fromCache: false } // source removed mid-index
       const emails = await safeAsync(() => folder.getEmails(), [])
       const docs: SearchDoc[] = []
       for (const m of emails) {
@@ -1375,12 +1402,13 @@ const api = {
       // instead of leaving orphaned docs in the shared search index.
       if (!sources.has(sourceId)) {
         for (const d of docs) searchDocs.delete(d.id)
-        return
+        return { fromCache: false }
       }
       if (docs.length) searchIndex.addAll(docs)
       onProgress?.(done, total)
     }
     onProgress?.(done, total)
+    return { fromCache: false }
   },
 
   /** Fuzzy full-text search across all indexed sources. */
@@ -1490,6 +1518,14 @@ const api = {
   async releaseSearchDocs(sourceId: string): Promise<void> {
     const entry = sources.get(sourceId)
     if (!entry) return
+    // The docs are final at this point (OCR text merged in, or OCR skipped),
+    // so persist them for instant indexing when this file is opened again.
+    if (entry.fingerprint) {
+      const docs = [...entry.searchIds]
+        .map((id) => searchDocs.get(id))
+        .filter((d): d is SearchDoc => d !== undefined)
+      if (docs.length) await putCachedIndex(entry.fingerprint, docs)
+    }
     for (const id of entry.searchIds) searchDocs.delete(id)
   },
 

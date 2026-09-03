@@ -204,12 +204,19 @@ export const useApp = create<AppState>((set, get) => {
               }))
             }),
           )
-          .then(() => {
+          .then((result) => {
             set((s) => ({
               sources: s.sources.map((src) => (src.id === id ? { ...src, indexed: true } : src)),
             }))
-            // Then OCR this mailbox's images so their text is searchable too.
-            enqueueOcr(id)
+            if (result?.fromCache) {
+              // Restored from the on-device index cache; its docs already
+              // carry any OCR text from the original pass.
+              patchSource(id, { ocrDone: true })
+              if (get().searchQuery.trim()) get().runSearch()
+            } else {
+              // Then OCR this mailbox's images so their text is searchable too.
+              enqueueOcr(id)
+            }
           })
       })
       .catch((err: unknown) => {

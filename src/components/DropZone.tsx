@@ -46,7 +46,7 @@ export function DropZone() {
       <label
         className="absolute bottom-6 flex cursor-pointer items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
         onClick={(e) => e.stopPropagation()}
-        data-tip="Reads text inside pictures in the background so it becomes searchable. Turning it off also skips its on-device cache. Saved as your preference."
+        data-tip="Reads text in pictures so you can search for it. Your choice is remembered."
       >
         <input
           type="checkbox"
