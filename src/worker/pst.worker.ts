@@ -566,7 +566,7 @@ const CONTROL_WORD = /^\\([a-zA-Z]+)(-?\d+)? ?/
  * Recovers the original HTML for `\fromhtml` mail (MS-OXRTFEX), or best-effort
  * text for `\fromtext` / plain RTF.
  */
-function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text: string } {
+export function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text: string } {
   if (!rtf || rtf.indexOf('\\rtf') === -1) return { html: '', text: '' }
   const isHtml = /\\fromhtml1?\b/.test(rtf) || rtf.indexOf('\\*\\htmltag') !== -1
 
@@ -606,10 +606,40 @@ function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text: strin
 
   while (i < n) {
     const c = rtf[i]
-    if (skipChars > 0 && c !== '{' && c !== '}' && c !== '\\') {
-      skipChars--
-      i++
-      continue
+    // A \uN character is followed by an ANSI fallback for old readers, which
+    // must be skipped. The fallback is usually a \'xx escape, so skipping has
+    // to consume whole escapes, not raw characters: counting characters both
+    // emits the fallback a second time and then eats the character after it.
+    if (skipChars > 0) {
+      if (c === '{' || c === '}') {
+        skipChars = 0 // a group boundary ends the fallback
+      } else if (c === '\\') {
+        const d = rtf[i + 1]
+        if (d === "'") {
+          i += 4 // \'xx
+          skipChars--
+          continue
+        }
+        if (d && /[a-zA-Z]/.test(d)) {
+          let j = i + 1
+          while (j < n && /[a-zA-Z]/.test(rtf[j])) j++
+          while (j < n && /[-0-9]/.test(rtf[j])) j++
+          if (rtf[j] === ' ') j++
+          i = j
+          skipChars--
+          continue
+        }
+        if (d === '\\' || d === '{' || d === '}') {
+          i += 2
+          skipChars--
+          continue
+        }
+        skipChars = 0 // lone backslash: stop skipping rather than guess
+      } else {
+        skipChars--
+        i++
+        continue
+      }
     }
     if (c === '{') {
       flushHex()
@@ -1571,8 +1601,15 @@ const api = {
    *   before:/after:      date bound (YYYY-MM-DD)
    */
   async search(query: string, limit = 100): Promise<SearchHit[]> {
+    return (await api.searchPage(query, limit)).hits
+  },
+
+  /** Search, reporting how many messages matched in total as well as the page
+   *  of hits returned. The total matters in a review: a capped list must not
+   *  be mistaken for "this is everything". */
+  async searchPage(query: string, limit = 100): Promise<{ hits: SearchHit[]; total: number }> {
     const q = query.trim()
-    if (!q) return []
+    if (!q) return { hits: [], total: 0 }
 
     // Parse: quoted phrases, key:value filters (value may be quoted), terms.
     const phrases: string[] = []
@@ -1671,7 +1708,7 @@ const api = {
     }
 
     if (!ftQuery.trim()) candidates.sort((a, b) => (b.meta.date ?? 0) - (a.meta.date ?? 0))
-    return candidates.slice(0, limit).map(({ meta, score }) => ({
+    const hits = candidates.slice(0, limit).map(({ meta, score }) => ({
       sourceId: meta.sourceId,
       messageId: meta.messageId,
       folderId: meta.folderId,
@@ -1681,6 +1718,7 @@ const api = {
       hasAttachments: meta.hasAttachments,
       score,
     }))
+    return { hits, total: candidates.length }
   },
 
   /** Every image to OCR across a source: image attachments plus data: body images. */
