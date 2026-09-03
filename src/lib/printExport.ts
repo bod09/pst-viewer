@@ -25,12 +25,16 @@ function recipientList(list: RecipientInfo[]): string {
   return list.map((r) => (r.name && r.email ? `${r.name} <${r.email}>` : r.name || r.email)).join('; ')
 }
 
-function bodyAndStyles(content: MessageContent): { styles: string; body: string } {
+function bodyAndStyles(
+  content: MessageContent,
+  allowRemote: boolean,
+): { styles: string; body: string } {
   if (content.html) {
     const cidMap = new Map<string, string>()
     for (const img of content.inlineImages) cidMap.set(img.cid, toDataUrl(img.data, img.mime))
-    // Inline images become data URLs; remote images load normally.
-    const html = sanitizeEmailHtml(content.html, cidMap)
+    // Inline images become data URLs; remote images load only if the reader
+    // allows them, matching what was shown on screen.
+    const html = sanitizeEmailHtml(content.html, cidMap, allowRemote)
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const styles = Array.from(doc.querySelectorAll('style'))
       .map((s) => s.textContent ?? '')
@@ -41,8 +45,8 @@ function bodyAndStyles(content: MessageContent): { styles: string; body: string 
   return { styles: '', body: `<pre class="plain">${text}</pre>` }
 }
 
-function section(content: MessageContent): string {
-  const { styles, body } = bodyAndStyles(content)
+function section(content: MessageContent, allowRemote: boolean): string {
+  const { styles, body } = bodyAndStyles(content, allowRemote)
   const from = content.fromName || content.fromEmail || '(unknown sender)'
   const fromExtra = content.fromEmail && content.fromName ? ` &lt;${escapeHtml(content.fromEmail)}&gt;` : ''
   const visibleAtt = content.attachments.filter((a) => a.isEmbeddedMessage || !a.isInline)
@@ -65,8 +69,8 @@ function section(content: MessageContent): string {
 }
 
 /** Build a single printable HTML document from one or more emails. */
-export function buildPrintDocument(contents: MessageContent[]): string {
-  const sections = contents.map(section).join('\n')
+export function buildPrintDocument(contents: MessageContent[], allowRemote = true): string {
+  const sections = contents.map((c) => section(c, allowRemote)).join('\n')
   // Empty <title> + `@page { margin: 0 }` make the browser omit its own
   // date/title/URL headers & footers; page padding comes from .email. We do not
   // pin a paper size: the browser's Save-as-PDF dialog already lets the user

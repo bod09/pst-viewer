@@ -74,9 +74,10 @@ export function MessageView({
     }
   }, [cidUrls])
 
+  const allowRemoteContent = useApp((s) => s.allowRemoteContent)
   const sanitizedHtml = useMemo(
-    () => (content.html ? sanitizeEmailHtml(content.html, cidUrls) : null),
-    [content.html, cidUrls],
+    () => (content.html ? sanitizeEmailHtml(content.html, cidUrls, allowRemoteContent) : null),
+    [content.html, cidUrls, allowRemoteContent],
   )
 
   // Inline (cid) images whose OCR text matched the search get outlined in the body.

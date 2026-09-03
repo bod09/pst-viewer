@@ -65,6 +65,9 @@ interface AppState {
   /** Persisted preference: show folders that contain no messages. */
   showEmptyFolders: boolean
   setShowEmptyFolders: (v: boolean) => void
+  /** Persisted preference: let messages load images from the internet. */
+  allowRemoteContent: boolean
+  setAllowRemoteContent: (v: boolean) => void
   addFiles: (files: File[]) => void
   removeSource: (id: string) => void
   clearSources: () => void
@@ -95,6 +98,7 @@ const NAV_W_KEY = 'pstviewer.navWidth'
 const LIST_W_KEY = 'pstviewer.listWidth'
 const OCR_KEY = 'pstviewer.ocrEnabled'
 const EMPTY_FOLDERS_KEY = 'pstviewer.showEmptyFolders'
+const REMOTE_CONTENT_KEY = 'pstviewer.allowRemoteContent'
 
 function readBool(key: string, def: boolean): boolean {
   try {
@@ -486,6 +490,13 @@ export const useApp = create<AppState>((set, get) => {
       writeBool(EMPTY_FOLDERS_KEY, v)
       set({ showEmptyFolders: v })
     },
+    // On by default, like a normal mail client: messages look as they were
+    // sent. Turning it off keeps everything on this device.
+    allowRemoteContent: readBool(REMOTE_CONTENT_KEY, true),
+    setAllowRemoteContent: (v) => {
+      writeBool(REMOTE_CONTENT_KEY, v)
+      set({ allowRemoteContent: v })
+    },
 
     setNavWidth: (w) => {
       const v = clamp(w, 200, 520)
@@ -704,7 +715,7 @@ export const useApp = create<AppState>((set, get) => {
             .filter((c): c is MessageContent => c != null)
           const dir = direction === 'desc' ? -1 : 1
           valid.sort((a, b) => dir * ((a.date ?? 0) - (b.date ?? 0)))
-          if (valid.length) printHtmlDocument(buildPrintDocument(valid))
+          if (valid.length) printHtmlDocument(buildPrintDocument(valid, get().allowRemoteContent))
         })
         .finally(() => {
           clearTimeout(safety)
@@ -719,7 +730,7 @@ export const useApp = create<AppState>((set, get) => {
       pst
         .getMessageContent(sourceId, messageId)
         .then((content) => {
-          if (content) printHtmlDocument(buildPrintDocument([content]))
+          if (content) printHtmlDocument(buildPrintDocument([content], get().allowRemoteContent))
         })
         .finally(() => {
           clearTimeout(safety)

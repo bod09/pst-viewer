@@ -58,6 +58,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   const setOcrEnabled = useApp((s) => s.setOcrEnabled)
   const showEmptyFolders = useApp((s) => s.showEmptyFolders)
   const setShowEmptyFolders = useApp((s) => s.setShowEmptyFolders)
+  const allowRemoteContent = useApp((s) => s.allowRemoteContent)
+  const setAllowRemoteContent = useApp((s) => s.setAllowRemoteContent)
 
   return (
     <Dialog title="Settings" onClose={onClose} size="sm">
@@ -73,6 +75,17 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           <Toggle checked={ocrEnabled} onChange={setOcrEnabled} />
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <div className="text-sm font-medium text-slate-100">Load images from the internet</div>
+            <div className="mt-1 text-xs leading-relaxed text-slate-400">
+              Some emails link to pictures stored online instead of including them. Turn this
+              off to show only what is inside the file, so opening a message never contacts
+              the sender.
+            </div>
+          </div>
+          <Toggle checked={allowRemoteContent} onChange={setAllowRemoteContent} />
         </div>
         <div className="flex items-center justify-between gap-6">
           <div>
