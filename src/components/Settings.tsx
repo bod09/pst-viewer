@@ -25,6 +25,7 @@ export function SettingsButton({ className }: { className?: string }) {
         onClick={() => setOpen(true)}
         className={`rounded-md p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 ${className ?? ''}`}
         data-tip="Settings"
+        aria-label="Settings"
       >
         <GearIcon className="h-5 w-5" />
       </button>
@@ -34,11 +35,20 @@ export function SettingsButton({ className }: { className?: string }) {
 }
 
 /** Animated on/off switch. */
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+}) {
   return (
     <button
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
         checked ? 'bg-sky-500' : 'bg-slate-700'
@@ -74,7 +84,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               since reading images makes opening a mailbox take longer.
             </div>
           </div>
-          <Toggle checked={ocrEnabled} onChange={setOcrEnabled} />
+          <Toggle checked={ocrEnabled} onChange={setOcrEnabled} label="Make text in images searchable" />
         </div>
         <div className="flex items-center justify-between gap-6">
           <div>
@@ -85,7 +95,11 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               the sender.
             </div>
           </div>
-          <Toggle checked={allowRemoteContent} onChange={setAllowRemoteContent} />
+          <Toggle
+            checked={allowRemoteContent}
+            onChange={setAllowRemoteContent}
+            label="Load images from the internet"
+          />
         </div>
         <div className="flex items-center justify-between gap-6">
           <div>
@@ -95,7 +109,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               folders that contain no messages.
             </div>
           </div>
-          <Toggle checked={showEmptyFolders} onChange={setShowEmptyFolders} />
+          <Toggle checked={showEmptyFolders} onChange={setShowEmptyFolders} label="Show empty folders" />
         </div>
         <ColorRow
           title="Theme"
@@ -161,6 +175,7 @@ function ColorRow({
             key={c || 'default'}
             onClick={() => pick(c)}
             data-tip={c ? undefined : 'Default'}
+            aria-label={c ? `${title}: ${c}` : `${title}: default`}
             className={`h-6 w-6 rounded-full transition ${ring(value === c)}`}
             style={{ backgroundColor: c || defaultSwatch }}
           />

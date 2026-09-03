@@ -21,6 +21,7 @@ export function AppShell() {
   const setNavWidth = useApp((s) => s.setNavWidth)
   const setListWidth = useApp((s) => s.setListWidth)
   const [dragging, setDragging] = useState(false)
+  const [rejected, setRejected] = useState<string | null>(null)
 
   // Global drag & drop: dropping anywhere on the window adds files.
   useEffect(() => {
@@ -41,9 +42,20 @@ export function AppShell() {
       e.preventDefault()
       depth = 0
       setDragging(false)
-      if (e.dataTransfer?.files?.length) {
-        const accepted = filterAccepted(e.dataTransfer.files)
+      const dropped = e.dataTransfer?.files
+      if (dropped?.length) {
+        const accepted = filterAccepted(dropped)
         if (accepted.length) addFiles(accepted)
+        else {
+          // Say why nothing happened, instead of the overlay just vanishing.
+          const names = Array.from(dropped).map((f) => f.name)
+          const ext = names.length === 1 ? /\.[^.]+$/.exec(names[0])?.[0] : null
+          setRejected(
+            ext
+              ? `${ext} files cannot be opened here. Try .pst, .ost, .msg, .eml or .zip.`
+              : 'Those files cannot be opened here. Try .pst, .ost, .msg, .eml or .zip.',
+          )
+        }
       }
     }
     window.addEventListener('dragenter', onEnter)
@@ -92,6 +104,8 @@ export function AppShell() {
         </div>
       )}
 
+      {rejected && <DropRejected message={rejected} onDone={() => setRejected(null)} />}
+
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-sky-500/10 backdrop-blur-sm">
           <div className="rounded-2xl border-2 border-dashed border-sky-400 bg-slate-900/80 px-10 py-8 text-lg font-medium text-sky-200">
@@ -99,6 +113,29 @@ export function AppShell() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Brief notice when a dropped file is not a format we can open. */
+function DropRejected({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 6000)
+    return () => clearTimeout(t)
+  }, [onDone])
+  return (
+    <div
+      role="status"
+      className="absolute bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-amber-500/40 bg-slate-900 px-4 py-2.5 text-sm text-amber-100 shadow-xl"
+    >
+      <span>{message}</span>
+      <button
+        onClick={onDone}
+        aria-label="Dismiss"
+        className="rounded px-1.5 text-amber-200/70 transition hover:bg-slate-800 hover:text-amber-100"
+      >
+        ✕
+      </button>
     </div>
   )
 }

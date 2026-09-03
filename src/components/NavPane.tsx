@@ -245,12 +245,13 @@ function SourceTree({ source }: { source: Source }) {
         {source.status === 'parsing' && <Spinner className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
         {source.status === 'error' && <Alert className="h-4 w-4 shrink-0 text-rose-400" />}
         {!editing && (
-          <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
             {source.status === 'ready' && (
               <button
                 onClick={startEdit}
                 className="text-slate-400 transition hover:text-slate-200"
                 data-tip="Rename"
+                aria-label={`Rename ${source.label}`}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -259,6 +260,7 @@ function SourceTree({ source }: { source: Source }) {
               onClick={() => removeSource(source.id)}
               className="text-slate-400 transition hover:text-rose-400"
               data-tip="Remove mailbox"
+              aria-label={`Remove ${source.label}`}
             >
               <Trash className="h-4 w-4" />
             </button>
@@ -267,7 +269,9 @@ function SourceTree({ source }: { source: Source }) {
       </div>
 
       {source.status === 'parsing' && (
-        <p className="px-3 pb-1 text-[11px] text-slate-400">Reading folders…</p>
+        <p role="status" className="px-3 pb-1 text-[11px] text-slate-400">
+          Reading folders…
+        </p>
       )}
       {source.status === 'error' && (
         <p
@@ -278,17 +282,24 @@ function SourceTree({ source }: { source: Source }) {
         </p>
       )}
       {source.status === 'ready' && !source.indexed && source.indexProgress && (
-        <p className="px-3 pb-1 text-[11px] text-slate-400">Indexing for search… {pct}%</p>
+        <p role="status" className="px-3 pb-1 text-[11px] text-slate-400">
+          Indexing for search… {pct}%
+        </p>
       )}
       {source.status === 'ready' &&
         source.indexed &&
         !source.ocrDone &&
         source.ocrProgress &&
         source.ocrProgress.total > 0 && (
-          <p className="px-3 pb-1 text-[11px] text-slate-400">
+          <p role="status" className="px-3 pb-1 text-[11px] text-slate-400">
             Reading images… {source.ocrProgress.done}/{source.ocrProgress.total}
           </p>
         )}
+      {source.status === 'ready' && source.indexFailed && (
+        <p className="px-3 pb-1 text-[11px] leading-snug text-amber-400">
+          Search may be incomplete for this mailbox.
+        </p>
+      )}
       {source.status === 'ready' && source.index && (
         <ul className="ml-5">
           {visibleChildren(source.index.rootFolder.children, showEmpty).map((child) => (

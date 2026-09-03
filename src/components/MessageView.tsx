@@ -229,7 +229,7 @@ export function MessageView({
                 onImageClick={setPreview}
               />
             ) : content.text ? (
-              <pre className="m-0 min-h-full whitespace-pre-wrap break-words bg-white px-6 py-4 font-sans text-sm text-slate-900">
+              <pre className="m-0 min-h-full whitespace-pre-wrap break-words bg-white px-6 py-4 font-sans text-sm text-neutral-900">
                 {terms.length ? <HighlightedText text={content.text} terms={terms} /> : content.text}
               </pre>
             ) : content.itemKind === 'email' ? (
@@ -270,7 +270,7 @@ function HighlightedText({ text, terms }: { text: string; terms: string[] }) {
       <mark
         key={i++}
         ref={isFirst ? firstRef : undefined}
-        className="rounded-sm bg-yellow-400 text-slate-900"
+        className="rounded-sm bg-yellow-400 text-neutral-900"
       >
         {m[0]}
       </mark>,

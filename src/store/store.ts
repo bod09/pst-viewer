@@ -22,6 +22,8 @@ export interface Source {
   index?: SourceIndex
   indexProgress?: { done: number; total: number }
   indexed?: boolean
+  /** Indexing stopped early; search may not cover the whole mailbox. */
+  indexFailed?: boolean
   ocrProgress?: { done: number; total: number }
   ocrDone?: boolean
 }
@@ -48,6 +50,8 @@ interface AppState {
 
   searchQuery: string
   searchResults: SearchHit[]
+  /** How many messages matched in total; more than searchResults when capped. */
+  searchTotal: number
   searching: boolean
 
   /** Messages picked for PDF export, keyed `${sourceId}:${messageId}`. */
@@ -93,6 +97,9 @@ const uid = () => `s${++counter}-${Date.now().toString(36)}`
 const stripExt = (n: string) => n.replace(/\.[^.]+$/, '')
 const fkey = (sourceId: string, folderId: string) => `${sourceId}:${folderId}`
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+/** Hits returned per search. The true match count is reported alongside. */
+const SEARCH_LIMIT = 200
 
 const NAV_W_KEY = 'pstviewer.navWidth'
 const LIST_W_KEY = 'pstviewer.listWidth'
@@ -182,6 +189,7 @@ function freshState(): Partial<AppState> {
     autoExpanded: null,
     searchQuery: '',
     searchResults: [],
+    searchTotal: 0,
     searching: false,
     exportSel: {},
     exporting: false,
@@ -249,6 +257,14 @@ export const useApp = create<AppState>((set, get) => {
                 // Then OCR this mailbox's images so their text is searchable too.
                 enqueueOcr(id)
               }
+            })
+            .catch(() => {
+              // Indexing failed (a damaged region, or the worker gave up). Stop
+              // reporting progress that will never finish: the mailbox stays
+              // readable, and search covers whatever was indexed before it
+              // failed. Marking it done also releases the staged documents.
+              patchSource(id, { indexed: true, indexProgress: undefined, indexFailed: true })
+              enqueueOcr(id)
             }),
         )
       })
@@ -357,6 +373,11 @@ export const useApp = create<AppState>((set, get) => {
   // Automatic background OCR: after a mailbox is indexed, recognize text in its
   // image attachments so it becomes searchable too. One image at a time, reusing
   // a single Tesseract worker across queued mailboxes; never blocks the UI.
+  // The UI's `exporting` flag is released by a safety timer so the buttons can
+  // never stay stuck, but the real work may still be running; this guard is
+  // what actually prevents a second export starting on top of the first.
+  let exportInFlight = false
+
   const ocrQueue: string[] = []
   let ocrActive = false
   const hasSource = (id: string) => get().sources.some((s) => s.id === id)
@@ -472,6 +493,7 @@ export const useApp = create<AppState>((set, get) => {
     autoExpanded: null,
     searchQuery: '',
     searchResults: [],
+    searchTotal: 0,
     searching: false,
     exportSel: {},
     exporting: false,
@@ -539,6 +561,9 @@ export const useApp = create<AppState>((set, get) => {
             ? { sourceId: null, folderId: null, messageId: null }
             : s.selection,
           messages: wasSelected ? [] : s.messages,
+          // Otherwise the removed mailbox's damage warning stays pinned above
+          // an empty pane, attributed to nothing.
+          messagesUnreadable: wasSelected ? 0 : s.messagesUnreadable,
           messageContent: wasSelected ? null : s.messageContent,
           searchResults: s.searchResults.filter((h) => h.sourceId !== id),
           exportSel,
@@ -649,24 +674,33 @@ export const useApp = create<AppState>((set, get) => {
     runSearch: () => {
       const query = get().searchQuery.trim()
       if (!query) {
-        set({ searchResults: [], searching: false })
+        set({ searchResults: [], searchTotal: 0, searching: false })
         return
       }
       set({ searching: true })
       pst
-        .search(query, 200)
-        .then((searchResults) => {
+        .searchPage(query, SEARCH_LIMIT)
+        .then(({ hits, total }) => {
           if (get().searchQuery.trim() !== query) return // stale
-          set({ searchResults, searching: false })
+          set({ searchResults: hits, searchTotal: total, searching: false })
         })
         .catch(() => {
-          if (get().searchQuery.trim() === query) set({ searchResults: [], searching: false })
+          if (get().searchQuery.trim() === query)
+            set({ searchResults: [], searchTotal: 0, searching: false })
         })
     },
 
-    clearSearch: () => set({ searchQuery: '', searchResults: [], searching: false }),
+    clearSearch: () =>
+      set({ searchQuery: '', searchResults: [], searchTotal: 0, searching: false }),
 
     openHit: (hit) => {
+      // Load the hit's own folder, so clearing the search leaves the list
+      // showing the folder the message actually lives in rather than whatever
+      // was open before.
+      const prev = get().selection
+      if (prev.sourceId !== hit.sourceId || prev.folderId !== hit.folderId) {
+        void get().selectFolder(hit.sourceId, hit.folderId)
+      }
       set((s) => ({
         selection: { sourceId: hit.sourceId, folderId: hit.folderId, messageId: hit.messageId },
         expanded: { ...s.expanded, [fkey(hit.sourceId, hit.folderId)]: true },
@@ -701,7 +735,8 @@ export const useApp = create<AppState>((set, get) => {
 
     exportSelected: (direction = 'asc') => {
       const picks = Object.values(get().exportSel)
-      if (!picks.length || get().exporting) return
+      if (!picks.length || exportInFlight) return
+      exportInFlight = true
       set({ exporting: true })
       // Never let the buttons stay disabled if a fetch stalls (e.g. the worker
       // is busy with background OCR); the user can always retry.
@@ -719,12 +754,14 @@ export const useApp = create<AppState>((set, get) => {
         })
         .finally(() => {
           clearTimeout(safety)
+          exportInFlight = false
           set({ exporting: false })
         })
     },
 
     exportSingle: (sourceId, messageId) => {
-      if (get().exporting) return
+      if (exportInFlight) return
+      exportInFlight = true
       set({ exporting: true })
       const safety = setTimeout(() => set({ exporting: false }), 30000)
       pst
@@ -734,12 +771,14 @@ export const useApp = create<AppState>((set, get) => {
         })
         .finally(() => {
           clearTimeout(safety)
+          exportInFlight = false
           set({ exporting: false })
         })
     },
 
     exportEml: (sourceId, messageId) => {
-      if (get().exporting) return
+      if (exportInFlight) return
+      exportInFlight = true
       set({ exporting: true })
       const safety = setTimeout(() => set({ exporting: false }), 30000)
       pst
@@ -759,6 +798,7 @@ export const useApp = create<AppState>((set, get) => {
         })
         .finally(() => {
           clearTimeout(safety)
+          exportInFlight = false
           set({ exporting: false })
         })
     },

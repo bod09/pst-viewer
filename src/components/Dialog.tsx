@@ -49,6 +49,7 @@ export function Dialog({
             {headerExtra}
             <button
               onClick={onClose}
+              aria-label="Close"
               className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
             >
               <Close className="h-5 w-5" />

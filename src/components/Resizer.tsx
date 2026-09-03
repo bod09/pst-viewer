@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
 /** A vertical drag handle that resizes the panel to its left. */
 export function Resizer({
@@ -13,24 +13,40 @@ export function Resizer({
   onResize: (w: number) => void
 }) {
   const start = useRef({ x: 0, w: 0 })
+  const [dragging, setDragging] = useState(false)
+  // Read inside the listeners without re-subscribing on every resize.
+  const latest = useRef({ min, max, onResize })
+  latest.current = { min, max, onResize }
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault()
     start.current = { x: e.clientX, w: width }
+    setDragging(true)
+  }
+
+  // Tied to the dragging state so unmounting mid-drag (or a cancelled pointer)
+  // still restores the cursor and drops the listeners. Otherwise the whole app
+  // keeps a resize cursor and unselectable text for the rest of the session.
+  useEffect(() => {
+    if (!dragging) return
     const move = (ev: PointerEvent) => {
-      onResize(Math.min(max, Math.max(min, start.current.w + (ev.clientX - start.current.x))))
+      const { min: lo, max: hi, onResize: cb } = latest.current
+      cb(Math.min(hi, Math.max(lo, start.current.w + (ev.clientX - start.current.x))))
     }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
+    const stop = () => setDragging(false)
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [dragging])
 
   return (
     <div

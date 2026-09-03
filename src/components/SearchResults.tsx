@@ -8,6 +8,7 @@ import { SelectAvatar } from './SelectAvatar'
 
 export function SearchResults() {
   const results = useApp((s) => s.searchResults)
+  const total = useApp((s) => s.searchTotal)
   const searching = useApp((s) => s.searching)
   const query = useApp((s) => s.searchQuery)
   const selectedId = useApp((s) => s.selection.messageId)
@@ -41,7 +42,9 @@ export function SearchResults() {
           Search results
         </span>
         {results.length > 0 && (
-          <span className="text-[11px] text-slate-400">{results.length}</span>
+          <span className="text-[11px] text-slate-400">
+            {total > results.length ? `${results.length} of ${total.toLocaleString()}` : results.length}
+          </span>
         )}
       </div>
 
