@@ -225,18 +225,89 @@ async function buildFolderTree(folder: IPSTFolder, entry: SourceEntry): Promise<
   }
 }
 
-// Outlook shows folders directly under the mailbox, not under the internal
-// "Top of Personal Folders" container; lift that container's children up a level.
-function liftRootContainer(node: FolderNode): FolderNode {
-  const children: FolderNode[] = []
-  for (const child of node.children) {
-    if (/^top of (personal folders|outlook data file)\b/i.test(child.name)) {
-      children.push(...child.children)
-    } else {
-      children.push(child)
+/**
+ * Pick the folder subtree that represents the user's mailbox.
+ *
+ * A .pst keeps everything under one "Top of Personal Folders" container, and
+ * the library's getTopOfOutlookDataFile finds it by a fixed node id. An .ost
+ * breaks both assumptions: the mail lives under a store root ("Root -
+ * Mailbox" -> "IPM_SUBTREE") next to internal plumbing (Common Views, Finder,
+ * ~MAPISP(Internal), ...), there can be several IPM_SUBTREEs (an empty
+ * public-folders one often enumerates first), and the fixed node id can land
+ * on an arbitrary mail folder instead.
+ *
+ * So: choose by evidence, not by name. Candidates are the library's answer,
+ * every folder named IPM_SUBTREE, and the root itself; the winner is the one
+ * whose subtree holds the most messages (ties: deepest, then most folders).
+ * Siblings of the winner that also hold mail (e.g. Exchange's Recoverable
+ * Items) are kept as extra top-level folders; empty plumbing is dropped.
+ */
+interface Scored {
+  node: FolderNode
+  parent: FolderNode | null
+  depth: number
+  messages: number
+  folders: number
+}
+
+function scoreTree(root: FolderNode): Map<FolderNode, Scored> {
+  const scores = new Map<FolderNode, Scored>()
+  const walk = (node: FolderNode, parent: FolderNode | null, depth: number): Scored => {
+    let messages = node.messageCount
+    let folders = node.children.length
+    for (const child of node.children) {
+      const s = walk(child, node, depth + 1)
+      messages += s.messages
+      folders += s.folders
+    }
+    const scored: Scored = { node, parent, depth, messages, folders }
+    scores.set(node, scored)
+    return scored
+  }
+  walk(root, null, 0)
+  return scores
+}
+
+function selectMailboxTree(
+  root: FolderNode,
+  libraryTopId: string | null,
+): { tree: FolderNode; ownerHint: string } {
+  const scores = scoreTree(root)
+  const candidates: Scored[] = []
+  for (const s of scores.values()) {
+    if (s.node === root || s.node.name === 'IPM_SUBTREE' || s.node.id === libraryTopId) {
+      candidates.push(s)
     }
   }
-  return { ...node, children }
+  candidates.sort(
+    (a, b) => b.messages - a.messages || b.depth - a.depth || b.folders - a.folders,
+  )
+  const best = candidates[0]
+  if (!best || best.node === root) return { tree: root, ownerHint: '' }
+
+  // Rescue sibling subtrees that hold mail (dropping the empty plumbing).
+  const extras = (best.parent?.children ?? [])
+    .filter((sib) => sib !== best.node && (scores.get(sib)?.messages ?? 0) > 0)
+  return {
+    tree: { ...root, children: [...best.node.children, ...extras] },
+    // The chosen container (or its parent store root) sometimes carries the
+    // mailbox owner's name; generic names are filtered by the caller.
+    ownerHint: best.node.name || best.parent?.name || '',
+  }
+}
+
+/** Drop worker-side folder handles that are not part of the displayed tree, so
+ *  indexing (which enumerates the handle map) matches what the user can open. */
+function pruneFolderHandles(entry: SourceEntry, rootNode: FolderNode): void {
+  const keep = new Set<string>()
+  const walk = (n: FolderNode) => {
+    keep.add(n.id)
+    n.children.forEach(walk)
+  }
+  walk(rootNode)
+  for (const id of entry.folders.keys()) {
+    if (!keep.has(id)) entry.folders.delete(id)
+  }
 }
 
 async function buildSearchDoc(
@@ -293,7 +364,9 @@ function isGenericStoreName(name: string): boolean {
     /^(top of )?(personal folders|outlook data file)\b/.test(n) ||
     n === 'mailbox' ||
     n === 'root' ||
-    n === 'root - mailbox'
+    n === 'root - mailbox' ||
+    n === 'root - public' ||
+    n === 'ipm_subtree'
   )
 }
 
@@ -999,19 +1072,18 @@ const api = {
     }
     sources.set(sourceId, entry)
 
-    // Start from the IPM subtree ("Top of Personal Folders"), the user's real
-    // mailbox root. Internal containers like Search Root are siblings of it under
-    // the true root, so starting here drops them in any language. Fall back to the
-    // raw root (lifting the localized top container) only if the subtree is absent.
-    let top: IPSTFolder | null = null
+    // Walk the whole tree once, then pick the subtree that actually holds the
+    // mailbox (see selectMailboxTree - the library's own top-of-file answer is
+    // just one candidate, since it is unreliable for .ost files).
+    let libraryTopId: string | null = null
     try {
-      top = await pstFile.getTopOfOutlookDataFile()
+      libraryTopId = String((await pstFile.getTopOfOutlookDataFile()).primaryNodeId)
     } catch {
-      top = null
+      libraryTopId = null
     }
-    const rootNode = top
-      ? await buildFolderTree(top, entry)
-      : liftRootContainer(await buildFolderTree(await pstFile.getRootFolder(), entry))
+    const fullTree = await buildFolderTree(await pstFile.getRootFolder(), entry)
+    const { tree: rootNode, ownerHint } = selectMailboxTree(fullTree, libraryTopId)
+    pruneFolderHandles(entry, rootNode)
 
     let totalMessages = 0
     const sum = (n: FolderNode) => {
@@ -1027,11 +1099,8 @@ const api = {
       async () => (await pstFile.getMessageStore()).displayName,
       '',
     )
-    const topName = await safeAsync(
-      async () => (await pstFile.getTopOfOutlookDataFile()).displayName,
-      '',
-    )
-    const ownerName = [storeName, topName].find((n) => n && !isGenericStoreName(n)) ?? ''
+    const ownerName =
+      [storeName, ownerHint].find((n) => n && !isGenericStoreName(n)) ?? ''
 
     return {
       rootFolder: rootNode,
