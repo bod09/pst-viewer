@@ -34,6 +34,7 @@ import type {
   AttachmentMeta,
   ContactCard,
   DistListCard,
+  ContactMatch,
   EmbeddedMessageResult,
   FolderMessages,
   FolderNode,
@@ -1193,7 +1194,7 @@ const api = {
     for (const id of ['msgfolder', 'msgcalendar', 'msgcontacts', 'msgtasks', 'msgnotes', 'msgjournal']) {
       const g = grouped.get(id)
       if (!g) continue
-      entry.folders.set(id, createMsgFolder(id, g.name, g.items))
+      entry.folders.set(id, createMsgFolder(id, g.name, g.items, g.cls))
       children.push({
         id,
         name: g.name,
@@ -1409,6 +1410,51 @@ const api = {
     }
     onProgress?.(done, total)
     return { fromCache: false }
+  },
+
+  /**
+   * Find contacts matching a clicked sender/recipient, across every loaded
+   * mailbox's contact folders. Deterministic on purpose: an exact email match
+   * when the recipient has a real address, otherwise exact (case-insensitive)
+   * display-name equality. Multiple exact matches are all returned so the UI
+   * can offer the choice instead of guessing.
+   */
+  async findContacts(email: string, name: string): Promise<ContactMatch[]> {
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+    const wantEmail = email.includes('@') ? norm(email) : ''
+    const wantName = norm(name)
+    if (!wantEmail && !wantName) return []
+
+    const results: ContactMatch[] = []
+    for (const [sourceId, entry] of sources) {
+      for (const folder of entry.folders.values()) {
+        if (!safe(() => folder.containerClass, '').toLowerCase().startsWith('ipf.contact')) continue
+        const msgs = await safeAsync(() => folder.getEmails(), [])
+        for (const m of msgs) {
+          if (!safe(() => m.messageClass, '').toLowerCase().startsWith('ipm.contact')) continue
+          const msgId = String(safe(() => m.primaryNodeId, 0))
+          if (msgId === '0') continue
+          const fields = msgFieldsOf(m)
+          const card = fields
+            ? msgContactCard(fields, safe(() => m.subject, ''))
+            : safe(() => buildContactCard(m), undefined)
+          if (!card) continue
+          const emails = card.emails.map((e) => norm(e.address)).filter(Boolean)
+          const names = [card.fullName, safe(() => m.subject, '')].map(norm).filter(Boolean)
+          const hit = wantEmail ? emails.includes(wantEmail) : names.includes(wantName)
+          if (!hit) continue
+          entry.messages.set(msgId, m)
+          results.push({
+            sourceId,
+            messageId: msgId,
+            name: card.fullName || safe(() => m.subject, ''),
+            email: card.emails[0]?.address ?? '',
+          })
+          if (results.length >= 8) return results
+        }
+      }
+    }
+    return results
   },
 
   /** Fuzzy full-text search across all indexed sources. */

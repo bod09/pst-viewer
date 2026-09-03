@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../store/store'
 import { pst } from '../worker/client'
-import type { MessageContent, OcrMatchResult, RecipientInfo } from '../types'
+import type { ContactMatch, MessageContent, OcrMatchResult, RecipientInfo } from '../types'
 import { formatDate } from '../lib/format'
 import { categoryFromNameMime } from '../lib/detectType'
 import { sanitizeEmailHtml } from '../lib/sanitizeHtml'
@@ -30,6 +30,7 @@ export function MessageView({
 }) {
   const [preview, setPreview] = useState<string | null>(null)
   const [showHeaders, setShowHeaders] = useState(false)
+  const [contactQuery, setContactQuery] = useState<{ name: string; email: string } | null>(null)
   const searchQuery = useApp((s) => s.searchQuery)
   const terms = useMemo(() => queryTerms(searchQuery), [searchQuery])
   const [ocrMatch, setOcrMatch] = useState<OcrMatchResult>({
@@ -100,7 +101,6 @@ export function MessageView({
       a.isEmbeddedMessage ||
       !(a.isInline && categoryFromNameMime(a.name, a.mime) === 'image'),
   )
-  const from = content.fromName || content.fromEmail || '(unknown sender)'
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-slate-950">
@@ -163,24 +163,25 @@ export function MessageView({
         {content.itemKind === 'email' && (
           <div className="mt-3 space-y-1 text-sm">
             <HeaderLine label="From">
-              <span className="text-slate-200">{from}</span>
-              {showAddress(content.fromName, content.fromEmail) && (
-                <span className="text-slate-400"> &lt;{content.fromEmail}&gt;</span>
-              )}
+              <Person
+                name={content.fromName}
+                email={content.fromEmail}
+                onLookup={setContactQuery}
+              />
             </HeaderLine>
             {content.to.length > 0 && (
               <HeaderLine label="To">
-                <Recipients list={content.to} />
+                <Recipients list={content.to} onLookup={setContactQuery} />
               </HeaderLine>
             )}
             {content.cc.length > 0 && (
               <HeaderLine label="Cc">
-                <Recipients list={content.cc} />
+                <Recipients list={content.cc} onLookup={setContactQuery} />
               </HeaderLine>
             )}
             {content.bcc.length > 0 && (
               <HeaderLine label="Bcc">
-                <Recipients list={content.bcc} />
+                <Recipients list={content.bcc} onLookup={setContactQuery} />
               </HeaderLine>
             )}
             {content.date != null && (
@@ -189,6 +190,10 @@ export function MessageView({
           </div>
         )}
       </div>
+
+      {contactQuery && (
+        <ContactLookup query={contactQuery} onClose={() => setContactQuery(null)} />
+      )}
 
       {visibleAttachments.length > 0 && (
         <AttachmentBar
@@ -283,17 +288,134 @@ function showAddress(name: string, email: string): boolean {
   return Boolean(email) && email.includes('@') && email.toLowerCase() !== name.toLowerCase()
 }
 
-function Recipients({ list }: { list: RecipientInfo[] }) {
+type LookupFn = (q: { name: string; email: string }) => void
+
+/** A clickable person: opens the matching contact card, if one exists. */
+function Person({ name, email, onLookup }: { name: string; email: string; onLookup: LookupFn }) {
+  const raw = !showAddress(name, email) && email && email !== name ? email : undefined
+  return (
+    <button
+      onClick={() => onLookup({ name, email })}
+      className="text-left text-slate-200 hover:underline"
+      data-tip={raw ?? 'Look up in contacts'}
+    >
+      {name || email || '(unknown sender)'}
+      {showAddress(name, email) && <span className="text-slate-400"> &lt;{email}&gt;</span>}
+    </button>
+  )
+}
+
+function Recipients({ list, onLookup }: { list: RecipientInfo[]; onLookup: LookupFn }) {
   return (
     <>
       {list.map((r, i) => (
-        <span key={`${r.email}-${i}`} data-tip={!showAddress(r.name, r.email) && r.email && r.email !== r.name ? r.email : undefined}>
+        <span key={`${r.email}-${i}`}>
           {i > 0 && '; '}
-          {r.name || r.email}
-          {showAddress(r.name, r.email) ? ` <${r.email}>` : ''}
+          <Person name={r.name} email={r.email} onLookup={onLookup} />
         </span>
       ))}
     </>
+  )
+}
+
+/** Modal: find the clicked person in the loaded mailboxes' contact folders. */
+function ContactLookup({
+  query,
+  onClose,
+}: {
+  query: { name: string; email: string }
+  onClose: () => void
+}) {
+  const [matches, setMatches] = useState<ContactMatch[] | null>(null)
+  const [picked, setPicked] = useState<ContactMatch | null>(null)
+  const [card, setCard] = useState<MessageContent | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    pst
+      .findContacts(query.email, query.name)
+      .then((r) => {
+        if (!alive) return
+        setMatches(r)
+        if (r.length === 1) setPicked(r[0])
+      })
+      .catch(() => alive && setMatches([]))
+    return () => {
+      alive = false
+    }
+  }, [query])
+
+  useEffect(() => {
+    if (!picked) return
+    let alive = true
+    setCard(null)
+    pst
+      .getMessageContent(picked.sourceId, picked.messageId)
+      .then((c) => alive && setCard(c))
+      .catch(() => alive && setCard(null))
+    return () => {
+      alive = false
+    }
+  }, [picked])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={onClose}>
+      <div
+        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
+          <span className="truncate text-sm font-medium text-slate-200">
+            {query.name || query.email} — contacts
+          </span>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
+            data-tip="Close (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="scroll-clear min-h-0 flex-1 overflow-auto">
+          {matches === null && (
+            <div className="p-8 text-center text-sm text-slate-400">Searching contacts…</div>
+          )}
+          {matches !== null && matches.length === 0 && (
+            <div className="p-8 text-center text-sm text-slate-400">
+              No matching contact in the loaded mailboxes.
+            </div>
+          )}
+          {matches !== null && matches.length > 1 && !picked && (
+            <div className="p-3">
+              {matches.map((m) => (
+                <button
+                  key={`${m.sourceId}:${m.messageId}`}
+                  onClick={() => setPicked(m)}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/70"
+                >
+                  {m.name}
+                  {m.email && <span className="text-slate-400"> &lt;{m.email}&gt;</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {picked && card && (
+            <MessageView sourceId={picked.sourceId} messageId={picked.messageId} content={card} />
+          )}
+          {picked && !card && matches !== null && (
+            <div className="p-8 text-center text-sm text-slate-400">Loading contact…</div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

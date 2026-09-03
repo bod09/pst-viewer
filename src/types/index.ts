@@ -195,6 +195,18 @@ export interface OcrMatchResult {
   bodyImageIndexes: number[]
 }
 
+/** A contact found for a clicked sender/recipient. */
+export interface ContactMatch {
+  sourceId: string
+  messageId: string
+  /** Contact's display name. */
+  name: string
+  /** Contact's primary email address, if any. */
+  email: string
+  /** Label of the mailbox the contact lives in. */
+  sourceLabel?: string
+}
+
 /** A single full-text search match. */
 export interface SearchHit {
   sourceId: string

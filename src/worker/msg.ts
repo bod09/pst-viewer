@@ -235,6 +235,7 @@ class MsgFolderAdapter {
     readonly nodeId: string,
     private name: string,
     private emails: MsgMessageAdapter[],
+    private cls: string,
   ) {}
 
   get primaryNodeId(): string {
@@ -244,7 +245,7 @@ class MsgFolderAdapter {
     return this.name
   }
   get containerClass(): string {
-    return 'IPF.Note'
+    return this.cls
   }
   get contentCount(): number {
     return this.emails.length
@@ -328,11 +329,17 @@ export function parseMsg(data: ArrayBuffer, nodeId: string): IPSTMessage {
 }
 
 /** A synthetic single folder holding standalone .msg messages. */
-export function createMsgFolder(id: string, name: string, emails: IPSTMessage[]): IPSTFolder {
+export function createMsgFolder(
+  id: string,
+  name: string,
+  emails: IPSTMessage[],
+  containerClass = 'IPF.Note',
+): IPSTFolder {
   return new MsgFolderAdapter(
     id,
     name,
     emails as unknown as MsgMessageAdapter[],
+    containerClass,
   ) as unknown as IPSTFolder
 }
 
