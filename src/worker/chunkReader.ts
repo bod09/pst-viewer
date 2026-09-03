@@ -17,7 +17,7 @@ import type { ReadFileApi } from '@hiraokahypertools/pst-extractor'
 const SLAB_SIZE = 256 * 1024
 const MAX_SLABS = 512 // 128 MiB cap per open file
 
-export function makeChunkedReader(file: File, maxSlabs = MAX_SLABS): ReadFileApi {
+export function makeChunkedReader(file: File): ReadFileApi {
   const cache = new Map<number, Uint8Array>()
   const loading = new Map<number, Promise<Uint8Array>>()
   const lastSlab = Math.floor(Math.max(file.size - 1, 0) / SLAB_SIZE)
@@ -40,7 +40,7 @@ export function makeChunkedReader(file: File, maxSlabs = MAX_SLABS): ReadFileApi
         const bytes = new Uint8Array(ab)
         loading.delete(index)
         cache.set(index, bytes)
-        if (cache.size > maxSlabs) {
+        if (cache.size > MAX_SLABS) {
           const oldest = cache.keys().next().value
           if (oldest !== undefined) cache.delete(oldest)
         }

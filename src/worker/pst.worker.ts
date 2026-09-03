@@ -84,15 +84,6 @@ interface SourceEntry {
   people?: Map<string, { label: string; count: number }>
   /** Memoised per-folder message lists (see folderEmails). */
   emailLists: Map<string, IPSTMessage[]>
-  /** Image-attachment indexes reported by parallel index workers, for OCR
-   *  discovery when this side never loaded the attachment handles. */
-  attImageRefs: Map<string, number[]>
-  /** The original File, kept so parallel index workers can open their own
-   *  parser over it. Absent for synthetic (.msg/.eml) sources. */
-  sourceFile?: File
-  /** Opened via built-in recovery: the raw file is unreadable to a fresh
-   *  parser, so parallel indexing is not possible. */
-  recovered?: boolean
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -220,24 +211,6 @@ async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTM
   for (const m of emails) safe(() => entry.messages.set(String(m.primaryNodeId), m), undefined)
   entry.emailLists.set(folderId, emails)
   return emails
-}
-
-/** A message handle by id, loading its folder on demand. Parallel indexing
- *  builds search docs in other worker instances, so this side may not hold a
- *  handle for a message the index knows about; the indexed doc remembers the
- *  folder, and enumerating it (memoised) recovers the handle. */
-async function resolveMessage(
-  sourceId: string,
-  entry: SourceEntry,
-  messageId: string,
-): Promise<IPSTMessage | undefined> {
-  const existing = entry.messages.get(messageId)
-  if (existing) return existing
-  const folderId = metaDocs.get(`${sourceId}:${messageId}`)?.folderId
-  if (folderId && entry.folders.has(folderId)) {
-    await safeAsync(() => folderEmails(entry, folderId), [])
-  }
-  return entry.messages.get(messageId)
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -1163,248 +1136,9 @@ async function buildMessageContent(
   }
 }
 
-/**
- * Parallel indexing.
- *
- * Large mailboxes are CPU-bound to index, and one worker means one core. For
- * big files the coordinator (this worker) spawns further instances of this
- * same script; each opens its own parser over the same File (read-only, so
- * reads never conflict), pulls folders off a shared queue, and returns plain
- * search docs to be merged here. Every parser instance stays strictly
- * sequential internally - parallelism exists only across instances, so no
- * shared-state assumptions are made about the parsing library.
- *
- * This is an accelerator, not a dependency: synthetic sources, recovered
- * files, small files, weak machines, or any spawn/open failure all fall back
- * to the original in-process walk, and a worker dying mid-run just returns
- * its folders to the queue.
- */
-
-/** What a helper instance returns for one folder. */
-interface FolderHarvest {
-  docs: SearchDoc[]
-  processed: number
-  people: [label: string, count: number][]
-  bodyImages: [messageId: string, count: number][]
-  attImages: [messageId: string, refs: number[]][]
-}
-
-const PARALLEL_MIN_BYTES = 64 * 1024 * 1024
-// Below this the parse work is too small for helper startup to pay for
-// itself (indexing cost tracks message count, not file size - a huge file
-// of large attachments indexes quickly).
-const PARALLEL_MIN_MESSAGES = 4000
-const SUB_SOURCE_ID = '__sub'
-
-function plannedIndexWorkers(): number {
-  const cores = (globalThis.navigator as Navigator | undefined)?.hardwareConcurrency ?? 2
-  return Math.min(4, Math.max(0, cores - 2))
-}
-
-/** Fold one helper result into the shared index and this source's books. */
-function mergeHarvest(sourceId: string, entry: SourceEntry, h: FolderHarvest): void {
-  const docs: SearchDoc[] = []
-  for (const d of h.docs) {
-    const doc = { ...d, sourceId, id: `${sourceId}:${d.messageId}` }
-    if (searchIndex.has(doc.id)) continue
-    docs.push(doc)
-    searchDocs.set(doc.id, doc)
-    entry.searchIds.add(doc.id)
-    metaDocs.set(doc.id, metaOf(doc))
-  }
-  if (docs.length) searchIndex.addAll(docs)
-  entry.people ??= new Map()
-  for (const [label, count] of h.people) {
-    const key = label.toLowerCase()
-    const p = entry.people.get(key)
-    if (p) p.count += count
-    else entry.people.set(key, { label, count })
-  }
-  for (const [messageId, count] of h.bodyImages) entry.bodyImageCount.set(messageId, count)
-  for (const [messageId, refs] of h.attImages) entry.attImageRefs.set(messageId, refs)
-}
-
-/** Index one folder in this worker (the original sequential path; also used
- *  to finish folders a parallel helper dropped). Returns messages processed,
- *  or null when the source was closed mid-folder. */
-async function indexOneFolder(
-  sourceId: string,
-  entry: SourceEntry,
-  folderId: string,
-): Promise<number | null> {
-  const emails = await safeAsync(() => folderEmails(entry, folderId), [])
-  const docs: SearchDoc[] = []
-  let processed = 0
-  for (const m of emails) {
-    const msgId = String(m.primaryNodeId)
-    const id = `${sourceId}:${msgId}`
-    processed++
-    if (searchIndex.has(id)) continue
-    try {
-      const doc = await buildSearchDoc(sourceId, folderId, msgId, m, entry)
-      docs.push(doc)
-      searchDocs.set(id, doc)
-      entry.searchIds.add(id)
-      metaDocs.set(id, metaOf(doc))
-    } catch {
-      // skip an unreadable message
-    }
-  }
-  // If the source was closed while reading this folder, drop what we staged
-  // instead of leaving orphaned docs in the shared search index.
-  if (!sources.has(sourceId)) {
-    for (const d of docs) searchDocs.delete(d.id)
-    return null
-  }
-  if (docs.length) searchIndex.addAll(docs)
-  return processed
-}
-
-/** Try to index this source with parallel helper workers. Returns false when
- *  the source is ineligible or no helper could start (caller then runs the
- *  sequential walk); on true the index is complete. */
-async function parallelIndex(
-  sourceId: string,
-  entry: SourceEntry,
-  total: number,
-  onProgress?: (done: number, total: number) => void,
-): Promise<boolean> {
-  const file = entry.sourceFile
-  const workers = plannedIndexWorkers()
-  if (!file || entry.recovered || !entry.fingerprint) return false
-  if (file.size < PARALLEL_MIN_BYTES || total < PARALLEL_MIN_MESSAGES) return false
-  if (workers < 2 || entry.folders.size < 2) return false
-  if (typeof Worker !== 'function') return false
-
-  // Biggest folders first, so the end of the run stays balanced.
-  const queue = [...entry.folders.entries()]
-    .sort((a, b) => safe(() => b[1].contentCount, 0) - safe(() => a[1].contentCount, 0))
-    .map(([id]) => id)
-  const leftovers: string[] = []
-  const spawned: Worker[] = []
-  let done = 0
-  let anyOpened = false
-
-  const runHelper = async () => {
-    const w = new Worker(self.location.href, { type: 'module', name: 'pst-index-helper' })
-    spawned.push(w)
-    const helper = Comlink.wrap<PstWorkerApi>(w)
-    let current: string | undefined
-    try {
-      await helper.openForIndex(file)
-      anyOpened = true
-      for (;;) {
-        current = queue.shift()
-        if (current === undefined || !sources.has(sourceId)) return
-        const h = await helper.harvestFolder(current)
-        current = undefined
-        if (!h || !sources.has(sourceId)) return
-        mergeHarvest(sourceId, entry, h)
-        done += h.processed
-        onProgress?.(Math.min(done, total), total)
-      }
-    } catch {
-      // A helper that fails to open or dies mid-folder hands its work back;
-      // surviving helpers (or the sequential tail below) pick it up.
-      if (current !== undefined) leftovers.push(current)
-    }
-  }
-
-  try {
-    await Promise.all(Array.from({ length: workers }, () => runHelper()))
-  } finally {
-    for (const w of spawned) w.terminate()
-  }
-  if (!anyOpened) return false
-
-  leftovers.push(...queue.splice(0))
-  for (const folderId of leftovers) {
-    if (!sources.has(sourceId)) return true
-    const processed = await indexOneFolder(sourceId, entry, folderId)
-    if (processed === null) return true
-    done += processed
-    onProgress?.(Math.min(done, total), total)
-  }
-  onProgress?.(Math.min(done, total), total)
-  return true
-}
-
 const api = {
   async ping(): Promise<'pong'> {
     return 'pong'
-  },
-
-  /**
-   * Helper-instance API: open a file for harvesting only. No recovery, no
-   * cache lookups, no store naming - just the parser and the folder handles,
-   * with a smaller read cache since each helper only walks its own share.
-   */
-  async openForIndex(file: File): Promise<number> {
-    sources.delete(SUB_SOURCE_ID)
-    const pstFile = await openPst(makeChunkedReader(file, 128))
-    const entry: SourceEntry = {
-      file: pstFile,
-      folders: new Map(),
-      messages: new Map(),
-      attachments: new Map(),
-      ocr: new Map(),
-      bodyImageCount: new Map(),
-      searchIds: new Set(),
-      tnef: new Map(),
-      emailLists: new Map(),
-      attImageRefs: new Map(),
-    }
-    sources.set(SUB_SOURCE_ID, entry)
-    await buildFolderTree(await pstFile.getRootFolder(), entry)
-    return entry.folders.size
-  },
-
-  /** Helper-instance API: build search docs for one folder and return them
-   *  (with the side information indexing normally leaves in worker caches). */
-  async harvestFolder(folderId: string): Promise<FolderHarvest | null> {
-    const entry = sources.get(SUB_SOURCE_ID)
-    if (!entry) return null
-    // Fresh books, so the result carries only this folder's contribution.
-    entry.people = new Map()
-    entry.bodyImageCount = new Map()
-    entry.attachments = new Map()
-
-    const emails = await safeAsync(() => folderEmails(entry, folderId), [])
-    const docs: SearchDoc[] = []
-    let processed = 0
-    for (const m of emails) {
-      const msgId = String(m.primaryNodeId)
-      processed++
-      try {
-        docs.push(await buildSearchDoc(SUB_SOURCE_ID, folderId, msgId, m, entry))
-      } catch {
-        // skip an unreadable message
-      }
-    }
-
-    const attImages: [string, number[]][] = []
-    for (const [msgId, list] of entry.attachments) {
-      const refs: number[] = []
-      list.forEach((a, index) => {
-        if (safe(() => a.attachMethod, 0) !== Consts.ATTACH_BY_VALUE) return
-        const name = attachmentName(a, index, false)
-        if (isImageAttachment(name, safe(() => a.mimeTag, ''))) refs.push(index)
-      })
-      if (refs.length) attImages.push([msgId, refs])
-    }
-
-    // Helpers never serve reads for what they harvested; stay lean.
-    entry.messages.clear()
-    entry.attachments.clear()
-    entry.emailLists.delete(folderId)
-
-    return {
-      docs,
-      processed,
-      people: [...entry.people.values()].map((p) => [p.label, p.count]),
-      bodyImages: [...entry.bodyImageCount],
-      attImages,
-    }
   },
 
   /** Open a PST/OST File, walk its folder tree, and return a serializable index. */
@@ -1433,9 +1167,6 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
-      attImageRefs: new Map(),
-      sourceFile: file,
-      recovered,
     }
     sources.set(sourceId, entry)
 
@@ -1523,7 +1254,6 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
-      attImageRefs: new Map(),
     }
 
     // Standalone files carry no folder tree, so bucket items into Outlook-like
@@ -1616,7 +1346,7 @@ const api = {
   ): Promise<MessageContent | null> {
     const entry = sources.get(sourceId)
     if (!entry) return null
-    const m = await resolveMessage(sourceId, entry, messageId)
+    const m = entry.messages.get(messageId)
     if (!m) return null
     return buildMessageContent(m, messageId, entry)
   },
@@ -1636,15 +1366,7 @@ const api = {
       const tCopy = t.data.slice(0)
       return Comlink.transfer({ name: t.name, mime: t.mime, data: tCopy }, [tCopy])
     }
-    let list = entry.attachments.get(messageId)
-    if (!list) {
-      // OCR can ask for attachment bytes before the message was ever viewed.
-      const m = await resolveMessage(sourceId, entry, messageId)
-      if (m) {
-        list = await safeAsync(() => m.getAttachments(), [])
-        entry.attachments.set(messageId, list)
-      }
-    }
+    const list = entry.attachments.get(messageId)
     const a = list?.[index]
     if (!a) return null
     const data = safe(() => a.fileData, undefined)
@@ -1741,20 +1463,34 @@ const api = {
 
     let total = 0
     for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
-
-    // Big files fan the work out across helper workers when the machine has
-    // the cores for it; any ineligibility or startup failure falls through to
-    // the sequential walk below.
-    if (await safeAsync(() => parallelIndex(sourceId, entry, total, onProgress), false)) {
-      return { fromCache: false }
-    }
-
     let done = 0
+
     for (const folderId of entry.folders.keys()) {
       if (!sources.has(sourceId)) return { fromCache: false } // source removed mid-index
-      const processed = await indexOneFolder(sourceId, entry, folderId)
-      if (processed === null) return { fromCache: false }
-      done += processed
+      const emails = await safeAsync(() => folderEmails(entry, folderId), [])
+      const docs: SearchDoc[] = []
+      for (const m of emails) {
+        const msgId = String(m.primaryNodeId)
+        const id = `${sourceId}:${msgId}`
+        done++
+        if (searchIndex.has(id)) continue
+        try {
+          const doc = await buildSearchDoc(sourceId, folderId, msgId, m, entry)
+          docs.push(doc)
+          searchDocs.set(id, doc)
+          entry.searchIds.add(id)
+          metaDocs.set(id, metaOf(doc))
+        } catch {
+          // skip an unreadable message
+        }
+      }
+      // If the source was closed while reading this folder, drop what we staged
+      // instead of leaving orphaned docs in the shared search index.
+      if (!sources.has(sourceId)) {
+        for (const d of docs) searchDocs.delete(d.id)
+        return { fromCache: false }
+      }
+      if (docs.length) searchIndex.addAll(docs)
       onProgress?.(done, total)
     }
     onProgress?.(done, total)
@@ -1961,12 +1697,6 @@ const api = {
         }
       })
     }
-    // Image attachments found by parallel index helpers, where this side
-    // holds no attachment handles (fetching the bytes loads them on demand).
-    for (const [messageId, refs] of entry.attImageRefs) {
-      if (entry.attachments.has(messageId)) continue
-      for (const index of refs) out.push({ messageId, kind: 'att', ref: index })
-    }
     for (const [messageId, count] of entry.bodyImageCount) {
       for (let i = 0; i < count; i++) out.push({ messageId, kind: 'body', ref: i })
     }
@@ -1980,7 +1710,7 @@ const api = {
     ref: number,
   ): Promise<AttachmentData | null> {
     const entry = sources.get(sourceId)
-    const m = entry ? await resolveMessage(sourceId, entry, messageId) : undefined
+    const m = entry?.messages.get(messageId)
     if (!m) return null
     const url = dataImageUrls(extractBodies(m).html)[ref]
     const decoded = url ? dataUrlToBytes(url) : null
