@@ -176,13 +176,15 @@ const HitRow = memo(function HitRow({
             {formatDateShort(hit.date)}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[12px] text-slate-400">
-          <span className="truncate">{hit.from || '(unknown)'}</span>
+        <div className="flex items-center gap-2 text-[12px] text-slate-400">
+          {/* Sender takes the room that is left and the mailbox sits against
+              the right edge, so the labels line up down the list the way the
+              dates do above them. */}
+          <span className="min-w-0 flex-1 truncate">{hit.from || '(unknown)'}</span>
           {sourceLabel && (
-            <>
-              <span className="text-slate-700">·</span>
-              <span className="shrink-0 truncate text-slate-400">{sourceLabel}</span>
-            </>
+            <span className="max-w-[45%] shrink-0 truncate text-slate-500" data-tip={sourceLabel}>
+              {sourceLabel}
+            </span>
           )}
         </div>
       </button>
