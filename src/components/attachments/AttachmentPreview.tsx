@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AttachmentMeta, EmbeddedMessageResult } from '../../types'
 import { pst } from '../../worker/client'
@@ -212,8 +213,16 @@ function SpreadsheetView({ bytes }: { bytes: Uint8Array }) {
         const wb = XLSX.read(bytes, { type: 'array' })
         const sheets = wb.SheetNames
         const tables = sheets.map((name) => {
+          // The spreadsheet's own text ends up in this markup, and it is
+          // rendered into the app's own document rather than a sandboxed
+          // frame, so it has to be sanitised: a cell value containing a quote
+          // can otherwise close an attribute and add an event handler.
           const raw = XLSX.utils.sheet_to_html(wb.Sheets[name])
-          const doc = new DOMParser().parseFromString(raw, 'text/html')
+          const clean = DOMPurify.sanitize(raw, {
+            ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'br', 'span', 'div', 'p'],
+            ALLOWED_ATTR: ['colspan', 'rowspan', 'id'],
+          })
+          const doc = new DOMParser().parseFromString(clean, 'text/html')
           return doc.querySelector('table')?.outerHTML ?? '<p style="padding:1rem">(empty sheet)</p>'
         })
         setState({ sheets, tables })

@@ -317,7 +317,7 @@ function scoreTree(root: FolderNode): Map<FolderNode, Scored> {
   return scores
 }
 
-function selectMailboxTree(
+export function selectMailboxTree(
   root: FolderNode,
   libraryTopId: string | null,
 ): { tree: FolderNode; ownerHint: string } {
@@ -331,12 +331,24 @@ function selectMailboxTree(
   candidates.sort(
     (a, b) => b.messages - a.messages || b.depth - a.depth || b.folders - a.folders,
   )
-  const best = candidates[0]
-  if (!best || best.node === root) return { tree: root, ownerHint: '' }
+  // The root always contains at least as much mail as anything inside it, so
+  // it can only ever be the fallback: judging it as a candidate would mean
+  // showing the raw tree (store root, IPM_SUBTREE, Common Views, Finder, ...)
+  // the moment a single message lived outside the chosen container.
+  const best = candidates.find((c) => c.node !== root)
+  if (!best || best.messages === 0) return { tree: root, ownerHint: '' }
 
   // Rescue sibling subtrees that hold mail (dropping the empty plumbing).
   const extras = (best.parent?.children ?? [])
     .filter((sib) => sib !== best.node && (scores.get(sib)?.messages ?? 0) > 0)
+
+  // Only prune when the result still accounts for every message. If mail lives
+  // somewhere this view would not reach, show the whole tree instead: a tidier
+  // tree is never worth hiding messages in a mailbox someone is reviewing.
+  const covered =
+    best.messages + extras.reduce((n, sib) => n + (scores.get(sib)?.messages ?? 0), 0)
+  if (covered < (scores.get(root)?.messages ?? 0)) return { tree: root, ownerHint: '' }
+
   return {
     tree: { ...root, children: [...best.node.children, ...extras] },
     // The chosen container (or its parent store root) sometimes carries the

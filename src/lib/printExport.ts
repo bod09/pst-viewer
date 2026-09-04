@@ -36,8 +36,14 @@ function bodyAndStyles(
     // allows them, matching what was shown on screen.
     const html = sanitizeEmailHtml(content.html, cidMap, allowRemote)
     const doc = new DOMParser().parseFromString(html, 'text/html')
+    // Style text is re-emitted inside a <style> element, so any "</" in it
+    // would end that element early and let the rest be parsed as markup.
+    // Escaping the solidus keeps it inert (and is ignored by the CSS parser).
+    // Only HTML-namespace <style> is taken: DOMPurify escapes the contents of
+    // an SVG-namespace one, which unescapes when re-parsed here.
     const styles = Array.from(doc.querySelectorAll('style'))
-      .map((s) => s.textContent ?? '')
+      .filter((el) => el.namespaceURI === 'http://www.w3.org/1999/xhtml')
+      .map((el) => (el.textContent ?? '').replace(/<\//g, '<\\/'))
       .join('\n')
     return { styles, body: doc.body?.innerHTML ?? '' }
   }
@@ -103,6 +109,10 @@ export function buildPrintDocument(contents: MessageContent[], allowRemote = tru
 export function printHtmlDocument(html: string): void {
   const iframe = document.createElement('iframe')
   iframe.setAttribute('aria-hidden', 'true')
+  // Email HTML must never run scripts. allow-same-origin lets this window
+  // reach contentWindow to print; allow-modals lets the print dialog open.
+  // allow-scripts must never be added here.
+  iframe.setAttribute('sandbox', 'allow-same-origin allow-modals')
   Object.assign(iframe.style, {
     position: 'fixed',
     left: '-10000px',

@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Mirrors the policy the Docker image sends as a header, so the same
+      protection applies on hosts that serve no headers of their own (GitHub
+      Pages, object storage, a plain static server). frame-ancestors and
+      report-uri cannot be expressed here; the header version adds those.
+      Note img-src allows remote hosts because emails legitimately reference
+      remote images; the Settings toggle is what controls that.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
     <meta name="theme-color" content="#0b1220" />
     <meta
       name="description"

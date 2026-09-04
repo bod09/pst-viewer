@@ -3,8 +3,15 @@ import DOMPurify from 'dompurify'
 // Width/height of 0 or 1 (with optional px) marks an invisible tracking pixel.
 const TINY = /^0*[01](?:\.0+)?(?:px)?$/
 
-/** True for a reference the browser would fetch from another server. */
+/** True for a reference the browser would fetch from another server. The
+ *  value is stripped of tabs and newlines first, because the URL parser
+ *  ignores those and would still fetch "ht\ttp://host". */
 const REMOTE_URL = /^(?:https?:)?\/\//i
+const isRemote = (value: string | null): boolean =>
+  !!value && REMOTE_URL.test(value.replace(/[\t\n\r]/g, '').trim())
+
+/** Attributes that can name a remote resource, across HTML and SVG. */
+const URL_ATTRS = ['src', 'href', 'xlink:href', 'background', 'poster', 'action', 'data', 'formaction']
 
 /**
  * Sanitize an email's HTML body for safe, faithful rendering inside a
@@ -32,21 +39,40 @@ export function sanitizeEmailHtml(
     }
 
     if (!allowRemote) {
-      // Anything that would reach another server goes: image sources, CSS
-      // links, and url(...) references inside inline styles.
-      const src = el.getAttribute('src') ?? ''
-      if (REMOTE_URL.test(src)) {
-        el.removeAttribute('src')
-        el.setAttribute('data-pstv-blocked', '1')
+      // A <style> element's contents are never inspected by the hook, and CSS
+      // has many ways to fetch (url(), @import, @font-face, image-set), so the
+      // whole element goes rather than trying to rewrite the stylesheet.
+      if (el.tagName === 'STYLE') {
+        el.remove()
+        return
       }
-      for (const attr of ['background', 'poster', 'srcset']) {
-        if (REMOTE_URL.test(el.getAttribute(attr) ?? '')) el.removeAttribute(attr)
+      // Any attribute that could name a remote resource, not a fixed list:
+      // SVG uses href/xlink:href where HTML uses src.
+      for (const attr of URL_ATTRS) {
+        if (isRemote(el.getAttribute(attr))) {
+          el.removeAttribute(attr)
+          if (el.tagName === 'IMG') el.setAttribute('data-pstv-blocked', '1')
+        }
       }
-      if (el.tagName === 'LINK' && REMOTE_URL.test(el.getAttribute('href') ?? '')) el.remove()
+      // srcset holds several candidates; a remote one may follow a local one.
+      const srcset = el.getAttribute('srcset')
+      if (srcset) {
+        const kept = srcset
+          .split(',')
+          .filter((c) => !isRemote(c.trim().split(/\s+/)[0] ?? ''))
+          .join(',')
+        if (kept.trim()) el.setAttribute('srcset', kept)
+        else el.removeAttribute('srcset')
+      }
+      // Inline styles can fetch through url() and image-set(), and the URL may
+      // be CSS-escaped, so drop the whole declaration rather than pattern-match
+      // the address.
       const style = el.getAttribute('style')
-      if (style && /url\(/i.test(style)) {
-        const cleaned = style.replace(/url\(\s*['"]?(?:https?:)?\/\/[^)]*\)/gi, 'none')
-        el.setAttribute('style', cleaned)
+      if (style && /url\(|image-set\(/i.test(style)) {
+        el.setAttribute(
+          'style',
+          style.replace(/(?:url|image-set)\([^)]*\)/gi, 'none'),
+        )
       }
     }
 
@@ -72,13 +98,31 @@ export function sanitizeEmailHtml(
   }
 
   DOMPurify.addHook('afterSanitizeAttributes', hook)
-  const html = DOMPurify.sanitize(rawHtml, {
-    WHOLE_DOCUMENT: true,
-    FORBID_TAGS: ['script', 'noscript', 'iframe', 'object', 'embed', 'form', 'base'],
-    FORBID_ATTR: ['ping'],
-    ADD_ATTR: ['target'],
-  })
-  DOMPurify.removeHook('afterSanitizeAttributes')
+  let html: string
+  try {
+    html = DOMPurify.sanitize(rawHtml, {
+      WHOLE_DOCUMENT: true,
+      FORBID_TAGS: ['script', 'noscript', 'iframe', 'object', 'embed', 'form', 'base'],
+      FORBID_ATTR: ['ping'],
+      ADD_ATTR: ['target'],
+    })
+  } finally {
+    // Always unhook: a hook left installed would carry this call's settings
+    // into every later message, including ones that must block.
+    DOMPurify.removeHook('afterSanitizeAttributes')
+  }
+
+  // Belt and braces: even if something slips past the hook, this policy stops
+  // the frame reaching another server at all. Inline styles and data/blob
+  // images (the message's own pictures) still work.
+  if (!allowRemote) {
+    const csp =
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
+      'img-src data: blob:; style-src \'unsafe-inline\'; font-src data:">'
+    html = /<head[^>]*>/i.test(html)
+      ? html.replace(/<head[^>]*>/i, (m) => m + csp)
+      : csp + html
+  }
 
   return html
 }
