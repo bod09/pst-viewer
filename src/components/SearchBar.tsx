@@ -91,9 +91,10 @@ const dropdownCls = (side: 'left' | 'right') =>
  * A text field with a suggestion list under it.
  *
  * Up and Down walk the list, Enter takes the highlighted entry and Escape
- * closes just the list. Tab is left alone so it moves to the next filter:
- * the entries are deliberately not tab stops, since tabbing through every
- * suggestion to reach the next field is nobody's idea of a shortcut.
+ * closes just the list. Tab takes the highlighted entry too and then moves to
+ * the next filter; the entries are deliberately not tab stops, since tabbing
+ * through every suggestion to reach the next field is nobody's idea of a
+ * shortcut.
  */
 function SuggestInput({
   value,
@@ -156,8 +157,14 @@ function SuggestInput({
       setOpen(false)
       setActive(-1)
     } else if (e.key === 'Tab') {
-      setOpen(false)
-      setActive(-1)
+      // Take the highlighted entry on the way out, then let Tab move focus
+      // as usual: having walked to an entry, leaving should keep it rather
+      // than throw the choice away.
+      if (isOpen && active >= 0) pick(shown[active])
+      else {
+        setOpen(false)
+        setActive(-1)
+      }
     }
   }
 
