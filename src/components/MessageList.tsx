@@ -1,4 +1,4 @@
-import { memo, useRef, type ReactNode } from 'react'
+import { memo, useEffect, useRef, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useApp } from '../store/store'
 import type { MessageMeta } from '../types'
@@ -24,6 +24,28 @@ export function MessageList() {
     estimateSize: () => 68,
     overscan: 12,
   })
+
+  const selectedIndex = messages.findIndex((m) => m.id === selectedId)
+
+  useEffect(() => {
+    if (selectedIndex >= 0) virtualizer.scrollToIndex(selectedIndex, { align: 'auto' })
+    // Only when the selection itself moves, not on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex])
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!messages.length) return
+    const move = (to: number) => {
+      e.preventDefault()
+      const next = Math.max(0, Math.min(messages.length - 1, to))
+      selectMessage(messages[next].id)
+    }
+    const at = selectedIndex >= 0 ? selectedIndex : -1
+    if (e.key === 'ArrowDown') move(at + 1)
+    else if (e.key === 'ArrowUp') move(at <= 0 ? 0 : at - 1)
+    else if (e.key === 'Home') move(0)
+    else if (e.key === 'End') move(messages.length - 1)
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-slate-950">
@@ -53,7 +75,14 @@ export function MessageList() {
       ) : messages.length === 0 ? (
         <Centered>No messages in this folder</Centered>
       ) : (
-        <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          ref={parentRef}
+          role="listbox"
+          aria-label="Messages"
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          className="min-h-0 flex-1 overflow-y-auto focus:outline-none"
+        >
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
             {virtualizer.getVirtualItems().map((item) => {
               const message = messages[item.index]
@@ -111,6 +140,8 @@ const MessageRow = memo(function MessageRow({
   const secondary = isCardItem ? '' : message.subject
   return (
     <div
+      role="option"
+      aria-selected={selected}
       className={`flex h-full w-full items-stretch border-b border-b-slate-800/70 border-l-2 transition ${
         selected ? 'border-l-sky-400 bg-sky-500/15' : 'border-l-transparent hover:bg-slate-800/40'
       }`}

@@ -326,10 +326,29 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
   const Icon = folderIcon(node)
 
   return (
-    <li>
+    // A tree item rather than a plain row, so it can be reached and operated
+    // without a mouse: Enter or Space opens the folder, Right and Left expand
+    // and collapse it.
+    <li role="none">
       <div
+        role="treeitem"
+        tabIndex={0}
+        aria-selected={selected}
+        aria-expanded={hasChildren ? expanded : undefined}
         onClick={() => selectFolder(sourceId, node.id)}
-        className={`group/row flex cursor-pointer items-center gap-1.5 rounded-r-md border-l-2 py-1 pr-2 text-sm transition ${
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            void selectFolder(sourceId, node.id)
+          } else if (e.key === 'ArrowRight' && hasChildren && !expanded) {
+            e.preventDefault()
+            toggleFolder(sourceId, node.id)
+          } else if (e.key === 'ArrowLeft' && hasChildren && expanded) {
+            e.preventDefault()
+            toggleFolder(sourceId, node.id)
+          }
+        }}
+        className={`group/row flex cursor-pointer items-center gap-1.5 rounded-r-md border-l-2 py-1 pr-2 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
           selected
             ? 'border-l-sky-400 bg-sky-500/15 font-medium text-slate-100'
             : 'border-l-slate-700/60 text-slate-300 hover:bg-slate-800/60'

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Close } from './icons'
 
 /**
@@ -24,13 +24,48 @@ export function Dialog({
   /** Stretch to the full available height (viewer-style dialogs). */
   fillHeight?: boolean
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        // Only the innermost dialog closes, so one press does not dismiss a
+        // preview and the lightbox opened on top of it together.
+        e.stopPropagation()
+        onClose()
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
+
+  // Move focus into the dialog and put it back where it was on close, and keep
+  // Tab inside while it is open.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    panelRef.current?.focus()
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !panelRef.current) return
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onTab)
+    return () => {
+      window.removeEventListener('keydown', onTab)
+      previous?.focus?.()
+    }
+  }, [])
 
   const width = size === 'sm' ? 'max-w-lg' : size === 'md' ? 'max-w-3xl' : 'max-w-4xl'
 
@@ -40,7 +75,12 @@ export function Dialog({
       onClick={onClose}
     >
       <div
-        className={`flex ${fillHeight ? 'h-full' : ''} max-h-[88vh] w-full ${width} flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl`}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
+        tabIndex={-1}
+        className={`flex ${fillHeight ? 'h-full' : ''} max-h-[88vh] w-full ${width} flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl focus:outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
