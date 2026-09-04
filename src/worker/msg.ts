@@ -349,21 +349,87 @@ export function msgFieldsOf(m: IPSTMessage): FieldsData | undefined {
 }
 
 /** Contact card straight from .msg fields (PST named-property path can't run). */
+/**
+ * Contact details that msgreader does not surface as named fields.
+ *
+ * Its typed output stops at email1 and a couple of addresses, so the rest is
+ * read straight from the raw properties: named ones (the email slots) by
+ * their property id, fixed ones (birthday, extra phones, home address) by
+ * their tag. Without this a .msg contact shows noticeably less than the same
+ * contact inside a PST.
+ */
+interface RawLike {
+  propertyTag?: string
+  propertyLid?: string
+  value?: string | Uint8Array
+}
+
+function rawText(f: FieldsData, matches: (p: RawLike) => boolean): string {
+  const props = (f as unknown as { rawProps?: RawLike[] }).rawProps
+  if (!props) return ''
+  for (const p of props) {
+    if (!matches(p)) continue
+    const v = p.value
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return ''
+}
+
+/** A fixed property, matched on the id half of its tag (e.g. "3a42"). */
+const byTag = (f: FieldsData, id: string): string =>
+  rawText(f, (p) => (p.propertyTag ?? '').toLowerCase().startsWith(id))
+
+/** A named property, matched on its id (e.g. "00008093" for email2). */
+const byLid = (f: FieldsData, lid: string): string =>
+  rawText(f, (p) => (p.propertyLid ?? '').toLowerCase() === lid)
+
+/** Join the parts of an address the way Outlook composes them. */
+const joinAddress = (...parts: string[]): string => {
+  const kept = parts.map((p) => p.trim()).filter(Boolean)
+  return kept.length ? kept.join('\n') : ''
+}
+
 export function msgContactCard(f: FieldsData, subject: string): ContactCard {
   const fullName =
     f.fileUnder ||
     [f.givenName, f.middleName, f.surname].filter(Boolean).join(' ') ||
     subject
   const emails: ContactCard['emails'] = []
-  if (f.email1EmailAddress) emails.push({ label: f.email1DisplayName || 'Email', address: f.email1EmailAddress })
+  const pushEmail = (address: string, label: string) => {
+    if (address) emails.push({ label: label || 'Email', address })
+  }
+  pushEmail(f.email1EmailAddress ?? '', f.email1DisplayName ?? '')
+  pushEmail(byLid(f, '00008093'), byLid(f, '00008090'))
+  pushEmail(byLid(f, '000080a3'), byLid(f, '000080a0'))
+
   const phones: ContactCard['phones'] = []
-  if (f.businessTelephoneNumber) phones.push({ label: 'Business', value: f.businessTelephoneNumber })
-  if (f.mobileTelephoneNumber) phones.push({ label: 'Mobile', value: f.mobileTelephoneNumber })
-  if (f.homeTelephoneNumber) phones.push({ label: 'Home', value: f.homeTelephoneNumber })
-  if (f.businessFaxNumber) phones.push({ label: 'Business fax', value: f.businessFaxNumber })
+  const pushPhone = (value: string, label: string) => {
+    if (value) phones.push({ label, value })
+  }
+  pushPhone(f.businessTelephoneNumber ?? '', 'Business')
+  pushPhone(f.mobileTelephoneNumber ?? '', 'Mobile')
+  pushPhone(f.homeTelephoneNumber ?? '', 'Home')
+  pushPhone(byTag(f, '3a1f'), 'Other')
+  pushPhone(byTag(f, '3a57'), 'Company')
+  pushPhone(f.businessFaxNumber ?? '', 'Business fax')
+
   const addresses: ContactCard['addresses'] = []
-  if (f.workAddress) addresses.push({ label: 'Work', value: f.workAddress })
-  else if (f.postalAddress) addresses.push({ label: 'Address', value: f.postalAddress })
+  const pushAddress = (value: string, label: string) => {
+    if (value) addresses.push({ label, value })
+  }
+  pushAddress(f.workAddress || f.postalAddress || '', f.workAddress ? 'Work' : 'Address')
+  pushAddress(
+    joinAddress(byTag(f, '3a5d'), byTag(f, '3a59'), byTag(f, '3a5c'), byTag(f, '3a5b'), byTag(f, '3a5a')),
+    'Home',
+  )
+  pushAddress(
+    joinAddress(byTag(f, '3a63'), byTag(f, '3a5f'), byTag(f, '3a62'), byTag(f, '3a61'), byTag(f, '3a60')),
+    'Other',
+  )
+
+  const birthdayRaw = byTag(f, '3a42')
+  const birthday = birthdayRaw ? Date.parse(birthdayRaw) : NaN
+
   return {
     fullName,
     emails,
@@ -372,9 +438,9 @@ export function msgContactCard(f: FieldsData, subject: string): ContactCard {
     jobTitle: f.title ?? '',
     department: f.departmentName ?? f.department ?? '',
     addresses,
-    website: f.businessHomePage ?? '',
+    website: f.businessHomePage || byTag(f, '3a50') || '',
     im: f.instMsg ?? '',
-    birthday: null,
+    birthday: Number.isNaN(birthday) ? null : birthday,
   }
 }
 
