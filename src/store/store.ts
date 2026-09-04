@@ -78,6 +78,8 @@ interface AppState {
   toggleFolder: (sourceId: string, folderId: string) => void
   selectFolder: (sourceId: string, folderId: string) => Promise<void>
   selectMessage: (messageId: string | null) => void
+  /** Try the open message again after it failed to load. */
+  retryMessage: () => void
 
   setSearchQuery: (q: string) => void
   runSearch: () => void
@@ -416,6 +418,36 @@ export const useApp = create<AppState>((set, get) => {
     return files
   }
 
+  /**
+   * Fetch a message into the reader.
+   *
+   * One quiet retry first: a read can fail for a moment (the worker busy
+   * behind a long job, a hiccup reaching the file) and recovering without
+   * telling anyone is better than showing an error that a second click would
+   * have fixed. Only a repeated failure is worth the user's attention.
+   */
+  const loadMessage = async (sourceId: string, messageId: string): Promise<void> => {
+    const stale = () => {
+      const sel = get().selection
+      return sel.messageId !== messageId || sel.sourceId !== sourceId
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const content = await pst.getMessageContent(sourceId, messageId)
+        if (stale()) return
+        if (content) {
+          set({ messageContent: content, contentLoading: false })
+          return
+        }
+      } catch {
+        /* fall through to the retry, then to the error state */
+      }
+      if (stale()) return
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 250))
+    }
+    if (!stale()) set({ messageContent: null, contentLoading: false })
+  }
+
   const ocrQueue: string[] = []
   let ocrActive = false
   const hasSource = (id: string) => get().sources.some((s) => s.id === id)
@@ -696,19 +728,15 @@ export const useApp = create<AppState>((set, get) => {
         contentLoading: messageId != null,
       }))
       if (!messageId || !sourceId) return
-      pst
-        .getMessageContent(sourceId, messageId)
-        .then((content) => {
-          const sel = get().selection
-          if (sel.messageId !== messageId || sel.sourceId !== sourceId) return
-          set({ messageContent: content, contentLoading: false })
-        })
-        .catch(() => {
-          const sel = get().selection
-          if (sel.messageId === messageId && sel.sourceId === sourceId) {
-            set({ messageContent: null, contentLoading: false })
-          }
-        })
+      void loadMessage(sourceId, messageId)
+    },
+
+    /** Load the open message again, after it failed to load. */
+    retryMessage: () => {
+      const { sourceId, messageId } = get().selection
+      if (!sourceId || !messageId) return
+      set({ messageContent: null, contentLoading: true })
+      void loadMessage(sourceId, messageId)
     },
 
     setSearchQuery: (searchQuery) => set({ searchQuery }),
