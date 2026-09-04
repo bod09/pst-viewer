@@ -375,6 +375,46 @@ export const useApp = create<AppState>((set, get) => {
   // what actually prevents a second export starting on top of the first.
   let exportInFlight = false
 
+  /**
+   * Attachments to write into an exported .eml.
+   *
+   * Inline images are already written as related parts, so only those are
+   * skipped; anything else marked inline is a real attachment that would
+   * otherwise vanish from the export. A message attached to a message is
+   * rebuilt as its own .eml so a forwarded mail survives the round trip
+   * instead of being dropped.
+   */
+  const collectEmlAttachments = async (
+    sourceId: string,
+    messageId: string,
+    content: MessageContent,
+    depth = 0,
+  ): Promise<EmlAttachment[]> => {
+    const files: EmlAttachment[] = []
+    const written = new Set(content.inlineImages.map((i) => i.cid))
+    for (const a of content.attachments) {
+      if (a.isEmbeddedMessage) {
+        if (depth >= 3) continue // stop a chain of forwards going on forever
+        const emb = await pst
+          .getEmbeddedMessageContent(sourceId, messageId, a.index)
+          .catch(() => null)
+        if (!emb?.content) continue
+        const inner = await collectEmlAttachments(sourceId, emb.id, emb.content, depth + 1)
+        const bytes = new TextEncoder().encode(buildEml(emb.content, inner))
+        files.push({
+          name: /\.eml$/i.test(a.name) ? a.name : `${a.name || emb.content.subject || 'message'}.eml`,
+          mime: 'message/rfc822',
+          data: bytes.buffer as ArrayBuffer,
+        })
+        continue
+      }
+      if (a.isInline && a.cid && written.has(a.cid)) continue
+      const d = await pst.getAttachmentData(sourceId, messageId, a.index)
+      if (d) files.push({ name: a.name || d.name, mime: a.mime || d.mime, data: d.data })
+    }
+    return files
+  }
+
   const ocrQueue: string[] = []
   let ocrActive = false
   const hasSource = (id: string) => get().sources.some((s) => s.id === id)
@@ -783,12 +823,7 @@ export const useApp = create<AppState>((set, get) => {
         .getMessageContent(sourceId, messageId)
         .then(async (content) => {
           if (!content) return
-          const files: EmlAttachment[] = []
-          for (const a of content.attachments) {
-            if (a.isInline || a.isEmbeddedMessage) continue
-            const d = await pst.getAttachmentData(sourceId, messageId, a.index)
-            if (d) files.push({ name: a.name || d.name, mime: a.mime || d.mime, data: d.data })
-          }
+          const files = await collectEmlAttachments(sourceId, messageId, content)
           downloadBlob(
             new Blob([buildEml(content, files)], { type: 'message/rfc822' }),
             emlFilename(content),
