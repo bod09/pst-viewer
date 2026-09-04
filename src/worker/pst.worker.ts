@@ -272,17 +272,30 @@ async function readFolderUnderPressure(
  */
 async function messageById(
   entry: SourceEntry,
+  sourceId: string,
   messageId: string,
 ): Promise<IPSTMessage | undefined> {
   const held = entry.messages.get(messageId)
   if (held) return held
+
+  // Indexed this session: go straight to where it was found.
   const at = entry.locationById.get(messageId)
-  if (!at) return undefined
-  const seq = await safeAsync(() => folderSequence(entry, at.folderId), null)
-  const m = seq ? await safeAsync(() => seq.get(at.index), undefined) : undefined
-  // Hold on to the one being read; this map is what is open, not the mailbox.
-  if (m) safe(() => entry.messages.set(messageId, m), undefined)
-  return m
+  if (at) {
+    const seq = await safeAsync(() => folderSequence(entry, at.folderId), null)
+    const m = seq ? await safeAsync(() => seq.get(at.index), undefined) : undefined
+    // Hold on to the one being read; this map is what is open, not the mailbox.
+    if (m) safe(() => entry.messages.set(messageId, m), undefined)
+    if (m) return m
+  }
+
+  // Restored from the on-device index instead of indexed, so no walk happened
+  // and no positions were recorded. The stored document still says which
+  // folder the message is in, so read that one folder — the same work opening
+  // the folder would do — rather than leaving a search hit that cannot open.
+  const folderId = metaDocs.get(`${sourceId}:${messageId}`)?.folderId
+  if (!folderId) return undefined
+  await safeAsync(() => folderEmails(entry, folderId), [])
+  return entry.messages.get(messageId)
 }
 
 /** A folder's messages, reachable one at a time rather than all at once. */
@@ -1671,7 +1684,7 @@ const api = {
   ): Promise<MessageContent | null> {
     const entry = sources.get(sourceId)
     if (!entry) return null
-    const m = await messageById(entry, messageId)
+    const m = await messageById(entry, sourceId, messageId)
     if (!m) return null
     return buildMessageContent(m, messageId, entry)
   },
@@ -1695,7 +1708,7 @@ const api = {
     if (!list) {
       // Indexing does not keep attachment handles, so fetch them now. Opening
       // a message caches them; OCR and direct downloads can arrive first.
-      const m = await messageById(entry, messageId)
+      const m = await messageById(entry, sourceId, messageId)
       list = m ? await safeAsync(() => m.getAttachments(), []) : undefined
       if (list) entry.attachments.set(messageId, list)
     }
@@ -1749,7 +1762,7 @@ const api = {
     } else {
       let list = entry.attachments.get(parentMessageId)
       if (!list) {
-        const parent = await messageById(entry, parentMessageId)
+        const parent = await messageById(entry, sourceId, parentMessageId)
         list = parent ? await safeAsync(() => parent.getAttachments(), []) : undefined
         if (list) entry.attachments.set(parentMessageId, list)
       }
@@ -2097,7 +2110,7 @@ const api = {
     ref: number,
   ): Promise<AttachmentData | null> {
     const entry = sources.get(sourceId)
-    const m = entry ? await messageById(entry, messageId) : undefined
+    const m = entry ? await messageById(entry, sourceId, messageId) : undefined
     if (!m) return null
     const url = dataImageUrls(extractBodies(m).html)[ref]
     const decoded = url ? dataUrlToBytes(url) : null
