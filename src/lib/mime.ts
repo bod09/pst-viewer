@@ -1,9 +1,19 @@
 // Minimal MIME parser to recover the readable html/text body from a raw RFC822
 // message, used for the S/MIME signed content extracted from a smime.p7m.
 
+export interface MimeAttachment {
+  name: string
+  mime: string
+  data: ArrayBuffer
+  /** Content-ID, when the part is referenced from the body by cid:. */
+  cid: string
+}
+
 export interface MimeBody {
   html: string | null
   text: string | null
+  /** Files carried alongside the body, e.g. inside a signed S/MIME envelope. */
+  attachments: MimeAttachment[]
 }
 
 const latin1 = (b: Uint8Array): string => {
@@ -47,6 +57,29 @@ function parseHeaders(headText: string): Map<string, string> {
   return map
 }
 
+/** Bytes of a part, honouring its transfer encoding. Null if unusable. */
+function decodeBinary(headers: Map<string, string>, body: string): ArrayBuffer | null {
+  try {
+    const enc = (headers.get('content-transfer-encoding') || '').toLowerCase().trim()
+    if (enc === 'base64') {
+      const clean = body.replace(/[^A-Za-z0-9+/=]/g, '')
+      if (!clean) return null
+      const bin = atob(clean)
+      const out = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+      return out.buffer
+    }
+    // quoted-printable and 7bit/8bit are already the bytes we read.
+    if (enc === 'quoted-printable') return qpToBytes(body).buffer as ArrayBuffer
+    const text = body
+    const out = new Uint8Array(text.length)
+    for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) & 0xff
+    return out.buffer
+  } catch {
+    return null
+  }
+}
+
 function decodeText(headers: Map<string, string>, bodyBytes: Uint8Array): string {
   const enc = (headers.get('content-transfer-encoding') || '').toLowerCase()
   const ct = headers.get('content-type') || ''
@@ -63,7 +96,7 @@ function decodeText(headers: Map<string, string>, bodyBytes: Uint8Array): string
 
 /** Recover the readable html/text body from a raw MIME message. */
 export function extractMimeBody(input: Uint8Array, depth = 0): MimeBody {
-  const result: MimeBody = { html: null, text: null }
+  const result: MimeBody = { html: null, text: null, attachments: [] }
   if (depth > 8) return result
   const s = latin1(input)
   const m = /\r\n\r\n|\n\n/.exec(s)
@@ -95,13 +128,38 @@ export function extractMimeBody(input: Uint8Array, depth = 0): MimeBody {
     for (const piece of pieces) {
       const split = /\r\n\r\n|\n\n/.exec(piece)
       const partHeaders = parseHeaders(split ? piece.slice(0, split.index) : piece)
-      // An attached file is not the message body, even when it is text.
-      if ((partHeaders.get('content-disposition') || '').toLowerCase().trim().startsWith('attachment')) {
+      const dispositionRaw = partHeaders.get('content-disposition') || ''
+      const disposition = dispositionRaw.toLowerCase()
+      const partType = partHeaders.get('content-type') || ''
+      const cid = (partHeaders.get('content-id') || '').replace(/^<|>$/g, '').trim()
+      // An attached file is not the message body, even when it is text. It is
+      // still part of the message though, so it is carried out rather than
+      // dropped: inside a signed envelope this is the only route to it.
+      const isAttachment =
+        disposition.trim().startsWith('attachment') ||
+        (!!cid && !partType.toLowerCase().startsWith('multipart/'))
+      if (isAttachment && split) {
+        const body = piece.slice(split.index + split[0].length)
+        const data = decodeBinary(partHeaders, body)
+        if (data) {
+          result.attachments.push({
+            // Read the name from the untouched header: lower-casing it for
+            // the checks above would also rename the file.
+            name:
+              /filename="?([^";]+)"?/i.exec(dispositionRaw)?.[1]?.trim() ||
+              /name="?([^";]+)"?/i.exec(partType)?.[1]?.trim() ||
+              'attachment',
+            mime: partType.split(';')[0].trim() || 'application/octet-stream',
+            data,
+            cid,
+          })
+        }
         continue
       }
       const sub = extractMimeBody(toBytes(piece.replace(/^\r?\n/, '')), depth + 1)
       if (sub.html && (alternative || !result.html)) result.html = sub.html
       if (sub.text && (alternative || !result.text)) result.text = sub.text
+      if (sub.attachments.length) result.attachments.push(...sub.attachments)
     }
   } else if (ct.startsWith('text/html')) {
     result.html = decodeText(headers, body)

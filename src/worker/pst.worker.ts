@@ -1123,9 +1123,31 @@ async function buildMessageContent(
         const res = await extractSmime(raw)
         if (res.kind === 'signed') {
           smimeBody = res.body
-          // The envelope holds the real body, and may hold attachments we do
-          // not unpack, so the chip stays: hiding it would leave the reader no
-          // way to reach anything inside it.
+          // Files inside the envelope are part of the message, so they are
+          // listed like any other attachment rather than being reachable only
+          // by saving the envelope. They ride on the same recovered-file list
+          // the winmail.dat path uses, which is what serves their bytes.
+          const recovered = entry.tnef.get(msgId) ?? []
+          const base = recovered.length
+          res.body.attachments.forEach((a, i) => {
+            recovered.push({ name: a.name, mime: a.mime, data: a.data })
+            const index = -1 - (base + i)
+            attachments.push({
+              index,
+              name: a.name || `attachment-${base + i + 1}`,
+              size: a.data.byteLength,
+              mime: a.mime,
+              isInline: !!a.cid,
+              cid: a.cid || undefined,
+              isEmbeddedMessage: false,
+            })
+            // Pictures the body refers to by cid have to be present for it to
+            // render them.
+            if (a.cid && /^image\//i.test(a.mime)) {
+              inlineImages.push({ cid: a.cid, mime: a.mime, data: a.data })
+            }
+          })
+          if (recovered.length) entry.tnef.set(msgId, recovered)
           if (res.body.html || res.body.text) {
             smimeNote = null
           }
