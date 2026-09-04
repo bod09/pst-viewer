@@ -73,7 +73,7 @@ services:
       - "8080:8080"
     read_only: true
     tmpfs:
-      - /tmp                 # nginx pid file and temp buffers
+      - /tmp:noexec,nosuid,size=64m   # nginx pid file and temp buffers
     cap_drop:
       - ALL
     security_opt:
@@ -135,8 +135,21 @@ pst.example.com {
     encode zstd gzip
     file_server
     try_files {path} /index.html
+
+    header {
+        Referrer-Policy "no-referrer"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Cross-Origin-Opener-Policy "same-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=(), payment=()"
+        -Server
+    }
 }
 ```
+
+The app also carries its own Content-Security-Policy in the page, so it is
+protected even on a host that sends no headers. The headers above add what a
+page cannot set for itself.
 
 Run `caddy run` from the folder, or paste the block into your system Caddyfile and
 `caddy reload`. To restrict access to staff, add a `basic_auth` block (generate a

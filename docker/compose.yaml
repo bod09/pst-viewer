@@ -5,7 +5,7 @@ services:
       - "8080:8080"
     read_only: true
     tmpfs:
-      - /tmp                 # nginx pid file and temp buffers
+      - /tmp:noexec,nosuid,size=64m   # nginx pid file and temp buffers
     cap_drop:
       - ALL
     security_opt:
