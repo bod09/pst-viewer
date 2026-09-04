@@ -11,13 +11,16 @@
  * Usage:
  *   node scripts/fidelity.mjs <mailbox> --update   # record a baseline
  *   node scripts/fidelity.mjs <mailbox>            # check against it
- *   node scripts/fidelity.mjs <mailbox> --full     # hash every body, not 1 in 10
+ *   node scripts/fidelity.mjs <mailbox> --update --full   # hash every body, not 1 in 10
+ *
+ * A check always samples bodies the way its baseline did, so --full only
+ * means anything while recording one.
  *
  * Mailboxes and baselines stay on your machine: baselines hold real subjects
  * and sender names, so they are git-ignored along with the files they describe.
  */
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { openAsBlob } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -93,7 +96,7 @@ function folderIds(node, out = []) {
 
 const sha = (s) => createHash('sha256').update(s ?? '').digest('hex').slice(0, 16)
 
-async function snapshot(api, sourceId, index) {
+async function snapshot(api, sourceId, index, hashEveryBody) {
   const folders = []
   let messages = 0
   let bodies = 0
@@ -117,7 +120,7 @@ async function snapshot(api, sourceId, index) {
       // Bodies are the expensive part, so sample unless --full. A wrong-message
       // bug shows up in the metadata too, but the body hash is what proves the
       // content actually belongs to this message.
-      if (full || i % 10 === 0) {
+      if (hashEveryBody || i % 10 === 0) {
         const content = await api.getMessageContent(sourceId, m.id)
         row.body = sha(content ? `${content.html ?? ''}${content.text ?? ''}` : '')
         row.atts = (content?.attachments ?? []).map((a) => a.name).join('|')
@@ -128,7 +131,7 @@ async function snapshot(api, sourceId, index) {
     }
     folders.push({ name: folder.name, id: folder.id, unreadable, rows })
   }
-  return { file: basename(mailboxPath), messages, bodies, folders }
+  return { file: basename(mailboxPath), full: hashEveryBody, messages, bodies, folders }
 }
 
 /** Report the first differences in a form that points straight at the cause. */
@@ -174,15 +177,41 @@ const file = new File([blob], basename(mailboxPath))
 // Standalone messages open as a synthetic mailbox, the same as dropping them
 // on the app; everything after this point is identical for both.
 const standalone = /\.(msg|eml)$/i.test(mailboxPath)
+await mkdir(BASELINE_DIR, { recursive: true })
+const baselinePath = join(BASELINE_DIR, `${basename(mailboxPath)}.json`)
+
+let baseline
+if (!update) {
+  try {
+    baseline = JSON.parse(await readFile(baselinePath, 'utf8'))
+  } catch {
+    console.error(
+      `no baseline for ${basename(mailboxPath)}. Record one first:\n` +
+        `  node scripts/fidelity.mjs ${mailboxPath} --update`,
+    )
+    process.exit(2)
+  }
+}
+
+// A check samples bodies exactly as its baseline did, otherwise rows would
+// differ only because one side hashed more of them than the other. A baseline
+// that predates this is rejected rather than compared: it would fail on every
+// unsampled row and read like a real regression.
+if (!update && typeof baseline.full !== 'boolean') {
+  console.error(
+    `baseline for ${basename(mailboxPath)} was written by an older version and cannot be compared.\n` +
+      `  node scripts/fidelity.mjs ${mailboxPath} --update`,
+  )
+  process.exit(2)
+}
+const hashEveryBody = update ? full : baseline.full === true
+
 const index = standalone
   ? await api.openMsgSource('fidelity', [file])
   : await api.openSource('fidelity', file)
 await api.indexSource('fidelity')
-const current = await snapshot(api, 'fidelity', index)
+const current = await snapshot(api, 'fidelity', index, hashEveryBody)
 const secs = ((Date.now() - t0) / 1000).toFixed(1)
-
-await mkdir(BASELINE_DIR, { recursive: true })
-const baselinePath = join(BASELINE_DIR, `${basename(mailboxPath)}.json`)
 
 if (update) {
   await writeFile(baselinePath, JSON.stringify(current, null, 1))
@@ -191,14 +220,6 @@ if (update) {
       `(${current.bodies} bodies hashed) in ${secs}s\n  ${baselinePath}`,
   )
   process.exit(0)
-}
-
-let baseline
-try {
-  baseline = JSON.parse(await readFile(baselinePath, 'utf8'))
-} catch {
-  console.error(`no baseline for ${basename(mailboxPath)}. Record one first:\n  node scripts/fidelity.mjs ${mailboxPath} --update`)
-  process.exit(2)
 }
 
 const problems = diff(baseline, current)
