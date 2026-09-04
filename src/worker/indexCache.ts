@@ -121,13 +121,20 @@ export async function getCachedIndex(fp: string): Promise<CachedIndex | undefine
 }
 
 /** Store the finished search docs and people list for a file fingerprint. */
+/**
+ * Store the finished documents. Reports whether they were actually written:
+ * the caller keeps its own copies when they were not, because the text in
+ * them is what exact-phrase search checks against. Storage can refuse a write
+ * for ordinary reasons - a large mailbox exceeding the quota, or private
+ * browsing - and search must not quietly stop matching because of it.
+ */
 export async function putCachedIndex(
   fp: string,
   docs: CachedSearchDoc[],
   people: [string, number][],
-): Promise<void> {
+): Promise<boolean> {
   const db = await openDb()
-  if (!db) return
+  if (!db) return false
   return new Promise((resolve) => {
     try {
       const tx = db.transaction(STORE, 'readwrite')
@@ -135,11 +142,11 @@ export async function putCachedIndex(
         { docs, people, exp: Date.now() + MAX_AGE_MS, v: ENTRY_VERSION } satisfies Entry,
         fp,
       )
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => resolve()
-      tx.onabort = () => resolve()
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => resolve(false)
+      tx.onabort = () => resolve(false)
     } catch {
-      resolve()
+      resolve(false)
     }
   })
 }

@@ -1933,14 +1933,22 @@ const api = {
       const docs = [...entry.searchIds]
         .map((id) => searchDocs.get(id))
         .filter((d): d is SearchDoc => d !== undefined)
+      let stored = false
       if (docs.length) {
         const people: [string, number][] = [...(entry.people?.values() ?? [])].map((p) => [
           p.label,
           p.count,
         ])
-        await putCachedIndex(entry.fingerprint, docs, people)
+        stored = await putCachedIndex(entry.fingerprint, docs, people)
       }
-      for (const id of entry.searchIds) searchDocs.delete(id)
+      // Only let go of the text once it is safely stored. If the write was
+      // refused (quota, private browsing) these copies are the only place the
+      // message bodies exist, and exact-phrase search reads them to confirm a
+      // match. Dropping them anyway would make quoted searches silently stop
+      // finding things that are there.
+      if (stored || !docs.length) {
+        for (const id of entry.searchIds) searchDocs.delete(id)
+      }
     }
     // Sources without a fingerprint (standalone .msg/.eml batches) keep their
     // docs in memory: they are small, and exact-phrase search needs the text.
