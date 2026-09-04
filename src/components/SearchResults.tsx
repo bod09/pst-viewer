@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useApp } from '../store/store'
 import type { SearchHit } from '../types'
@@ -34,6 +34,28 @@ export function SearchResults() {
     estimateSize: () => 68,
     overscan: 12,
   })
+
+  const selectedIndex = results.findIndex(
+    (h) => h.messageId === selectedId && h.sourceId === selectedSourceId,
+  )
+
+  useEffect(() => {
+    if (selectedIndex >= 0) virtualizer.scrollToIndex(selectedIndex, { align: 'auto' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex])
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!results.length) return
+    const go = (to: number) => {
+      e.preventDefault()
+      openHit(results[Math.max(0, Math.min(results.length - 1, to))])
+    }
+    const at = selectedIndex >= 0 ? selectedIndex : -1
+    if (e.key === 'ArrowDown') go(at + 1)
+    else if (e.key === 'ArrowUp') go(at <= 0 ? 0 : at - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(results.length - 1)
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-slate-950">
@@ -75,7 +97,14 @@ export function SearchResults() {
           )}
         </div>
       ) : (
-        <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          ref={parentRef}
+          role="listbox"
+          aria-label="Search results"
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          className="min-h-0 flex-1 overflow-y-auto focus:outline-none"
+        >
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
             {virtualizer.getVirtualItems().map((item) => {
               const hit = results[item.index]
@@ -126,6 +155,8 @@ const HitRow = memo(function HitRow({
 }) {
   return (
     <div
+      role="option"
+      aria-selected={selected}
       className={`flex h-full w-full items-stretch border-b border-b-slate-800/70 border-l-2 transition ${
         selected ? 'border-l-sky-400 bg-sky-500/15' : 'border-l-transparent hover:bg-slate-800/40'
       }`}

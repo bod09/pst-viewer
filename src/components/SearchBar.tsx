@@ -55,12 +55,12 @@ const inputCls =
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
         {label}
       </span>
       {children}
-    </label>
+    </div>
   )
 }
 
@@ -78,12 +78,14 @@ function ListInput({
   onChange,
   options,
   placeholder,
+  ariaLabel,
   side = 'left',
 }: {
   value: string
   onChange: (v: string) => void
   options: string[]
   placeholder?: string
+  ariaLabel?: string
   side?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
@@ -98,6 +100,7 @@ function ListInput({
         className={inputCls}
         value={value}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         onChange={(e) => {
           onChange(e.target.value)
           setOpen(true)
@@ -131,11 +134,13 @@ function PersonInput({
   value,
   onChange,
   placeholder,
+  ariaLabel,
   side = 'left',
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  ariaLabel?: string
   side?: 'left' | 'right'
 }) {
   const [options, setOptions] = useState<string[]>([])
@@ -174,6 +179,7 @@ function PersonInput({
         className={inputCls}
         value={value}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         onChange={(e) => {
           onChange(e.target.value)
           setOpen(true)
@@ -229,15 +235,20 @@ export function SearchBar() {
     () => sources.filter((s) => s.status === 'ready').map((s) => s.label).filter(Boolean),
     [sources],
   )
+  const showEmptyFolders = useApp((s) => s.showEmptyFolders)
   const folderNames = useMemo(() => {
     const names = new Set<string>()
-    const walk = (n: { name: string; children: { name: string; children: unknown[] }[] }) => {
-      if (n.name && n.name !== '(unnamed folder)') names.add(n.name)
-      for (const c of n.children) walk(c as never)
+    type Node = { name: string; messageCount: number; children: Node[] }
+    const walk = (n: Node) => {
+      // Only folders that hold messages can match, so an empty one would just
+      // return nothing. They are listed only when empty folders are shown.
+      const worthListing = showEmptyFolders || n.messageCount > 0
+      if (worthListing && n.name && n.name !== '(unnamed folder)') names.add(n.name)
+      for (const c of n.children) walk(c)
     }
-    for (const src of sources) if (src.index) walk(src.index.rootFolder as never)
+    for (const src of sources) if (src.index) walk(src.index.rootFolder as unknown as Node)
     return [...names].sort((a, b) => a.localeCompare(b))
-  }, [sources])
+  }, [sources, showEmptyFolders])
   const wrapRef = useRef<HTMLDivElement>(null)
 
   // Debounce the search as the user types.
@@ -250,7 +261,13 @@ export function SearchBar() {
   useEffect(() => {
     if (!panelOpen) return
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setPanelOpen(false)
+      const target = e.target
+      if (!(target instanceof Node)) return
+      // Picking a suggestion removes it from the page before this runs, and a
+      // detached node is inside nothing: treating that as a click outside
+      // closed the whole panel and threw the choice away.
+      if (!document.contains(target)) return
+      if (wrapRef.current && !wrapRef.current.contains(target)) setPanelOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPanelOpen(false)
@@ -307,6 +324,7 @@ export function SearchBar() {
                 value={fields.from}
                 onChange={(v) => set({ from: v })}
                 placeholder="Name or address"
+                ariaLabel="From"
               />
             </Field>
             <Field label="To">
@@ -314,6 +332,7 @@ export function SearchBar() {
                 value={fields.to}
                 onChange={(v) => set({ to: v })}
                 placeholder="Name or address"
+                ariaLabel="To"
                 side="right"
               />
             </Field>
@@ -329,6 +348,7 @@ export function SearchBar() {
                 value={fields.person}
                 onChange={(v) => set({ person: v })}
                 placeholder="Sender or any recipient, incl. Cc/Bcc"
+                ariaLabel="Person"
                 side="right"
               />
             </Field>
@@ -338,6 +358,7 @@ export function SearchBar() {
                 onChange={(v) => set({ mailbox: v })}
                 options={mailboxNames}
                 placeholder="All mailboxes"
+                ariaLabel="Mailbox"
               />
             </Field>
             <Field label="Folder">
@@ -346,6 +367,7 @@ export function SearchBar() {
                 onChange={(v) => set({ folder: v })}
                 options={folderNames}
                 placeholder="All folders"
+                ariaLabel="Folder"
                 side="right"
               />
             </Field>
