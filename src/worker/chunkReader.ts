@@ -10,24 +10,93 @@ import type { ReadFileApi } from '@hiraokahypertools/pst-extractor'
  * thousands of micro-reads. Reading the file in larger slabs and serving
  * requests from an in-memory cache collapses that to one fetch per slab.
  *
- * Slabs are kept in a small LRU (Map insertion order); concurrent requests
- * for a slab that is still loading share the same fetch.
+ * Slabs are kept in an LRU (Map insertion order); concurrent requests for a
+ * slab that is still loading share the same fetch.
+ *
+ * The budget is shared by every open mailbox rather than granted per file:
+ * someone comparing five mailboxes should not be charged five times over for
+ * what is only a read cache. It is also sized to the machine, because the
+ * devices most likely to run short of memory are the ones least able to
+ * spare a nine-figure cache.
  */
 
 const SLAB_SIZE = 256 * 1024
-const MAX_SLABS = 512 // 128 MiB cap per open file
 
-export function makeChunkedReader(file: File): ReadFileApi {
-  const cache = new Map<number, Uint8Array>()
+/** Total slab memory across every open file. */
+function slabBudget(): number {
+  // navigator.deviceMemory is a coarse, capped hint (0.25-8, absent on
+  // Firefox and Safari). Unknown is treated as roomy: the read cache is what
+  // makes a large mailbox usable, so it is not given up on a guess.
+  const gb = (navigator as unknown as { deviceMemory?: number }).deviceMemory
+  if (!gb) return 128 * 1024 * 1024
+  if (gb <= 2) return 24 * 1024 * 1024
+  if (gb <= 4) return 48 * 1024 * 1024
+  return 128 * 1024 * 1024
+}
+
+/**
+ * Every live reader's slabs, in one LRU keyed `${readerId}:${slabIndex}`, so
+ * eviction can take the globally coldest slab instead of each file policing
+ * its own share.
+ */
+const slabs = new Map<string, Uint8Array>()
+let slabBytes = 0
+let nextReaderId = 0
+
+function evictToBudget(): void {
+  const budget = slabBudget()
+  if (slabBytes <= budget) return
+  for (const [key, bytes] of slabs) {
+    slabs.delete(key)
+    slabBytes -= bytes.byteLength
+    if (slabBytes <= budget) return
+  }
+}
+
+/** A reader that can also give its cached bytes back on request. */
+export interface ChunkedReader extends ReadFileApi {
+  /** Drop this file's cached slabs. Pure cache: reads simply refetch. */
+  trim(): void
+}
+
+export function makeChunkedReader(file: File): ChunkedReader {
+  const id = String(nextReaderId++)
+  const keyOf = (index: number) => `${id}:${index}`
+  const owned = new Set<number>()
   const loading = new Map<number, Promise<Uint8Array>>()
   const lastSlab = Math.floor(Math.max(file.size - 1, 0) / SLAB_SIZE)
+
+  const cache = {
+    has: (index: number) => slabs.has(keyOf(index)),
+    get: (index: number) => slabs.get(keyOf(index)),
+    set: (index: number, bytes: Uint8Array) => {
+      slabs.set(keyOf(index), bytes)
+      owned.add(index)
+      slabBytes += bytes.byteLength
+      evictToBudget()
+    },
+    touch: (index: number, bytes: Uint8Array) => {
+      // Re-insert to move this slab to the warm end of the LRU.
+      slabs.delete(keyOf(index))
+      slabs.set(keyOf(index), bytes)
+    },
+    drop: () => {
+      for (const index of owned) {
+        const key = keyOf(index)
+        const bytes = slabs.get(key)
+        if (bytes) {
+          slabs.delete(key)
+          slabBytes -= bytes.byteLength
+        }
+      }
+      owned.clear()
+    },
+  }
 
   const slab = (index: number): Promise<Uint8Array> => {
     const hit = cache.get(index)
     if (hit) {
-      // Refresh the LRU position.
-      cache.delete(index)
-      cache.set(index, hit)
+      cache.touch(index, hit)
       return Promise.resolve(hit)
     }
     const inflight = loading.get(index)
@@ -39,11 +108,7 @@ export function makeChunkedReader(file: File): ReadFileApi {
       .then((ab) => {
         const bytes = new Uint8Array(ab)
         loading.delete(index)
-        cache.set(index, bytes)
-        if (cache.size > MAX_SLABS) {
-          const oldest = cache.keys().next().value
-          if (oldest !== undefined) cache.delete(oldest)
-        }
+        cache.set(index, bytes) // evicts globally if this puts us over budget
         return bytes
       })
       .catch((err: unknown) => {
@@ -78,8 +143,12 @@ export function makeChunkedReader(file: File): ReadFileApi {
       }
       return produced
     },
+    trim: () => {
+      cache.drop()
+      loading.clear()
+    },
     close: async () => {
-      cache.clear()
+      cache.drop()
       loading.clear()
     },
   }

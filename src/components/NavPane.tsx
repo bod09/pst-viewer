@@ -297,7 +297,8 @@ function SourceTree({ source }: { source: Source }) {
         )}
       {source.status === 'ready' && source.indexFailed && (
         <p className="px-3 pb-1 text-[11px] leading-snug text-amber-400">
-          Search may be incomplete for this mailbox.
+          Search may be incomplete for this mailbox. Open it again to retry —
+          nothing was kept from this pass.
         </p>
       )}
       {source.status === 'ready' && source.index && (

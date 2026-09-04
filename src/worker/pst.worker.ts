@@ -12,7 +12,7 @@ import {
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
-import { makeChunkedReader } from './chunkReader'
+import { makeChunkedReader, type ChunkedReader } from './chunkReader'
 import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
 import {
   Consts,
@@ -62,6 +62,9 @@ import type {
 
 interface SourceEntry {
   file: IPSTFile
+  /** The caching reader under `file`, so its slabs can be handed back when
+   *  memory is short. Absent for sources opened by salvage recovery. */
+  reader?: ChunkedReader
   folders: Map<string, IPSTFolder>
   messages: Map<string, IPSTMessage>
   /** Cached attachment handles per message id, for lazy byte fetching. */
@@ -70,6 +73,9 @@ interface SourceEntry {
   ocr: Map<string, string>
   /** Count of data: images in each message body (only messages that have any). */
   bodyImageCount: Map<string, number>
+  /** Indexes of image attachments per message, for the OCR pass. Kept instead
+   *  of the attachment handles, which would retain their messages. */
+  imageAttachments: Map<string, number[]>
   /** Search-index document ids contributed by this source (for cleanup). */
   searchIds: Set<string>
   /** Attachments recovered from a winmail.dat (TNEF), keyed by message id. */
@@ -82,6 +88,10 @@ interface SourceEntry {
   label?: string
   /** Cached search docs found for this file, consumed by indexSource. */
   cachedDocs?: SearchDoc[] | null
+  /** Did the indexing pass cover the whole mailbox? Only a complete pass is
+   *  worth storing: caching a partial one would hide the missing mail from
+   *  search on every future open. */
+  indexComplete?: boolean
   /** People seen in this source (key: lowercased label), for suggestions. */
   people?: Map<string, { label: string; count: number }>
   /** Memoised per-folder message lists (see folderEmails). */
@@ -215,6 +225,50 @@ async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTM
   for (const m of emails) safe(() => entry.messages.set(String(m.primaryNodeId), m), undefined)
   entry.emailLists.set(folderId, emails)
   return emails
+}
+
+/**
+ * Read one folder's messages, treating failure as a memory problem first.
+ *
+ * The read that fails on a machine short of memory is usually the one that
+ * asked for the last allocation, not a damaged folder, and retrying straight
+ * away just asks again under the same conditions. So each further attempt
+ * first hands back this file's cached slabs — pure cache, worth far more as
+ * free memory than as a read cache while things are tight — and waits a
+ * little, giving the browser room to collect and other tabs room to release.
+ *
+ * Returns null only when the folder could not be read at all, which means
+ * every message in it is missing from the index.
+ */
+async function readFolderUnderPressure(
+  entry: SourceEntry,
+  folderId: string,
+): Promise<IPSTMessage[] | null> {
+  const backoffMs = [0, 250, 1000]
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (attempt > 0) {
+      entry.reader?.trim()
+      await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]))
+    }
+    try {
+      return await folderEmails(entry, folderId)
+    } catch {
+      // Try again, with more room than last time.
+    }
+  }
+  return null
+}
+
+/**
+ * Does an indexed document count plausibly cover a mailbox of this size?
+ *
+ * A folder's contentCount is exact in practice, so a walk that reads every
+ * folder lands on the declared total; the margin only absorbs a list that
+ * comes back short. Wholesale absence means the pass lost folders and must
+ * not be treated as a finished index.
+ */
+function coversMailbox(indexed: number, declared: number): boolean {
+  return declared === 0 || indexed >= declared * 0.9
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -394,6 +448,18 @@ async function buildSearchDoc(
   if (safe(() => m.hasAttachments, false)) {
     const list = await safeAsync(() => m.getAttachments(), [])
     entry.attachments.set(msgId, list) // warm cache for later preview
+    // Note which attachments are images while we have them in hand. The OCR
+    // pass needs to know they exist, and remembering two numbers per image is
+    // cheaper than holding a handle that keeps its whole message alive.
+    const images = list
+      .map((a, index) =>
+        safe(() => a.attachMethod, 0) === Consts.ATTACH_BY_VALUE &&
+        isImageAttachment(attachmentName(a, index, false), safe(() => a.mimeTag, ''))
+          ? index
+          : -1,
+      )
+      .filter((index) => index >= 0)
+    if (images.length) entry.imageAttachments.set(msgId, images)
     attachments = list
       .map((a) => safe(() => a.longFilename, '') || safe(() => a.filename, ''))
       .filter(Boolean)
@@ -1324,9 +1390,12 @@ const api = {
     // b-trees are damaged, fall back to built-in recovery (see salvage.ts).
     let pstFile: IPSTFile
     let recovered = false
+    let reader: ChunkedReader | undefined
     try {
-      pstFile = await openPst(makeChunkedReader(file))
+      reader = makeChunkedReader(file)
+      pstFile = await openPst(reader)
     } catch (primaryError) {
+      reader = undefined
       const attempt = await safeAsync(() => salvageOpenPst(file), null)
       if (!attempt) throw primaryError
       pstFile = attempt.pst
@@ -1334,11 +1403,13 @@ const api = {
     }
     const entry: SourceEntry = {
       file: pstFile,
+      reader,
       folders: new Map(),
       messages: new Map(),
       attachments: new Map(),
       ocr: new Map(),
       bodyImageCount: new Map(),
+      imageAttachments: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
@@ -1427,6 +1498,7 @@ const api = {
       attachments: new Map(),
       ocr: new Map(),
       bodyImageCount: new Map(),
+      imageAttachments: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
@@ -1550,7 +1622,14 @@ const api = {
       const tCopy = t.data.slice(0)
       return Comlink.transfer({ name: t.name, mime: t.mime, data: tCopy }, [tCopy])
     }
-    const list = entry.attachments.get(messageId)
+    let list = entry.attachments.get(messageId)
+    if (!list) {
+      // Indexing does not keep attachment handles, so fetch them now. Opening
+      // a message caches them; OCR and direct downloads can arrive first.
+      const m = entry.messages.get(messageId)
+      list = m ? await safeAsync(() => m.getAttachments(), []) : undefined
+      if (list) entry.attachments.set(messageId, list)
+    }
     const a = list?.[index]
     if (!a) return null
     const data = safe(() => a.fileData, undefined)
@@ -1599,7 +1678,13 @@ const api = {
     if (index < 0) {
       raw = entry.tnef.get(parentMessageId)?.[-1 - index]?.data
     } else {
-      const a = entry.attachments.get(parentMessageId)?.[index]
+      let list = entry.attachments.get(parentMessageId)
+      if (!list) {
+        const parent = entry.messages.get(parentMessageId)
+        list = parent ? await safeAsync(() => parent.getAttachments(), []) : undefined
+        if (list) entry.attachments.set(parentMessageId, list)
+      }
+      const a = list?.[index]
       raw = a ? safe(() => a.fileData, undefined) : undefined
     }
     if (!raw || raw.byteLength === 0) return null
@@ -1623,13 +1708,22 @@ const api = {
   async indexSource(
     sourceId: string,
     onProgress?: (done: number, total: number) => void,
-  ): Promise<{ fromCache: boolean }> {
+  ): Promise<{ fromCache: boolean; complete: boolean }> {
     const entry = sources.get(sourceId)
-    if (!entry) return { fromCache: false }
+    if (!entry) return { fromCache: false, complete: false }
+
+    // What the mailbox says it holds. Used to report progress, and to judge
+    // whether a pass actually covered it.
+    let total = 0
+    for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
 
     // Cache hit: register the stored docs (rewritten to this session's source
     // id) and skip the walk entirely. OCR text from the original pass is
     // already inside them, so no OCR pass is needed either.
+    //
+    // Only a pass that covered the whole mailbox is ever stored (see
+    // releaseSearchDocs), and the cache version was bumped to drop entries
+    // written before that rule existed, so a hit here is known to be whole.
     if (entry.cachedDocs && entry.cachedDocs.length) {
       const docs: SearchDoc[] = []
       for (const d of entry.cachedDocs) {
@@ -1642,16 +1736,20 @@ const api = {
       entry.cachedDocs = null
       if (docs.length) searchIndex.addAll(docs)
       onProgress?.(docs.length, docs.length)
-      return { fromCache: true }
+      entry.indexComplete = true
+      return { fromCache: true, complete: true }
     }
 
-    let total = 0
-    for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
     let done = 0
+    // Folders whose message list could not be read at all. Each one hides
+    // every message it holds from search, so the pass is not complete.
+    let folderFailures = 0
 
     for (const folderId of entry.folders.keys()) {
-      if (!sources.has(sourceId)) return { fromCache: false } // source removed mid-index
-      const emails = await safeAsync(() => folderEmails(entry, folderId), [])
+      if (!sources.has(sourceId)) return { fromCache: false, complete: false } // source removed mid-index
+      const read = await readFolderUnderPressure(entry, folderId)
+      if (read === null) folderFailures++
+      const emails = read ?? []
       const docs: SearchDoc[] = []
       for (const m of emails) {
         const msgId = String(m.primaryNodeId)
@@ -1672,13 +1770,22 @@ const api = {
       // instead of leaving orphaned docs in the shared search index.
       if (!sources.has(sourceId)) {
         for (const d of docs) searchDocs.delete(d.id)
-        return { fromCache: false }
+        return { fromCache: false, complete: false }
       }
       if (docs.length) searchIndex.addAll(docs)
       onProgress?.(done, total)
     }
     onProgress?.(done, total)
-    return { fromCache: false }
+    // Individually unreadable messages are normal and are skipped above; a
+    // folder that could not be read at all is not, and neither is a pass that
+    // ends up covering only part of what the mailbox declares.
+    // `done` counts every message the walk actually saw, so it lands on the
+    // declared total when no folder was lost. The indexed-document count is
+    // deliberately not used: a message filed in two folders is indexed once,
+    // which would read as missing mail.
+    const complete = folderFailures === 0 && coversMailbox(done, total)
+    entry.indexComplete = complete
+    return { fromCache: false, complete }
   },
 
   /**
@@ -1900,14 +2007,8 @@ const api = {
     const entry = sources.get(sourceId)
     if (!entry) return []
     const out: OcrTarget[] = []
-    for (const [messageId, list] of entry.attachments) {
-      list.forEach((a, index) => {
-        if (safe(() => a.attachMethod, 0) !== Consts.ATTACH_BY_VALUE) return
-        const name = attachmentName(a, index, false)
-        if (isImageAttachment(name, safe(() => a.mimeTag, ''))) {
-          out.push({ messageId, kind: 'att', ref: index })
-        }
-      })
+    for (const [messageId, indexes] of entry.imageAttachments) {
+      for (const index of indexes) out.push({ messageId, kind: 'att', ref: index })
     }
     for (const [messageId, count] of entry.bodyImageCount) {
       for (let i = 0; i < count; i++) out.push({ messageId, kind: 'body', ref: i })
@@ -1985,7 +2086,10 @@ const api = {
         .map((id) => searchDocs.get(id))
         .filter((d): d is SearchDoc => d !== undefined)
       let stored = false
-      if (docs.length) {
+      // Never persist a pass that missed part of the mailbox: the stored copy
+      // is reused on every future open, so a partial one would turn a passing
+      // memory shortage into permanently incomplete search.
+      if (docs.length && entry.indexComplete !== false) {
         const people: [string, number][] = [...(entry.people?.values() ?? [])].map((p) => [
           p.label,
           p.count,

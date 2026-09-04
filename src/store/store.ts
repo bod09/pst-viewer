@@ -275,8 +275,15 @@ export const useApp = create<AppState>((set, get) => {
               }),
             )
             .then((result) => {
+              // A pass can finish without covering the mailbox: folder reads
+              // that fail (a browser briefly out of memory on a big file) are
+              // skipped rather than thrown. Say so instead of presenting a
+              // fraction of the mail as a finished index.
+              const incomplete = result ? !result.complete : false
               set((s) => ({
-                sources: s.sources.map((src) => (src.id === id ? { ...src, indexed: true } : src)),
+                sources: s.sources.map((src) =>
+                  src.id === id ? { ...src, indexed: true, indexFailed: incomplete } : src,
+                ),
               }))
               if (result?.fromCache) {
                 // Restored from the on-device index cache; its docs already

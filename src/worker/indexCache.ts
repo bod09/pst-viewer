@@ -31,8 +31,10 @@ export interface CachedSearchDoc {
   unread: boolean
 }
 
-/** Bump when the entry shape changes; older entries are treated as misses. */
-const ENTRY_VERSION = 3
+/** Bump when the entry shape changes; older entries are treated as misses.
+ *  4: versions up to 3 could store an indexing pass that had silently lost
+ *  folders, which then hid that mail from search on every later open. */
+const ENTRY_VERSION = 4
 
 interface Entry {
   docs: CachedSearchDoc[]
