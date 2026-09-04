@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { pst } from '../worker/client'
 import { Close, Search, Spinner } from './icons'
@@ -65,34 +65,65 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Text input with people suggestions from the loaded mailboxes. */
+/** Suggestion list geometry: the panel is a two-column grid with a 0.75rem
+ *  gap, so a list anchored in either column spans the full content width. */
+const dropdownCls = (side: 'left' | 'right') =>
+  `absolute top-full z-50 mt-1 max-h-64 w-[calc(200%+0.75rem)] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-xl ${
+    side === 'left' ? 'left-0' : 'left-[calc(-100%-0.75rem)]'
+  }`
+
 /** Free-text input offering the names already present in the open mailboxes. */
 function ListInput({
   value,
   onChange,
   options,
   placeholder,
+  side = 'left',
 }: {
   value: string
   onChange: (v: string) => void
   options: string[]
   placeholder?: string
+  side?: 'left' | 'right'
 }) {
-  const listId = useId()
+  const [open, setOpen] = useState(false)
+  const needle = value.trim().toLowerCase()
+  const shown = options
+    .filter((o) => !needle || (o.toLowerCase().includes(needle) && o.toLowerCase() !== needle))
+    .slice(0, 50)
+
   return (
-    <>
+    <div className="relative">
       <input
         className={inputCls}
-        list={listId}
         value={value}
         placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
       />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-    </>
+      {open && shown.length > 0 && (
+        <div className={dropdownCls(side)}>
+          {shown.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onChange(o)
+                setOpen(false)
+              }}
+              className="block w-full truncate px-3 py-1.5 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -100,10 +131,12 @@ function PersonInput({
   value,
   onChange,
   placeholder,
+  side = 'left',
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  side?: 'left' | 'right'
 }) {
   const [options, setOptions] = useState<string[]>([])
   const [open, setOpen] = useState(false)
@@ -149,7 +182,7 @@ function PersonInput({
         onFocus={() => setOpen(true)}
       />
       {open && options.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl">
+        <div className={dropdownCls(side)}>
           {options.map((o) => (
             <button
               key={o}
@@ -199,7 +232,7 @@ export function SearchBar() {
   const folderNames = useMemo(() => {
     const names = new Set<string>()
     const walk = (n: { name: string; children: { name: string; children: unknown[] }[] }) => {
-      if (n.name) names.add(n.name)
+      if (n.name && n.name !== '(unnamed folder)') names.add(n.name)
       for (const c of n.children) walk(c as never)
     }
     for (const src of sources) if (src.index) walk(src.index.rootFolder as never)
@@ -281,6 +314,7 @@ export function SearchBar() {
                 value={fields.to}
                 onChange={(v) => set({ to: v })}
                 placeholder="Name or address"
+                side="right"
               />
             </Field>
             <Field label="Subject contains">
@@ -295,6 +329,7 @@ export function SearchBar() {
                 value={fields.person}
                 onChange={(v) => set({ person: v })}
                 placeholder="Sender or any recipient, incl. Cc/Bcc"
+                side="right"
               />
             </Field>
             <Field label="Mailbox">
@@ -311,6 +346,7 @@ export function SearchBar() {
                 onChange={(v) => set({ folder: v })}
                 options={folderNames}
                 placeholder="All folders"
+                side="right"
               />
             </Field>
             <Field label="After">
