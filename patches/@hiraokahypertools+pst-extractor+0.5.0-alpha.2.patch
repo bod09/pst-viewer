@@ -1,3 +1,44 @@
+diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js b/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
+index f2d291b..053cfdd 100644
+--- a/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
++++ b/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
+@@ -1,4 +1,12 @@
+ import { KeyedDelay } from "./KeyedDelay.js";
++/**
++ * How many items one collection keeps. The cache exists so that reading the
++ * same item twice in a row is cheap; it was unbounded, which meant a folder
++ * held every message it had ever handed out for as long as the file stayed
++ * open, and walking a large mailbox therefore kept all of it in memory.
++ * @internal
++ */
++const MAX_CACHED_ITEMS = 64;
+ /**
+  * @internal
+  */
+@@ -12,7 +20,22 @@ export class CollectionAsyncProvider {
+         return this._count;
+     }
+     async get(index) {
+-        return await this._cache.getOrCreate(index.toString(), async () => await this._itemProvider(index));
++        const key = index.toString();
++        const value = await this._cache.getOrCreate(key, async () => await this._itemProvider(index));
++        // Keep the most recently used items and drop the coldest. Map iterates
++        // in insertion order, so re-inserting on use is enough to order them.
++        const map = this._cache._map;
++        if (map.has(key)) {
++            map.delete(key);
++            map.set(key, value);
++        }
++        while (map.size > MAX_CACHED_ITEMS) {
++            const oldest = map.keys().next().value;
++            if (oldest === undefined)
++                break;
++            map.delete(oldest);
++        }
++        return value;
+     }
+     /**
+      * get all of the children
 diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js b/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
 index 6b48cc5..d0e9191 100644
 --- a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
@@ -31,3 +72,22 @@ index 6b48cc5..d0e9191 100644
                  .map(it => getOneNodeBy(it.nodeId))
                  .filter(it => it !== undefined),
              getSubNode: () => getSubNodeOf(ptr.nodeId),
+diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/PSTFolder.class.d.ts b/node_modules/@hiraokahypertools/pst-extractor/dist/PSTFolder.class.d.ts
+index a46d92a..bd0e234 100644
+--- a/node_modules/@hiraokahypertools/pst-extractor/dist/PSTFolder.class.d.ts
++++ b/node_modules/@hiraokahypertools/pst-extractor/dist/PSTFolder.class.d.ts
+@@ -29,7 +29,13 @@ export declare class PSTFolder extends PSTObject implements IPSTFolder {
+      * @param {Map<number, PSTDescriptorItem>} [localDescriptorItems]
+      */
+     constructor(rootProvider: RootProvider, node: PLNode, subNode: PLSubNode, propertyFinder: PropertyFinder);
+-    private getEmailsProvider;
++    /** Read a folder's messages one at a time. `getEmails()` builds them all
++     *  at once, which for a large folder means holding all of them. */
++    getEmailsProvider(): Promise<{
++        readonly count: number;
++        get(index: number): Promise<PSTMessage>;
++        all(): Promise<PSTMessage[]>;
++    }>;
+     private getSubFoldersProvider;
+     /**
+      * Get folders in one fell swoop, since there's not usually thousands of them.

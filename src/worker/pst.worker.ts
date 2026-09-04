@@ -76,6 +76,9 @@ interface SourceEntry {
   /** Indexes of image attachments per message, for the OCR pass. Kept instead
    *  of the attachment handles, which would retain their messages. */
   imageAttachments: Map<string, number[]>
+  /** Where each message sits, so one can be re-read without keeping it. Two
+   *  numbers per message, against a parsed message costing kilobytes. */
+  locationById: Map<string, { folderId: string; index: number }>
   /** Search-index document ids contributed by this source (for cleanup). */
   searchIds: Set<string>
   /** Attachments recovered from a winmail.dat (TNEF), keyed by message id. */
@@ -243,7 +246,7 @@ async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTM
 async function readFolderUnderPressure(
   entry: SourceEntry,
   folderId: string,
-): Promise<IPSTMessage[] | null> {
+): Promise<MessageSequence | null> {
   const backoffMs = [0, 250, 1000]
   for (let attempt = 0; attempt < backoffMs.length; attempt++) {
     if (attempt > 0) {
@@ -251,12 +254,76 @@ async function readFolderUnderPressure(
       await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]))
     }
     try {
-      return await folderEmails(entry, folderId)
+      return await folderSequence(entry, folderId)
     } catch {
       // Try again, with more room than last time.
     }
   }
   return null
+}
+
+/**
+ * The message for an id: the one already open if there is one, otherwise read
+ * again from where indexing found it.
+ *
+ * Indexing deliberately keeps no messages, so opening a search hit in a folder
+ * the reader has never visited has nothing in hand — it re-reads that one
+ * message, which costs a few milliseconds and no memory afterwards.
+ */
+async function messageById(
+  entry: SourceEntry,
+  messageId: string,
+): Promise<IPSTMessage | undefined> {
+  const held = entry.messages.get(messageId)
+  if (held) return held
+  const at = entry.locationById.get(messageId)
+  if (!at) return undefined
+  const seq = await safeAsync(() => folderSequence(entry, at.folderId), null)
+  const m = seq ? await safeAsync(() => seq.get(at.index), undefined) : undefined
+  // Hold on to the one being read; this map is what is open, not the mailbox.
+  if (m) safe(() => entry.messages.set(messageId, m), undefined)
+  return m
+}
+
+/** A folder's messages, reachable one at a time rather than all at once. */
+interface MessageSequence {
+  count: number
+  get: (index: number) => Promise<IPSTMessage>
+}
+
+/** A folder that can hand out its messages individually (PST/OST). */
+interface ProvidesMessages {
+  getEmailsProvider: () => Promise<{
+    readonly count: number
+    get: (index: number) => Promise<IPSTMessage>
+  }>
+}
+
+/**
+ * Read a folder as a sequence.
+ *
+ * `getEmails()` builds every message in the folder at once, and the parser
+ * used to keep each one for as long as the file stayed open, so indexing a
+ * large mailbox held all of it: 1.3 GB of parsed messages for a 2 GB file.
+ * Taking them one at a time from the same collection — the same order, the
+ * same items, just not all at once — leaves that at about 20 MB, because a
+ * message can be collected as soon as its search document is built. The
+ * collection's cache is bounded by a patch for the same reason.
+ *
+ * Standalone .msg/.eml batches have no such collection: their messages are
+ * parsed up front from small files, so the already-built list is wrapped to
+ * look the same to the caller.
+ */
+async function folderSequence(entry: SourceEntry, folderId: string): Promise<MessageSequence> {
+  const folder = entry.folders.get(folderId)
+  if (!folder) return { count: 0, get: () => Promise.reject(new Error('no folder')) }
+  const provider = (folder as unknown as Partial<ProvidesMessages>).getEmailsProvider
+  if (typeof provider === 'function') {
+    const p = await provider.call(folder)
+    return { count: p.count, get: (index) => p.get(index) }
+  }
+  const emails = await folderEmails(entry, folderId)
+  return { count: emails.length, get: (index) => Promise.resolve(emails[index]) }
 }
 
 /**
@@ -1410,6 +1477,7 @@ const api = {
       ocr: new Map(),
       bodyImageCount: new Map(),
       imageAttachments: new Map(),
+      locationById: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
@@ -1499,6 +1567,7 @@ const api = {
       ocr: new Map(),
       bodyImageCount: new Map(),
       imageAttachments: new Map(),
+      locationById: new Map(),
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
@@ -1602,7 +1671,7 @@ const api = {
   ): Promise<MessageContent | null> {
     const entry = sources.get(sourceId)
     if (!entry) return null
-    const m = entry.messages.get(messageId)
+    const m = await messageById(entry, messageId)
     if (!m) return null
     return buildMessageContent(m, messageId, entry)
   },
@@ -1626,7 +1695,7 @@ const api = {
     if (!list) {
       // Indexing does not keep attachment handles, so fetch them now. Opening
       // a message caches them; OCR and direct downloads can arrive first.
-      const m = entry.messages.get(messageId)
+      const m = await messageById(entry, messageId)
       list = m ? await safeAsync(() => m.getAttachments(), []) : undefined
       if (list) entry.attachments.set(messageId, list)
     }
@@ -1680,7 +1749,7 @@ const api = {
     } else {
       let list = entry.attachments.get(parentMessageId)
       if (!list) {
-        const parent = entry.messages.get(parentMessageId)
+        const parent = await messageById(entry, parentMessageId)
         list = parent ? await safeAsync(() => parent.getAttachments(), []) : undefined
         if (list) entry.attachments.set(parentMessageId, list)
       }
@@ -1749,15 +1818,20 @@ const api = {
       if (!sources.has(sourceId)) return { fromCache: false, complete: false } // source removed mid-index
       const read = await readFolderUnderPressure(entry, folderId)
       if (read === null) folderFailures++
-      const emails = read ?? []
+      const messages = read ?? { count: 0, get: () => Promise.reject(new Error('unread')) }
       const docs: SearchDoc[] = []
-      for (const m of emails) {
-        const msgId = String(m.primaryNodeId)
-        const id = `${sourceId}:${msgId}`
+      for (let i = 0; i < messages.count; i++) {
         done++
-        if (searchIndex.has(id)) continue
         try {
+          // Built here, read, and then let go: the search document holds
+          // everything the index needs, so keeping the parsed message would
+          // only pin the whole mailbox in memory.
+          const m = await messages.get(i)
+          const msgId = String(m.primaryNodeId)
+          const id = `${sourceId}:${msgId}`
+          if (searchIndex.has(id)) continue
           const doc = await buildSearchDoc(sourceId, folderId, msgId, m, entry)
+          entry.locationById.set(msgId, { folderId, index: i })
           docs.push(doc)
           searchDocs.set(id, doc)
           entry.searchIds.add(id)
@@ -2023,7 +2097,7 @@ const api = {
     ref: number,
   ): Promise<AttachmentData | null> {
     const entry = sources.get(sourceId)
-    const m = entry?.messages.get(messageId)
+    const m = entry ? await messageById(entry, messageId) : undefined
     if (!m) return null
     const url = dataImageUrls(extractBodies(m).html)[ref]
     const decoded = url ? dataUrlToBytes(url) : null
