@@ -12,7 +12,12 @@ import {
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
-import { makeChunkedReader, type ChunkedReader } from './chunkReader'
+import {
+  makeChunkedReader,
+  beginReadingPass,
+  endReadingPass,
+  type ChunkedReader,
+} from './chunkReader'
 import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
 import {
   Consts,
@@ -1488,6 +1493,92 @@ function unifyPeople(entries: { label: string; count: number }[]): { label: stri
   ]
 }
 
+async function runIndexPass(
+  sourceId: string,
+  entry: SourceEntry,
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ fromCache: boolean; complete: boolean }> {
+    // What the mailbox says it holds. Used to report progress, and to judge
+    // whether a pass actually covered it.
+    let total = 0
+    for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
+
+    // Cache hit: register the stored docs (rewritten to this session's source
+    // id) and skip the walk entirely. OCR text from the original pass is
+    // already inside them, so no OCR pass is needed either.
+    //
+    // Only a pass that covered the whole mailbox is ever stored (see
+    // releaseSearchDocs), and the cache version was bumped to drop entries
+    // written before that rule existed, so a hit here is known to be whole.
+    if (entry.cachedDocs && entry.cachedDocs.length) {
+      const docs: SearchDoc[] = []
+      for (const d of entry.cachedDocs) {
+        const doc = { ...d, sourceId, id: `${sourceId}:${d.messageId}` }
+        if (searchIndex.has(doc.id)) continue
+        docs.push(doc)
+        entry.searchIds.add(doc.id)
+        metaDocs.set(doc.id, metaOf(doc))
+      }
+      entry.cachedDocs = null
+      if (docs.length) searchIndex.addAll(docs)
+      onProgress?.(docs.length, docs.length)
+      entry.indexComplete = true
+      return { fromCache: true, complete: true }
+    }
+
+    let done = 0
+    // Folders whose message list could not be read at all. Each one hides
+    // every message it holds from search, so the pass is not complete.
+    let folderFailures = 0
+
+    for (const folderId of entry.folders.keys()) {
+      if (!sources.has(sourceId)) return { fromCache: false, complete: false } // source removed mid-index
+      const read = await readFolderUnderPressure(entry, folderId)
+      if (read === null) folderFailures++
+      const messages = read ?? { count: 0, get: () => Promise.reject(new Error('unread')) }
+      const docs: SearchDoc[] = []
+      for (let i = 0; i < messages.count; i++) {
+        done++
+        try {
+          // Built here, read, and then let go: the search document holds
+          // everything the index needs, so keeping the parsed message would
+          // only pin the whole mailbox in memory.
+          const m = await messages.get(i)
+          const msgId = String(m.primaryNodeId)
+          const id = `${sourceId}:${msgId}`
+          if (searchIndex.has(id)) continue
+          const doc = await buildSearchDoc(sourceId, folderId, msgId, m, entry)
+          entry.locationById.set(msgId, { folderId, index: i })
+          docs.push(doc)
+          searchDocs.set(id, doc)
+          entry.searchIds.add(id)
+          metaDocs.set(id, metaOf(doc))
+        } catch {
+          // skip an unreadable message
+        }
+      }
+      // If the source was closed while reading this folder, drop what we staged
+      // instead of leaving orphaned docs in the shared search index.
+      if (!sources.has(sourceId)) {
+        for (const d of docs) searchDocs.delete(d.id)
+        return { fromCache: false, complete: false }
+      }
+      if (docs.length) searchIndex.addAll(docs)
+      onProgress?.(done, total)
+    }
+    onProgress?.(done, total)
+    // Individually unreadable messages are normal and are skipped above; a
+    // folder that could not be read at all is not, and neither is a pass that
+    // ends up covering only part of what the mailbox declares.
+    // `done` counts every message the walk actually saw, so it lands on the
+    // declared total when no folder was lost. The indexed-document count is
+    // deliberately not used: a message filed in two folders is indexed once,
+    // which would read as missing mail.
+    const complete = folderFailures === 0 && coversMailbox(done, total)
+    entry.indexComplete = complete
+    return { fromCache: false, complete }
+}
+
 const api = {
   async ping(): Promise<'pong'> {
     return 'pong'
@@ -1843,86 +1934,14 @@ const api = {
   ): Promise<{ fromCache: boolean; complete: boolean }> {
     const entry = sources.get(sourceId)
     if (!entry) return { fromCache: false, complete: false }
-
-    // What the mailbox says it holds. Used to report progress, and to judge
-    // whether a pass actually covered it.
-    let total = 0
-    for (const folder of entry.folders.values()) total += safe(() => folder.contentCount, 0)
-
-    // Cache hit: register the stored docs (rewritten to this session's source
-    // id) and skip the walk entirely. OCR text from the original pass is
-    // already inside them, so no OCR pass is needed either.
-    //
-    // Only a pass that covered the whole mailbox is ever stored (see
-    // releaseSearchDocs), and the cache version was bumped to drop entries
-    // written before that rule existed, so a hit here is known to be whole.
-    if (entry.cachedDocs && entry.cachedDocs.length) {
-      const docs: SearchDoc[] = []
-      for (const d of entry.cachedDocs) {
-        const doc = { ...d, sourceId, id: `${sourceId}:${d.messageId}` }
-        if (searchIndex.has(doc.id)) continue
-        docs.push(doc)
-        entry.searchIds.add(doc.id)
-        metaDocs.set(doc.id, metaOf(doc))
-      }
-      entry.cachedDocs = null
-      if (docs.length) searchIndex.addAll(docs)
-      onProgress?.(docs.length, docs.length)
-      entry.indexComplete = true
-      return { fromCache: true, complete: true }
+    // A full read of the file: worth reading ahead for, so the read cache runs
+    // at its full size until this returns.
+    beginReadingPass()
+    try {
+      return await runIndexPass(sourceId, entry, onProgress)
+    } finally {
+      endReadingPass()
     }
-
-    let done = 0
-    // Folders whose message list could not be read at all. Each one hides
-    // every message it holds from search, so the pass is not complete.
-    let folderFailures = 0
-
-    for (const folderId of entry.folders.keys()) {
-      if (!sources.has(sourceId)) return { fromCache: false, complete: false } // source removed mid-index
-      const read = await readFolderUnderPressure(entry, folderId)
-      if (read === null) folderFailures++
-      const messages = read ?? { count: 0, get: () => Promise.reject(new Error('unread')) }
-      const docs: SearchDoc[] = []
-      for (let i = 0; i < messages.count; i++) {
-        done++
-        try {
-          // Built here, read, and then let go: the search document holds
-          // everything the index needs, so keeping the parsed message would
-          // only pin the whole mailbox in memory.
-          const m = await messages.get(i)
-          const msgId = String(m.primaryNodeId)
-          const id = `${sourceId}:${msgId}`
-          if (searchIndex.has(id)) continue
-          const doc = await buildSearchDoc(sourceId, folderId, msgId, m, entry)
-          entry.locationById.set(msgId, { folderId, index: i })
-          docs.push(doc)
-          searchDocs.set(id, doc)
-          entry.searchIds.add(id)
-          metaDocs.set(id, metaOf(doc))
-        } catch {
-          // skip an unreadable message
-        }
-      }
-      // If the source was closed while reading this folder, drop what we staged
-      // instead of leaving orphaned docs in the shared search index.
-      if (!sources.has(sourceId)) {
-        for (const d of docs) searchDocs.delete(d.id)
-        return { fromCache: false, complete: false }
-      }
-      if (docs.length) searchIndex.addAll(docs)
-      onProgress?.(done, total)
-    }
-    onProgress?.(done, total)
-    // Individually unreadable messages are normal and are skipped above; a
-    // folder that could not be read at all is not, and neither is a pass that
-    // ends up covering only part of what the mailbox declares.
-    // `done` counts every message the walk actually saw, so it lands on the
-    // declared total when no folder was lost. The indexed-document count is
-    // deliberately not used: a message filed in two folders is indexed once,
-    // which would read as missing mail.
-    const complete = folderFailures === 0 && coversMailbox(done, total)
-    entry.indexComplete = complete
-    return { fromCache: false, complete }
   },
 
   /**

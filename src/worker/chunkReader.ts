@@ -18,12 +18,18 @@ import type { ReadFileApi } from '@hiraokahypertools/pst-extractor'
  * what is only a read cache. It is also sized to the machine, because the
  * devices most likely to run short of memory are the ones least able to
  * spare a nine-figure cache.
+ *
+ * It shrinks once nothing is being indexed. Indexing reads the file end to
+ * end, where reading ahead pays for itself; afterwards the reads are small and
+ * scattered, and a cache holding a fraction of a multi-gigabyte file rarely
+ * has the wanted slab anyway. Opening another mailbox raises it again for the
+ * duration of that pass.
  */
 
 const SLAB_SIZE = 256 * 1024
 
-/** Total slab memory across every open file. */
-function slabBudget(): number {
+/** What this machine can spare for reading, while a mailbox is being read. */
+function deviceBudget(): number {
   // navigator.deviceMemory is a coarse, capped hint (0.25-8, absent on
   // Firefox and Safari). Unknown is treated as roomy: the read cache is what
   // makes a large mailbox usable, so it is not given up on a guess.
@@ -32,6 +38,27 @@ function slabBudget(): number {
   if (gb <= 2) return 24 * 1024 * 1024
   if (gb <= 4) return 48 * 1024 * 1024
   return 128 * 1024 * 1024
+}
+
+/** Indexing passes running right now. */
+let readingPasses = 0
+
+/** Total slab memory across every open file. */
+function slabBudget(): number {
+  const full = deviceBudget()
+  return readingPasses > 0 ? full : Math.max(8 * 1024 * 1024, Math.floor(full / 4))
+}
+
+/** Called around an indexing pass, which reads the whole file and is the one
+ *  time reading ahead is worth the memory. */
+export function beginReadingPass(): void {
+  readingPasses++
+}
+
+export function endReadingPass(): void {
+  readingPasses = Math.max(0, readingPasses - 1)
+  // Hand the difference back now rather than waiting for the next read.
+  if (readingPasses === 0) evictToBudget()
 }
 
 /**
