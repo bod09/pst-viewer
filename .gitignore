@@ -9,3 +9,7 @@ deploy
 /fixtures
 *.pst
 *.ost
+*.msg
+*.eml
+# Fidelity baselines describe a real mailbox (subjects, senders): keep them local
+/.fidelity

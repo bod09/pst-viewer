@@ -9,7 +9,8 @@
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && node scripts/make-deploy.mjs",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "fidelity": "node scripts/fidelity.mjs"
   },
   "keywords": [],
   "author": "",
