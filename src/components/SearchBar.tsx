@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { pst } from '../worker/client'
 import { Close, Search, Spinner } from './icons'
@@ -53,6 +53,21 @@ function buildQuery(f: Fields): string {
 const inputCls =
   'w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none'
 
+function ChipToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+        on
+          ? 'border-sky-500 bg-sky-500/20 text-sky-300'
+          : 'border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="block">
@@ -72,14 +87,22 @@ const dropdownCls = (side: 'left' | 'right') =>
     side === 'left' ? 'left-0' : 'left-[calc(-100%-0.75rem)]'
   }`
 
-/** Free-text input offering the names already present in the open mailboxes. */
-function ListInput({
+/**
+ * A text field with a suggestion list under it.
+ *
+ * Up and Down walk the list, Enter takes the highlighted entry and Escape
+ * closes just the list. Tab is left alone so it moves to the next filter:
+ * the entries are deliberately not tab stops, since tabbing through every
+ * suggestion to reach the next field is nobody's idea of a shortcut.
+ */
+function SuggestInput({
   value,
   onChange,
   options,
   placeholder,
   ariaLabel,
   side = 'left',
+  transform,
 }: {
   value: string
   onChange: (v: string) => void
@@ -87,12 +110,56 @@ function ListInput({
   placeholder?: string
   ariaLabel?: string
   side?: 'left' | 'right'
+  /** Turns a chosen entry into the value to store (e.g. just the address). */
+  transform?: (entry: string) => string
 }) {
   const [open, setOpen] = useState(false)
-  const needle = value.trim().toLowerCase()
-  const shown = options
-    .filter((o) => !needle || (o.toLowerCase().includes(needle) && o.toLowerCase() !== needle))
-    .slice(0, 50)
+  const [active, setActive] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
+  const shown = options.slice(0, 50)
+  const isOpen = open && shown.length > 0
+
+  // Reset the highlight whenever the list changes underneath it.
+  useEffect(() => setActive(-1), [options.join('\u0000')])
+
+  // Keep the highlighted entry in view when walking a long list.
+  useEffect(() => {
+    if (active < 0) return
+    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' })
+  }, [active])
+
+  const pick = (entry: string) => {
+    onChange(transform ? transform(entry) : entry)
+    setOpen(false)
+    setActive(-1)
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!isOpen) {
+        setOpen(true)
+        return
+      }
+      setActive((i) => (i + 1) % shown.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!isOpen) return
+      setActive((i) => (i <= 0 ? shown.length - 1 : i - 1))
+    } else if (e.key === 'Enter' && isOpen && active >= 0) {
+      e.preventDefault()
+      pick(shown[active])
+    } else if (e.key === 'Escape' && isOpen) {
+      // Only the list closes; the filter panel stays where it is.
+      e.stopPropagation()
+      setOpen(false)
+      setActive(-1)
+    } else if (e.key === 'Tab') {
+      setOpen(false)
+      setActive(-1)
+    }
+  }
 
   return (
     <div className="relative">
@@ -101,28 +168,40 @@ function ListInput({
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={isOpen && active >= 0 ? `${listId}-${active}` : undefined}
         onChange={(e) => {
           onChange(e.target.value)
           setOpen(true)
+          setActive(-1)
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        onKeyDown={onKeyDown}
       />
-      {open && shown.length > 0 && (
-        <div className={dropdownCls(side)}>
-          {shown.map((o) => (
-            <button
+      {isOpen && (
+        <div ref={listRef} id={listId} role="listbox" className={dropdownCls(side)}>
+          {shown.map((o, i) => (
+            <div
               key={o}
-              type="button"
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              tabIndex={-1}
               onMouseDown={(e) => {
                 e.preventDefault()
-                onChange(o)
-                setOpen(false)
+                pick(o)
               }}
-              className="block w-full truncate px-3 py-1.5 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+              onMouseEnter={() => setActive(i)}
+              className={`cursor-pointer truncate px-3 py-1.5 text-left text-sm transition ${
+                i === active ? 'bg-slate-800 text-slate-100' : 'text-slate-200'
+              }`}
             >
               {o}
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -130,6 +209,23 @@ function ListInput({
   )
 }
 
+/** Free-text field offering names already present in the open mailboxes. */
+function ListInput(props: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+  ariaLabel?: string
+  side?: 'left' | 'right'
+}) {
+  const needle = props.value.trim().toLowerCase()
+  const options = props.options.filter(
+    (o) => !needle || (o.toLowerCase().includes(needle) && o.toLowerCase() !== needle),
+  )
+  return <SuggestInput {...props} options={options} />
+}
+
+/** Sender/recipient field, suggesting people seen in the open mailboxes. */
 function PersonInput({
   value,
   onChange,
@@ -144,7 +240,6 @@ function PersonInput({
   side?: 'left' | 'right'
 }) {
   const [options, setOptions] = useState<string[]>([])
-  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (!value.trim()) {
@@ -167,58 +262,17 @@ function PersonInput({
     }
   }, [value])
 
-  const pick = (label: string) => {
-    const email = /<([^>]+)>\s*$/.exec(label)?.[1]
-    onChange(email ?? label)
-    setOpen(false)
-  }
-
   return (
-    <div className="relative">
-      <input
-        className={inputCls}
-        value={value}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        onChange={(e) => {
-          onChange(e.target.value)
-          setOpen(true)
-        }}
-        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
-        onFocus={() => setOpen(true)}
-      />
-      {open && options.length > 0 && (
-        <div className={dropdownCls(side)}>
-          {options.map((o) => (
-            <button
-              key={o}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                pick(o)
-              }}
-              className="block w-full truncate px-3 py-1.5 text-left text-sm text-slate-200 transition hover:bg-slate-800"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ChipToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        on
-          ? 'border-sky-500 bg-sky-500/20 text-sky-300'
-          : 'border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500'
-      }`}
-    >
-      {children}
-    </button>
+    <SuggestInput
+      value={value}
+      onChange={onChange}
+      options={options}
+      placeholder={placeholder}
+      ariaLabel={ariaLabel}
+      side={side}
+      // Store just the address when the entry carries one.
+      transform={(entry) => /<([^>]+)>\s*$/.exec(entry)?.[1] ?? entry}
+    />
   )
 }
 
@@ -339,6 +393,7 @@ export function SearchBar() {
             <Field label="Subject contains">
               <input
                 className={inputCls}
+                aria-label="Subject contains"
                 value={fields.subject}
                 onChange={(e) => set({ subject: e.target.value })}
               />
@@ -375,6 +430,7 @@ export function SearchBar() {
               <input
                 type="date"
                 className={inputCls}
+                aria-label="After"
                 value={fields.after}
                 onChange={(e) => set({ after: e.target.value })}
               />
@@ -383,6 +439,7 @@ export function SearchBar() {
               <input
                 type="date"
                 className={inputCls}
+                aria-label="Before"
                 value={fields.before}
                 onChange={(e) => set({ before: e.target.value })}
               />
