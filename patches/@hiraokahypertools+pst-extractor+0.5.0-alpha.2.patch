@@ -1,8 +1,8 @@
 diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js b/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
-index f2d291b..053cfdd 100644
+index f2d291b..88ba663 100644
 --- a/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
 +++ b/node_modules/@hiraokahypertools/pst-extractor/dist/CollectionAsyncProvider.js
-@@ -1,4 +1,12 @@
+@@ -1,10 +1,18 @@
  import { KeyedDelay } from "./KeyedDelay.js";
 +/**
 + * How many items one collection keeps. The cache exists so that reading the
@@ -15,30 +15,56 @@ index f2d291b..053cfdd 100644
  /**
   * @internal
   */
-@@ -12,7 +20,22 @@ export class CollectionAsyncProvider {
-         return this._count;
+ export class CollectionAsyncProvider {
+     constructor(count, itemProvider) {
+-        this._cache = new KeyedDelay();
++        this._cache = new KeyedDelay(MAX_CACHED_ITEMS);
+         this._count = count;
+         this._itemProvider = itemProvider;
      }
-     async get(index) {
--        return await this._cache.getOrCreate(index.toString(), async () => await this._itemProvider(index));
-+        const key = index.toString();
-+        const value = await this._cache.getOrCreate(key, async () => await this._itemProvider(index));
-+        // Keep the most recently used items and drop the coldest. Map iterates
-+        // in insertion order, so re-inserting on use is enough to order them.
-+        const map = this._cache._map;
-+        if (map.has(key)) {
-+            map.delete(key);
-+            map.set(key, value);
-+        }
-+        while (map.size > MAX_CACHED_ITEMS) {
-+            const oldest = map.keys().next().value;
-+            if (oldest === undefined)
-+                break;
-+            map.delete(oldest);
-+        }
-+        return value;
+diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/KeyedDelay.js b/node_modules/@hiraokahypertools/pst-extractor/dist/KeyedDelay.js
+index ef8961a..c0223c3 100644
+--- a/node_modules/@hiraokahypertools/pst-extractor/dist/KeyedDelay.js
++++ b/node_modules/@hiraokahypertools/pst-extractor/dist/KeyedDelay.js
+@@ -2,8 +2,14 @@
+  * @internal
+  */
+ export class KeyedDelay {
+-    constructor() {
++    /**
++     * @param capacity how many entries to keep. Unlimited by default, so
++     * existing callers are unaffected; a caller that may produce a very large
++     * number of entries can cap it and have the least recently used dropped.
++     */
++    constructor(capacity = Number.POSITIVE_INFINITY) {
+         this._map = new Map();
++        this._capacity = capacity;
      }
-     /**
-      * get all of the children
+     async getOrCreate(key, provider) {
+         if (this._map.has(key)) {
+@@ -11,11 +17,22 @@ export class KeyedDelay {
+             if (value === undefined) {
+                 throw new Error("provider must provide a non-undefined value");
+             }
++            // Re-insert so that Map iteration order tracks recency of use, which is
++            // what makes the eviction below drop the coldest entry.
++            this._map.delete(key);
++            this._map.set(key, value);
+             return value;
+         }
+         else {
+             const value = await provider();
+             this._map.set(key, value);
++            while (this._map.size > this._capacity) {
++                const oldest = this._map.keys().next().value;
++                if (oldest === undefined) {
++                    break;
++                }
++                this._map.delete(oldest);
++            }
+             return value;
+         }
+     }
 diff --git a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js b/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js
 index 6b48cc5..d0e9191 100644
 --- a/node_modules/@hiraokahypertools/pst-extractor/dist/PLUtil.js

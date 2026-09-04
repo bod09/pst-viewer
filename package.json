@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && node scripts/make-deploy.mjs",
     "postinstall": "patch-package",
-    "fidelity": "node scripts/fidelity.mjs"
+    "fidelity": "node scripts/fidelity.mjs",
+    "fixtures": "node scripts/make-fixtures.mjs"
   },
   "keywords": [],
   "author": "",
