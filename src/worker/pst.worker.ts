@@ -1192,6 +1192,64 @@ async function buildMessageContent(
   }
 }
 
+/**
+ * Collapse the several ways the same person appears into one entry.
+ *
+ * The same address turns up written differently across a mailbox: with a
+ * display name, without one, or with the address repeated as the name. Those
+ * are one person, and offering four spellings of them as separate suggestions
+ * is just noise. Entries are grouped by address, the best name seen for that
+ * address wins, and a name-only entry joins the group that already uses it.
+ */
+function unifyPeople(entries: { label: string; count: number }[]): { label: string; count: number }[] {
+  const addressOf = (label: string): string => {
+    const angled = /<([^>]+)>\s*$/.exec(label)?.[1]
+    if (angled?.includes('@')) return angled.trim().toLowerCase()
+    const bare = label.trim()
+    return !bare.includes('<') && bare.includes('@') ? bare.toLowerCase() : ''
+  }
+  const nameOf = (label: string): string => label.replace(/<[^>]*>\s*$/, '').trim()
+
+  const groups = new Map<string, { address: string; name: string; count: number }>()
+  const nameOnly: { label: string; count: number }[] = []
+
+  for (const e of entries) {
+    const address = addressOf(e.label)
+    if (!address) {
+      nameOnly.push(e)
+      continue
+    }
+    const name = nameOf(e.label)
+    // A "name" that is just the address again tells us nothing.
+    const realName = name && name.toLowerCase() !== address && !name.includes('@') ? name : ''
+    const g = groups.get(address)
+    if (g) {
+      g.count += e.count
+      if (!g.name && realName) g.name = realName
+    } else {
+      groups.set(address, { address, name: realName, count: e.count })
+    }
+  }
+
+  // Fold a bare name into the address that already goes by it.
+  const leftovers: { label: string; count: number }[] = []
+  for (const e of nameOnly) {
+    const match = [...groups.values()].find(
+      (g) => g.name && g.name.toLowerCase() === e.label.trim().toLowerCase(),
+    )
+    if (match) match.count += e.count
+    else leftovers.push(e)
+  }
+
+  return [
+    ...[...groups.values()].map((g) => ({
+      label: g.name ? `${g.name} <${g.address}>` : g.address,
+      count: g.count,
+    })),
+    ...leftovers,
+  ]
+}
+
 const api = {
   async ping(): Promise<'pong'> {
     return 'pong'
@@ -1619,7 +1677,7 @@ const api = {
         else agg.set(key, { ...p })
       }
     }
-    return [...agg.values()]
+    return unifyPeople([...agg.values()])
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map((p) => p.label)

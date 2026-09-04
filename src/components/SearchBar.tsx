@@ -52,6 +52,24 @@ function buildQuery(f: Fields): string {
 
 const inputCls =
   'w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none'
+const inputClsClearable = inputCls.replace('px-3', 'pl-3 pr-8')
+
+/** Small clear button shown on a filled field while it is hovered or focused.
+ *  Not a tab stop: Tab should move between filters, not into their controls. */
+function ClearButton({ label, onClear }: { label?: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      aria-label={label ? `Clear ${label.toLowerCase()}` : 'Clear'}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClear}
+      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 opacity-0 transition hover:bg-slate-700/60 hover:text-slate-200 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+    >
+      <Close className="h-3.5 w-3.5" />
+    </button>
+  )
+}
 
 function ChipToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -169,9 +187,9 @@ function SuggestInput({
   }
 
   return (
-    <div className="relative">
+    <div className="group relative">
       <input
-        className={inputCls}
+        className={value ? inputClsClearable : inputCls}
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}
@@ -189,6 +207,7 @@ function SuggestInput({
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
         onKeyDown={onKeyDown}
       />
+      {value && <ClearButton label={ariaLabel} onClear={() => onChange('')} />}
       {isOpen && (
         <div ref={listRef} id={listId} role="listbox" className={dropdownCls(side)}>
           {shown.map((o, i) => (
@@ -398,12 +417,17 @@ export function SearchBar() {
               />
             </Field>
             <Field label="Subject contains">
-              <input
-                className={inputCls}
-                aria-label="Subject contains"
-                value={fields.subject}
-                onChange={(e) => set({ subject: e.target.value })}
-              />
+              <div className="group relative">
+                <input
+                  className={fields.subject ? inputClsClearable : inputCls}
+                  aria-label="Subject contains"
+                  value={fields.subject}
+                  onChange={(e) => set({ subject: e.target.value })}
+                />
+                {fields.subject && (
+                  <ClearButton label="subject" onClear={() => set({ subject: '' })} />
+                )}
+              </div>
             </Field>
             <Field label="Person">
               <PersonInput
