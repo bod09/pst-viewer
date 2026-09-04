@@ -207,17 +207,23 @@ function SpreadsheetView({ bytes }: { bytes: Uint8Array }) {
     setState(null)
     setError(false)
     setActive(0)
-    import('xlsx')
-      .then((XLSX) => {
-        if (!alive) return
-        const wb = XLSX.read(bytes, { type: 'array' })
-        const sheets = wb.SheetNames
-        const tables = sheets.map((name) => {
-          // The spreadsheet's own text ends up in this markup, and it is
-          // rendered into the app's own document rather than a sandboxed
-          // frame, so it has to be sanitised: a cell value containing a quote
-          // can otherwise close an attribute and add an event handler.
-          const raw = XLSX.utils.sheet_to_html(wb.Sheets[name])
+    // Parsed in a worker: the parser has unfixed issues on the npm release and
+    // runs on bytes from a mailbox, so neither a polluted prototype nor a
+    // parse that will not finish reaches this window. See sheet.worker.ts.
+    const worker = new Worker(new URL('../../lib/sheet.worker.ts', import.meta.url), {
+      type: 'module',
+      name: 'sheet-parser',
+    })
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; result?: { sheets: string[]; tables: string[] } }>) => {
+      if (!alive) return
+      const data = e.data
+      if (!data.ok || !data.result) {
+        setError(true)
+      } else {
+        // The markup still carries the spreadsheet's own text and is rendered
+        // into this document, so a cell value containing a quote could
+        // otherwise close an attribute and add an event handler.
+        const tables = data.result.tables.map((raw) => {
           const clean = DOMPurify.sanitize(raw, {
             ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'br', 'span', 'div', 'p'],
             ALLOWED_ATTR: ['colspan', 'rowspan', 'id'],
@@ -225,13 +231,20 @@ function SpreadsheetView({ bytes }: { bytes: Uint8Array }) {
           const doc = new DOMParser().parseFromString(clean, 'text/html')
           return doc.querySelector('table')?.outerHTML ?? '<p style="padding:1rem">(empty sheet)</p>'
         })
-        setState({ sheets, tables })
-      })
-      .catch(() => {
-        if (alive) setError(true)
-      })
+        setState({ sheets: data.result.sheets, tables })
+      }
+      worker.terminate()
+    }
+    worker.onerror = () => {
+      if (alive) setError(true)
+      worker.terminate()
+    }
+    // Copy the bytes so the transfer cannot detach a buffer the app still uses.
+    const copy = bytes.slice()
+    worker.postMessage(copy.buffer, [copy.buffer])
     return () => {
       alive = false
+      worker.terminate()
     }
   }, [bytes])
 
