@@ -1693,16 +1693,11 @@ const api = {
    *   is:high|low|flagged|unread
    *   before:/after:      date bound (YYYY-MM-DD)
    */
-  async search(query: string, limit = 100): Promise<SearchHit[]> {
-    return (await api.searchPage(query, limit)).hits
-  },
-
-  /** Search, reporting how many messages matched in total as well as the page
-   *  of hits returned. The total matters in a review: a capped list must not
-   *  be mistaken for "this is everything". */
-  async searchPage(query: string, limit = 100): Promise<{ hits: SearchHit[]; total: number }> {
+  /** Every message matching the query. Nothing is trimmed: a review has to be
+   *  able to trust that what is listed is all there is. */
+  async search(query: string): Promise<SearchHit[]> {
     const q = query.trim()
-    if (!q) return { hits: [], total: 0 }
+    if (!q) return []
 
     // Parse: quoted phrases, key:value filters (value may be quoted), terms.
     const phrases: string[] = []
@@ -1826,7 +1821,7 @@ const api = {
     }
 
     if (!ftQuery.trim()) candidates.sort((a, b) => (b.meta.date ?? 0) - (a.meta.date ?? 0))
-    const hits = candidates.slice(0, limit).map(({ meta, score }) => ({
+    const hits = candidates.map(({ meta, score }) => ({
       sourceId: meta.sourceId,
       messageId: meta.messageId,
       folderId: meta.folderId,
@@ -1836,7 +1831,7 @@ const api = {
       hasAttachments: meta.hasAttachments,
       score,
     }))
-    return { hits, total: candidates.length }
+    return hits
   },
 
   /** Every image to OCR across a source: image attachments plus data: body images. */

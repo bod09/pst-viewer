@@ -50,8 +50,6 @@ interface AppState {
 
   searchQuery: string
   searchResults: SearchHit[]
-  /** How many messages matched in total; more than searchResults when capped. */
-  searchTotal: number
   searching: boolean
 
   /** Messages picked for PDF export, keyed `${sourceId}:${messageId}`. */
@@ -97,9 +95,6 @@ const uid = () => `s${++counter}-${Date.now().toString(36)}`
 const stripExt = (n: string) => n.replace(/\.[^.]+$/, '')
 const fkey = (sourceId: string, folderId: string) => `${sourceId}:${folderId}`
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
-
-/** Hits returned per search. The true match count is reported alongside. */
-const SEARCH_LIMIT = 200
 
 const NAV_W_KEY = 'pstviewer.navWidth'
 const LIST_W_KEY = 'pstviewer.listWidth'
@@ -189,7 +184,6 @@ function freshState(): Partial<AppState> {
     autoExpanded: null,
     searchQuery: '',
     searchResults: [],
-    searchTotal: 0,
     searching: false,
     exportSel: {},
     exporting: false,
@@ -496,7 +490,6 @@ export const useApp = create<AppState>((set, get) => {
     autoExpanded: null,
     searchQuery: '',
     searchResults: [],
-    searchTotal: 0,
     searching: false,
     exportSel: {},
     exporting: false,
@@ -680,24 +673,23 @@ export const useApp = create<AppState>((set, get) => {
     runSearch: () => {
       const query = get().searchQuery.trim()
       if (!query) {
-        set({ searchResults: [], searchTotal: 0, searching: false })
+        set({ searchResults: [], searching: false })
         return
       }
       set({ searching: true })
       pst
-        .searchPage(query, SEARCH_LIMIT)
-        .then(({ hits, total }) => {
+        .search(query)
+        .then((searchResults) => {
           if (get().searchQuery.trim() !== query) return // stale
-          set({ searchResults: hits, searchTotal: total, searching: false })
+          set({ searchResults, searching: false })
         })
         .catch(() => {
-          if (get().searchQuery.trim() === query)
-            set({ searchResults: [], searchTotal: 0, searching: false })
+          if (get().searchQuery.trim() === query) set({ searchResults: [], searching: false })
         })
     },
 
     clearSearch: () =>
-      set({ searchQuery: '', searchResults: [], searchTotal: 0, searching: false }),
+      set({ searchQuery: '', searchResults: [], searching: false }),
 
     openHit: (hit) => {
       // Load the hit's own folder, so clearing the search leaves the list
