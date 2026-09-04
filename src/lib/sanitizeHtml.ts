@@ -87,12 +87,20 @@ export function sanitizeEmailHtml(
 
       // Drop invisible tracking pixels (zero/one px, or hidden). This keeps the
       // visible content identical while pinging fewer trackers.
-      const tiny = (v: string | null) => v != null && TINY.test(v.trim())
-      const style = (el.getAttribute('style') ?? '').toLowerCase()
-      const hidden =
-        /display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0(?:px)?\b/.test(style)
-      if (tiny(el.getAttribute('width')) || tiny(el.getAttribute('height')) || hidden) {
-        el.remove()
+      //
+      // Only images fetched from another server are worth removing: one
+      // carried inside the message cannot report anything, and removing it
+      // would renumber the pictures the reader points at when a search
+      // matches text inside one.
+      const finalSrc = el.getAttribute('src') ?? ''
+      if (REMOTE_URL.test(finalSrc.replace(/[\t\n\r]/g, '').trim())) {
+        const tiny = (v: string | null) => v != null && TINY.test(v.trim())
+        const style = (el.getAttribute('style') ?? '').toLowerCase()
+        const hidden =
+          /display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0(?:px)?\b/.test(style)
+        if (tiny(el.getAttribute('width')) || tiny(el.getAttribute('height')) || hidden) {
+          el.remove()
+        }
       }
     }
   }
