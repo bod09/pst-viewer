@@ -99,6 +99,11 @@ interface SourceEntry {
   people?: Map<string, { label: string; count: number }>
   /** Memoised per-folder message lists (see folderEmails). */
   emailLists: Map<string, IPSTMessage[]>
+  /** The rows the message list shows, per folder. Text, so cheap to keep, and
+   *  keeping them means a folder can be reopened without reading it again. */
+  metaLists: Map<string, FolderMessages>
+  /** Folders whose parsed messages are still held, most recently opened last. */
+  warmFolders: string[]
   /** Folder display names by id, for the folder: search filter. */
   folderNames: Map<string, string>
 }
@@ -260,6 +265,38 @@ async function readFolderUnderPressure(
     }
   }
   return null
+}
+
+/**
+ * Let go of the parsed messages behind folders the reader has moved on from.
+ *
+ * Opening a folder used to keep every message in it for the rest of the
+ * session, so working through a large mailbox folder by folder ended up
+ * holding all of it: 369 MB after opening all 57 folders of a 2 GB file. The
+ * rows stay (see metaLists), so going back to a folder is still immediate, and
+ * a message is read from the file again when it is actually opened.
+ *
+ * Only done once indexing has finished, because until then `locationById` does
+ * not know where every message is, and something has to be able to find one.
+ */
+function releaseColdFolders(entry: SourceEntry, justOpened: string): void {
+  const KEEP = 2 // the folder in front of the reader, and the one before it
+  entry.warmFolders = entry.warmFolders.filter((id) => id !== justOpened)
+  entry.warmFolders.push(justOpened)
+  if (entry.indexComplete === undefined) return
+  while (entry.warmFolders.length > KEEP) {
+    const cold = entry.warmFolders.shift()
+    if (cold === undefined) break
+    const emails = entry.emailLists.get(cold)
+    if (!emails) continue
+    entry.emailLists.delete(cold)
+    for (const m of emails) {
+      const id = safe(() => String(m.primaryNodeId), '')
+      // Only drop what can be found again; embedded and standalone messages
+      // are not in the file's folder tables.
+      if (id && entry.locationById.has(id)) entry.messages.delete(id)
+    }
+  }
 }
 
 /**
@@ -1494,6 +1531,8 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
+      metaLists: new Map(),
+      warmFolders: [],
       folderNames: new Map(),
     }
     sources.set(sourceId, entry)
@@ -1584,6 +1623,8 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
+      metaLists: new Map(),
+      warmFolders: [],
       folderNames: new Map(),
     }
 
@@ -1652,6 +1693,12 @@ const api = {
     const folder = entry.folders.get(folderId)
     if (!folder) return { messages: [], unreadable: 0 }
 
+    // A folder read once keeps its list, which is all the message list shows.
+    // The rows are text and cost little; the parsed messages behind them cost
+    // a great deal, and are released below.
+    const listed = entry.metaLists.get(folderId)
+    if (listed) return listed
+
     let emails: IPSTMessage[] = []
     let enumFailed = false
     try {
@@ -1674,7 +1721,10 @@ const api = {
     const unreadable = enumFailed
       ? Math.max(safe(() => folder.contentCount, 0), 1)
       : failed + (entry.extraUnreadable?.get(folderId) ?? 0)
-    return { messages: metas, unreadable }
+    const result = { messages: metas, unreadable }
+    entry.metaLists.set(folderId, result)
+    releaseColdFolders(entry, folderId)
+    return result
   },
 
   /** Fetch full body + headers + inline images + attachment list for one message. */
