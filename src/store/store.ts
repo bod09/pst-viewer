@@ -223,6 +223,9 @@ export const useApp = create<AppState>((set, get) => {
           expanded: { ...s.expanded, [fkey(id, index.rootFolder.id)]: true },
         }))
 
+        // The worker needs the sidebar label so `mailbox:` can match it.
+        void pst.setSourceLabel(id, get().sources.find((s) => s.id === id)?.label ?? '')
+
         // Show the first folder's messages before the background indexer
         // starts reading the whole file; both compete for the same reads.
         let firstListing: Promise<void> = Promise.resolve()
@@ -576,10 +579,13 @@ export const useApp = create<AppState>((set, get) => {
       set(freshState())
     },
 
-    renameSource: (id, label) =>
+    renameSource: (id, label) => {
       set((s) => ({
         sources: s.sources.map((src) => (src.id === id ? { ...src, label } : src)),
-      })),
+      }))
+      // Keep `mailbox:` searching by the name actually shown in the sidebar.
+      void pst.setSourceLabel(id, label)
+    },
 
     toggleFolder: (sourceId, folderId) =>
       set((s) => {

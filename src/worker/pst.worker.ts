@@ -78,12 +78,16 @@ interface SourceEntry {
   extraUnreadable?: Map<string, number>
   /** File identity for the on-device search-index cache (PST/OST only). */
   fingerprint?: string
+  /** The label shown in the sidebar, for the mailbox: search filter. */
+  label?: string
   /** Cached search docs found for this file, consumed by indexSource. */
   cachedDocs?: SearchDoc[] | null
   /** People seen in this source (key: lowercased label), for suggestions. */
   people?: Map<string, { label: string; count: number }>
   /** Memoised per-folder message lists (see folderEmails). */
   emailLists: Map<string, IPSTMessage[]>
+  /** Folder display names by id, for the folder: search filter. */
+  folderNames: Map<string, string>
 }
 
 const sources = new Map<string, SourceEntry>()
@@ -259,6 +263,7 @@ function isHiddenFolder(folder: IPSTFolder): boolean {
 async function buildFolderTree(folder: IPSTFolder, entry: SourceEntry): Promise<FolderNode> {
   const id = String(folder.primaryNodeId)
   entry.folders.set(id, folder)
+  entry.folderNames.set(id, safe(() => folder.displayName, '') || '')
   const subs = await safeAsync(() => folder.getSubFolders(), [] as IPSTFolder[])
   const children: FolderNode[] = []
   for (const sub of subs) {
@@ -1192,6 +1197,12 @@ const api = {
     return 'pong'
   },
 
+  /** Tell the worker what a source is called, so `mailbox:` can match it. */
+  async setSourceLabel(sourceId: string, label: string): Promise<void> {
+    const entry = sources.get(sourceId)
+    if (entry) entry.label = label
+  },
+
   /** Open a PST/OST File, walk its folder tree, and return a serializable index. */
   async openSource(sourceId: string, file: File): Promise<SourceIndex> {
     sources.delete(sourceId)
@@ -1218,6 +1229,7 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
+      folderNames: new Map(),
     }
     sources.set(sourceId, entry)
 
@@ -1305,6 +1317,7 @@ const api = {
       searchIds: new Set(),
       tnef: new Map(),
       emailLists: new Map(),
+      folderNames: new Map(),
     }
 
     // Standalone files carry no folder tree, so bucket items into Outlook-like
@@ -1331,6 +1344,7 @@ const api = {
       const g = grouped.get(id)
       if (!g) continue
       entry.folders.set(id, createMsgFolder(id, g.name, g.items, g.cls))
+      entry.folderNames.set(id, g.name)
       children.push({
         id,
         name: g.name,
@@ -1637,7 +1651,7 @@ const api = {
     const terms: string[] = []
     const filters: Record<string, string[]> = {}
     const TOKEN = /(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]*)"|(\S+)/g
-    const KEYS = new Set(['from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after'])
+    const KEYS = new Set(['from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after', 'mailbox', 'folder'])
     let tok: RegExpExecArray | null
     while ((tok = TOKEN.exec(q))) {
       const key = (tok[1] ?? tok[3])?.toLowerCase()
@@ -1693,6 +1707,19 @@ const api = {
       if (filters.person && !filters.person.every((p) =>
         meta.from.toLowerCase().includes(p) || meta.to.toLowerCase().includes(p))) return false
       if (filters.has?.some((h) => h.startsWith('attach')) && !meta.hasAttachments) return false
+      // Scope: limit the search to a mailbox or a folder by name. Several
+      // values are treated as "any of", so `folder:inbox folder:sent` widens
+      // rather than contradicting itself.
+      if (filters.mailbox) {
+        const label = (sources.get(meta.sourceId)?.label ?? '').toLowerCase()
+        if (!filters.mailbox.some((m) => label.includes(m))) return false
+      }
+      if (filters.folder) {
+        const name = (
+          sources.get(meta.sourceId)?.folderNames.get(meta.folderId) ?? ''
+        ).toLowerCase()
+        if (!filters.folder.some((f) => name.includes(f))) return false
+      }
       if (filters.is) {
         for (const f of filters.is) {
           // An unknown value matches nothing: silently ignoring it would

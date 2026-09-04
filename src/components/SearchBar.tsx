@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { pst } from '../worker/client'
 import { Close, Search, Spinner } from './icons'
@@ -6,6 +6,7 @@ import { Close, Search, Spinner } from './icons'
 /** Split a query into panel fields (known key:value pairs) plus free words. */
 function parseQuery(q: string) {
   const f = { words: [] as string[], from: '', to: '', subject: '', person: '',
+    mailbox: '', folder: '',
     attachment: false, flagged: false, unread: false, importance: '', after: '', before: '' }
   const TOKEN = /(\w+):"([^"]*)"|(\w+):(\S+)|("[^"]*")|(\S+)/g
   let m: RegExpExecArray | null
@@ -16,6 +17,8 @@ function parseQuery(q: string) {
     else if (key === 'to') f.to = val
     else if (key === 'subject') f.subject = val
     else if (key === 'person') f.person = val
+    else if (key === 'mailbox') f.mailbox = val
+    else if (key === 'folder') f.folder = val
     else if (key === 'after') f.after = val
     else if (key === 'before') f.before = val
     else if (key === 'has' && val.toLowerCase().startsWith('attach')) f.attachment = true
@@ -36,6 +39,8 @@ function buildQuery(f: Fields): string {
   if (f.to) parts.push(`to:${quote(f.to)}`)
   if (f.subject) parts.push(`subject:${quote(f.subject)}`)
   if (f.person) parts.push(`person:${quote(f.person)}`)
+  if (f.mailbox) parts.push(`mailbox:${quote(f.mailbox)}`)
+  if (f.folder) parts.push(`folder:${quote(f.folder)}`)
   if (f.attachment) parts.push('has:attachment')
   if (f.importance) parts.push(`is:${f.importance}`)
   if (f.flagged) parts.push('is:flagged')
@@ -60,6 +65,37 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Text input with people suggestions from the loaded mailboxes. */
+/** Free-text input offering the names already present in the open mailboxes. */
+function ListInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+}) {
+  const listId = useId()
+  return (
+    <>
+      <input
+        className={inputCls}
+        list={listId}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 function PersonInput({
   value,
   onChange,
@@ -155,6 +191,20 @@ export function SearchBar() {
   const searching = useApp((s) => s.searching)
   const [panelOpen, setPanelOpen] = useState(false)
   const [fields, setFields] = useState<Fields>(() => parseQuery(''))
+  const sources = useApp((s) => s.sources)
+  const mailboxNames = useMemo(
+    () => sources.filter((s) => s.status === 'ready').map((s) => s.label).filter(Boolean),
+    [sources],
+  )
+  const folderNames = useMemo(() => {
+    const names = new Set<string>()
+    const walk = (n: { name: string; children: { name: string; children: unknown[] }[] }) => {
+      if (n.name) names.add(n.name)
+      for (const c of n.children) walk(c as never)
+    }
+    for (const src of sources) if (src.index) walk(src.index.rootFolder as never)
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [sources])
   const wrapRef = useRef<HTMLDivElement>(null)
 
   // Debounce the search as the user types.
@@ -245,6 +295,22 @@ export function SearchBar() {
                 value={fields.person}
                 onChange={(v) => set({ person: v })}
                 placeholder="Sender or any recipient, incl. Cc/Bcc"
+              />
+            </Field>
+            <Field label="Mailbox">
+              <ListInput
+                value={fields.mailbox}
+                onChange={(v) => set({ mailbox: v })}
+                options={mailboxNames}
+                placeholder="All mailboxes"
+              />
+            </Field>
+            <Field label="Folder">
+              <ListInput
+                value={fields.folder}
+                onChange={(v) => set({ folder: v })}
+                options={folderNames}
+                placeholder="All folders"
               />
             </Field>
             <Field label="After">
