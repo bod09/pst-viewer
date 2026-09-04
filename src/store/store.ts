@@ -93,6 +93,35 @@ interface AppState {
   exportEml: (sourceId: string, messageId: string) => void
 }
 
+/**
+ * Remembers only that *a* mailbox was open in this tab, so that if the browser
+ * reloads the page (it discards tabs to reclaim memory) the empty screen can
+ * explain itself rather than look like lost work. Deliberately just a flag:
+ * recording which files someone opened would leave exactly the trace this
+ * tool exists to avoid. Per-tab, and gone when the tab closes.
+ */
+const HAD_MAILBOX_KEY = 'pstviewer.hadMailbox'
+
+export function noteMailboxOpen(open: boolean): void {
+  try {
+    if (open) sessionStorage.setItem(HAD_MAILBOX_KEY, '1')
+    else sessionStorage.removeItem(HAD_MAILBOX_KEY)
+  } catch {
+    /* private mode, or storage disabled: the note is a nicety */
+  }
+}
+
+/** True when this tab had a mailbox open before the page was reloaded. */
+export function tookMailboxWithIt(): boolean {
+  try {
+    const had = sessionStorage.getItem(HAD_MAILBOX_KEY) === '1'
+    sessionStorage.removeItem(HAD_MAILBOX_KEY)
+    return had
+  } catch {
+    return false
+  }
+}
+
 let counter = 0
 const uid = () => `s${++counter}-${Date.now().toString(36)}`
 const stripExt = (n: string) => n.replace(/\.[^.]+$/, '')
@@ -219,6 +248,7 @@ export const useApp = create<AppState>((set, get) => {
           ),
           expanded: { ...s.expanded, [fkey(id, index.rootFolder.id)]: true },
         }))
+        noteMailboxOpen(true)
 
         // The worker needs the sidebar label so `mailbox:` can match it.
         void pst.setSourceLabel(id, get().sources.find((s) => s.id === id)?.label ?? '')
@@ -618,8 +648,12 @@ export const useApp = create<AppState>((set, get) => {
       void pst.closeSource(id)
       set((s) => {
         const sources = s.sources.filter((src) => src.id !== id)
-        // Removing the last mailbox returns to a clean slate.
-        if (sources.length === 0) return freshState()
+        // Removing the last mailbox returns to a clean slate. Closing them by
+        // hand is not something to explain later.
+        if (sources.length === 0) {
+          noteMailboxOpen(false)
+          return freshState()
+        }
 
         const wasSelected = s.selection.sourceId === id
         // Drop anything tied to the removed source.
@@ -643,6 +677,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     clearSources: () => {
+      noteMailboxOpen(false)
       for (const src of get().sources) void pst.closeSource(src.id)
       set(freshState())
     },

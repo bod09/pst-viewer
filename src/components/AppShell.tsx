@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useApp } from '../store/store'
+import { useApp, tookMailboxWithIt } from '../store/store'
 import { DropZone } from './DropZone'
 import { NavPane } from './NavPane'
 import { MessageList } from './MessageList'
@@ -141,6 +141,10 @@ function DropRejected({ message, onDone }: { message: string; onDone: () => void
 }
 
 function EmptyState() {
+  // Checked once, on the way in: if this tab had a mailbox open before the
+  // page reloaded, say so. Coming back to an empty screen with no explanation
+  // reads as lost work rather than as a browser reclaiming memory.
+  const [reloaded] = useState(tookMailboxWithIt)
   return (
     <div className="relative h-full">
       <div className="absolute left-4 top-3 z-10 flex items-center gap-2.5">
@@ -149,6 +153,15 @@ function EmptyState() {
       <div className="absolute right-4 top-3 z-10">
         <SettingsButton />
       </div>
+      {reloaded && (
+        <div
+          role="status"
+          className="absolute left-1/2 top-16 z-10 max-w-md -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900/90 px-4 py-3 text-center text-sm leading-relaxed text-slate-300"
+        >
+          This page was reloaded, so the mailbox that was open here has closed. Open it again
+          to carry on.
+        </div>
+      )}
       <DropZone />
     </div>
   )
