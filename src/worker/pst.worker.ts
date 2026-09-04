@@ -550,8 +550,18 @@ function codepageToLabel(cp?: number): string {
       return 'iso-2022-jp'
     case 51932:
       return 'euc-jp'
+    case 874:
+      return 'windows-874'
+    case 10000:
+      return 'macintosh'
+    case 20866:
+      return 'koi8-r'
+    case 21866:
+      return 'koi8-u'
     default:
-      return 'utf-8'
+      // An unknown code page is far more likely to be some 8-bit encoding than
+      // UTF-8, and windows-1252 at least keeps the ASCII half readable.
+      return cp && cp !== 1200 ? 'windows-1252' : 'utf-8'
   }
 }
 
