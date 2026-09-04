@@ -574,15 +574,34 @@ function decodeBinary(buf: ArrayBuffer, cp?: number): string {
   }
 }
 
-function bodyCodepage(m: IPSTMessage): number | undefined {
-  const cp = safe(() => m.getProperty(PR_INTERNET_CPID)?.value, undefined)
-  return typeof cp === 'number' ? cp : undefined
+/** PidTagMessageCodepage: the code page of the message's own 8-bit strings. */
+const PR_MESSAGE_CODEPAGE = 0x3ffd
+
+/**
+ * Which code page a body is written in.
+ *
+ * The HTML body is tagged by the internet code page, but a plain-text body is
+ * in the message's own one, and the two can differ: a message received as
+ * iso-2022-jp carries its text as Shift-JIS. Reading text with the transport
+ * code page turns those bodies into nonsense, so each is asked for its own,
+ * falling back to the other when only one is set.
+ */
+function bodyCodepage(m: IPSTMessage, forText = false): number | undefined {
+  const read = (tag: number) => {
+    const v = safe(() => m.getProperty(tag)?.value, undefined)
+    return typeof v === 'number' && v > 0 ? v : undefined
+  }
+  const internet = read(PR_INTERNET_CPID)
+  const message = read(PR_MESSAGE_CODEPAGE)
+  return forText ? (message ?? internet) : (internet ?? message)
 }
 
-function propString(m: IPSTMessage, key: number): string {
+function propString(m: IPSTMessage, key: number, forText = false): string {
   const value = safe(() => m.getProperty(key)?.value, undefined)
   if (typeof value === 'string') return value
-  if (value instanceof ArrayBuffer && value.byteLength > 0) return decodeBinary(value, bodyCodepage(m))
+  if (value instanceof ArrayBuffer && value.byteLength > 0) {
+    return decodeBinary(value, bodyCodepage(m, forText))
+  }
   return ''
 }
 
@@ -785,7 +804,7 @@ export function deEncapsulateRtf(rtf: string, cp?: number): { html: string; text
 /** Extract the best HTML + text body, covering bodyHTML, PR_HTML binary, and RTF. */
 function extractBodies(m: IPSTMessage): { html: string; text: string } {
   let html = safe(() => m.bodyHTML, '') || propString(m, PR_HTML)
-  let text = safe(() => m.body, '') || propString(m, PR_BODY)
+  let text = safe(() => m.body, '') || propString(m, PR_BODY, true)
   if (!html) {
     const rtf = safe(() => m.bodyRTF, '')
     if (rtf) {
@@ -910,7 +929,7 @@ function buildAppointmentCard(m: IPSTMessage): AppointmentCard {
 // One-off EntryID (MS-OXCDATA): 4-byte flags + 16-byte UID + 2-byte version + 2-byte
 // flags, then 3 null-terminated strings (display name, address type, email). The
 // 0x8000 flag marks the strings as UTF-16LE rather than 8-bit.
-function parseOneOffMember(bytes: Uint8Array): { name: string; email: string } | null {
+function parseOneOffMember(bytes: Uint8Array, codepage?: number): { name: string; email: string } | null {
   if (bytes.length < 26) return null
   const flags = bytes[22] | (bytes[23] << 8)
   const unicode = (flags & 0x8000) !== 0
@@ -925,7 +944,11 @@ function parseOneOffMember(bytes: Uint8Array): { name: string; email: string } |
     }
     let end = off
     while (end < bytes.length && bytes[end] !== 0) end++
-    const s = new TextDecoder('utf-8').decode(bytes.subarray(off, end))
+    // A non-Unicode entry is in the message's code page, not UTF-8; assuming
+    // UTF-8 turns an accented or non-Latin member name into nonsense.
+    const s = new TextDecoder(codepageToLabel(codepage), { fatal: false }).decode(
+      bytes.subarray(off, end),
+    )
     off = end + 1
     return s
   }
@@ -956,7 +979,7 @@ function buildDistListCard(m: IPSTMessage): DistListCard {
           : item instanceof Uint8Array
             ? item
             : null
-      const parsed = buf ? parseOneOffMember(buf) : null
+      const parsed = buf ? parseOneOffMember(buf, bodyCodepage(m, true)) : null
       if (parsed) members.push(parsed)
     }
   } catch {
@@ -1443,7 +1466,13 @@ const api = {
         children: [],
       })
     }
-    if (failed && children.length) entry.extraUnreadable = new Map([[children[0].id, failed]])
+    if (failed && children.length) {
+      // Files that would not parse belong to no folder, so put the count on
+      // Messages rather than whichever bucket happens to be first: a warning
+      // about unreadable mail sitting on Contacts reads as a different problem.
+      const home = children.find((c) => c.name === 'Messages') ?? children[0]
+      entry.extraUnreadable = new Map([[home.id, failed]])
+    }
     sources.set(sourceId, entry)
 
     const label =

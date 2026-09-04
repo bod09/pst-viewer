@@ -11,4 +11,14 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 64
+    # Serving static files needs very little; a ceiling means a runaway cannot
+    # take the host down with it.
+    mem_limit: 256m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped

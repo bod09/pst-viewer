@@ -365,6 +365,8 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
             }}
             className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-200"
             data-tip={expanded ? 'Collapse' : 'Expand'}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.name}`}
+            tabIndex={-1}
           >
             <Icon
               className={`h-4 w-4 group-hover/row:hidden ${selected ? 'text-sky-300' : 'text-slate-400'}`}

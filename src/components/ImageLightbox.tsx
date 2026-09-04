@@ -79,13 +79,14 @@ export function ImageLightbox({ src, onClose }: { src: string; onClose: () => vo
         onClick={onClose}
         className="fixed right-4 top-4 z-10 rounded-full bg-slate-800/80 p-2 text-slate-200 transition hover:bg-slate-700"
         data-tip="Close (Esc)"
+        aria-label="Close image"
       >
         <Close className="h-5 w-5" />
       </button>
       <div className="flex min-h-full w-max min-w-full items-center justify-center p-4">
         <img
           src={src}
-          alt=""
+          alt="Attached picture, shown full screen"
           draggable={false}
           onLoad={(e) => setNatural(e.currentTarget.naturalWidth)}
           onClick={onImgClick}
