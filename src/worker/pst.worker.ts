@@ -1108,11 +1108,20 @@ async function buildMessageContent(
         const res = await extractSmime(raw)
         if (res.kind === 'signed') {
           smimeBody = res.body
-          const at = attachments.findIndex((x) => x.index === p7mIdx)
-          if (at !== -1) attachments.splice(at, 1)
+          // The envelope holds the real body, and may hold attachments we do
+          // not unpack, so the chip stays: hiding it would leave the reader no
+          // way to reach anything inside it.
+          if (res.body.html || res.body.text) {
+            smimeNote = null
+          }
         } else if (res.kind === 'encrypted') {
           smimeNote =
             "This is an encrypted S/MIME message. It cannot be read without the recipient's private key."
+        } else {
+          // Otherwise the reader would show a completely blank message.
+          smimeNote =
+            'This message is wrapped in an S/MIME envelope that could not be decoded. ' +
+            'The original is attached as smime.p7m.'
         }
       }
     }
@@ -1663,8 +1672,16 @@ const api = {
     // Field filters over the in-memory metadata.
     const has = (hay: string, needles: string[] | undefined) =>
       !needles || needles.every((n) => hay.toLowerCase().includes(n))
+    // A bare date means that day in the reader's own timezone. Date.parse
+    // treats "2024-01-01" as UTC midnight, which in other zones pulls in the
+    // evening before or drops the morning of.
     const dateBound = (v: string[] | undefined) => {
-      const t = v ? Date.parse(v[v.length - 1]) : NaN
+      if (!v) return null
+      const raw = v[v.length - 1]
+      const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
+      const t = ymd
+        ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime()
+        : Date.parse(raw)
       return Number.isNaN(t) ? null : t
     }
     const before = dateBound(filters.before)
@@ -1678,10 +1695,14 @@ const api = {
       if (filters.has?.some((h) => h.startsWith('attach')) && !meta.hasAttachments) return false
       if (filters.is) {
         for (const f of filters.is) {
-          if (f === 'high' && meta.importance !== 'high') return false
-          if (f === 'low' && meta.importance !== 'low') return false
-          if (f === 'flagged' && !meta.flagged) return false
-          if (f === 'unread' && !meta.unread) return false
+          // An unknown value matches nothing: silently ignoring it would
+          // widen the search when the user meant to narrow it.
+          if (f === 'high') { if (meta.importance !== 'high') return false }
+          else if (f === 'low') { if (meta.importance !== 'low') return false }
+          else if (f === 'flagged') { if (!meta.flagged) return false }
+          else if (f === 'unread') { if (!meta.unread) return false }
+          else if (f === 'read') { if (meta.unread) return false }
+          else return false
         }
       }
       if (before !== null && (meta.date === null || meta.date >= before)) return false

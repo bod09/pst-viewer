@@ -35,6 +35,11 @@ function isJunkEntry(name: string): boolean {
  * fflate's async worker.
  */
 export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
+  // Files unpacked from a zip inherit the zip's own timestamp, so reopening
+  // the same archive recognises them again. Stamping them with the current
+  // time instead would miss the search-index cache on every open and store
+  // another full copy of the index each time.
+  const srcModified = zipFile.lastModified
   const psts: ExtractedPst[] = []
   const msgs: ExtractedPst[] = []
   const otherFiles: string[] = []
@@ -64,9 +69,9 @@ export async function scanZipForPsts(zipFile: File): Promise<ZipScanResult> {
       if (!bytes || bytes.length === 0) continue
       const name = path.split('/').pop() || path
       if (PST_ENTRY.test(path)) {
-        psts.push({ name, path, file: new File([bytes], name) })
+        psts.push({ name, path, file: new File([bytes], name, { lastModified: srcModified }) })
       } else if (MSG_ENTRY.test(path)) {
-        msgs.push({ name, path, file: new File([bytes], name) })
+        msgs.push({ name, path, file: new File([bytes], name, { lastModified: srcModified }) })
       } else if (ZIP_ENTRY.test(path) && depth < MAX_DEPTH) {
         await scan(bytes, depth + 1)
       }
