@@ -75,12 +75,33 @@ export function extractMimeBody(input: Uint8Array, depth = 0): MimeBody {
   if (ct.startsWith('multipart/')) {
     const boundary = /boundary="?([^";]+)"?/i.exec(ctRaw)?.[1]
     if (!boundary) return result
-    const parts = latin1(body).split('--' + boundary)
-    for (let i = 1; i < parts.length; i++) {
-      if (parts[i].startsWith('--')) break
-      const sub = extractMimeBody(toBytes(parts[i].replace(/^\r?\n/, '')), depth + 1)
-      if (!result.html && sub.html) result.html = sub.html
-      if (!result.text && sub.text) result.text = sub.text
+    // A boundary only counts at the start of a line. Splitting on the bare
+    // string would also cut wherever those characters happen to appear inside
+    // encoded content, which breaks the part it appears in.
+    const escaped = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const delimiter = new RegExp(`(?:^|\r?\n)--${escaped}(--)?[ \t]*(?=\r?\n|$)`, 'g')
+    const raw = latin1(body)
+    const pieces: string[] = []
+    let last = -1
+    let hit: RegExpExecArray | null
+    while ((hit = delimiter.exec(raw))) {
+      if (last >= 0) pieces.push(raw.slice(last, hit.index))
+      if (hit[1]) break // the closing --boundary--
+      last = hit.index + hit[0].length
+    }
+    // multipart/alternative lists the same content simplest first, so the last
+    // usable version wins there; elsewhere the first body part is the body.
+    const alternative = ct.startsWith('multipart/alternative')
+    for (const piece of pieces) {
+      const split = /\r\n\r\n|\n\n/.exec(piece)
+      const partHeaders = parseHeaders(split ? piece.slice(0, split.index) : piece)
+      // An attached file is not the message body, even when it is text.
+      if ((partHeaders.get('content-disposition') || '').toLowerCase().trim().startsWith('attachment')) {
+        continue
+      }
+      const sub = extractMimeBody(toBytes(piece.replace(/^\r?\n/, '')), depth + 1)
+      if (sub.html && (alternative || !result.html)) result.html = sub.html
+      if (sub.text && (alternative || !result.text)) result.text = sub.text
     }
   } else if (ct.startsWith('text/html')) {
     result.html = decodeText(headers, body)
