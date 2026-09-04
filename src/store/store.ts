@@ -5,6 +5,7 @@ import { scanZipForPsts } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
 import { buildEml, downloadBlob, emlFilename, type EmlAttachment } from '../lib/emlExport'
 import { getCachedOcr, putCachedOcr, hashImageBytes } from '../lib/ocrCache'
+import { clearCachedImages } from '../lib/imageCache'
 import type { Worker as OcrWorker } from 'tesseract.js'
 import type { FolderNode, MessageContent, MessageMeta, OcrTarget, SearchHit, SourceIndex } from '../types'
 
@@ -554,6 +555,8 @@ export const useApp = create<AppState>((set, get) => {
     setAllowRemoteContent: (v) => {
       writeBool(REMOTE_CONTENT_KEY, v)
       set({ allowRemoteContent: v })
+      // Turning it off should not leave a record of what was already fetched.
+      if (!v) void clearCachedImages()
     },
 
     setNavWidth: (w) => {

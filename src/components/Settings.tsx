@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../store/store'
 import { getUserAccent, setUserAccent, getUserTheme, setUserTheme } from '../lib/branding'
 import { Dialog } from './Dialog'
+import { cachedImageCount, clearCachedImages } from '../lib/imageCache'
 
 export function GearIcon({ className }: { className?: string }) {
   return (
@@ -101,6 +102,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             label="Load images from the internet"
           />
         </div>
+        <CachedImagesRow />
         <div className="flex items-center justify-between gap-6">
           <div>
             <div className="text-sm font-medium text-slate-100">Show empty folders</div>
@@ -129,6 +131,45 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         />
       </div>
     </Dialog>
+  )
+}
+
+
+/**
+ * Images already fetched from the internet are kept so a sender is not
+ * contacted again on a re-read. That is also a record of what the mail
+ * referenced, so it can be emptied here; switching the setting above off
+ * empties it too.
+ */
+function CachedImagesRow() {
+  const [count, setCount] = useState<number | null>(null)
+  const [clearing, setClearing] = useState(false)
+  const refresh = () => void cachedImageCount().then(setCount)
+  useEffect(refresh, [])
+  if (!count) return null
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <div className="text-sm font-medium text-slate-100">Pictures saved from the internet</div>
+        <div className="mt-1 text-xs leading-relaxed text-slate-400">
+          {count} {count === 1 ? 'picture has' : 'pictures have'} been kept on this device so
+          they do not have to be fetched again. Clearing them leaves nothing behind about what
+          the mail linked to.
+        </div>
+      </div>
+      <button
+        disabled={clearing}
+        onClick={async () => {
+          setClearing(true)
+          await clearCachedImages()
+          setClearing(false)
+          refresh()
+        }}
+        className="shrink-0 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700/60 disabled:opacity-60"
+      >
+        {clearing ? 'Clearing…' : 'Clear'}
+      </button>
+    </div>
   )
 }
 
