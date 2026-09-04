@@ -290,7 +290,22 @@ function DocxView({ bytes }: { bytes: Uint8Array }) {
         })
       })
       .then(() => {
-        if (alive) setLoading(false)
+        if (!alive) return
+        // Links come from the document's own relationships, unchecked, and
+        // this renders into the app's document: only web addresses stay
+        // clickable, and they open in a new tab so the mailbox is not lost.
+        if (el) {
+          for (const a of el.querySelectorAll('a[href]')) {
+            const href = (a.getAttribute('href') ?? '').trim()
+            if (/^https?:\/\/|^mailto:/i.test(href)) {
+              a.setAttribute('target', '_blank')
+              a.setAttribute('rel', 'noopener noreferrer')
+            } else {
+              a.removeAttribute('href')
+            }
+          }
+        }
+        setLoading(false)
       })
       .catch(() => {
         if (alive) setError(true)

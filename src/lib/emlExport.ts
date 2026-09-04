@@ -31,6 +31,21 @@ function encodeWord(s: string): string {
   return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${base64Text(s)}?=`
 }
 
+/**
+ * A value safe to place inside a quoted MIME parameter. A filename carrying a
+ * quote, a semicolon or a line break would otherwise close the parameter and
+ * let the rest be read as headers, which matters when the exported file is
+ * evidence someone else will open.
+ */
+function quotedParam(s: string): string {
+  const plain = s.replace(/[\r\n]+/g, ' ')
+  if (!/^[\x20-\x7e]*$/.test(plain)) return `=?UTF-8?B?${base64Text(plain)}?=`
+  return plain.replace(/["\\]/g, '_')
+}
+
+/** Strip anything that could break out of a header line. */
+const headerSafe = (s: string): string => s.replace(/[\r\n<>]+/g, '')
+
 function formatAddress(r: RecipientInfo): string {
   if (!r.email) return encodeWord(r.name || '')
   return r.name ? `${encodeWord(r.name)} <${r.email}>` : `<${r.email}>`
@@ -82,14 +97,14 @@ function bodyPart(content: MessageContent): string {
       `--${b}\r\n` +
       `Content-Type: ${img.mime || 'application/octet-stream'}\r\n` +
       `Content-Transfer-Encoding: base64\r\n` +
-      `Content-ID: <${img.cid}>\r\n` +
+      `Content-ID: <${headerSafe(img.cid)}>\r\n` +
       `Content-Disposition: inline\r\n\r\n${fold(base64(img.data))}\r\n`
   }
   return s + `--${b}--\r\n`
 }
 
 function attachmentPart(a: EmlAttachment): string {
-  const name = encodeWord(a.name || 'attachment')
+  const name = quotedParam(a.name || 'attachment')
   return (
     `Content-Type: ${a.mime || 'application/octet-stream'}; name="${name}"\r\n` +
     `Content-Transfer-Encoding: base64\r\n` +

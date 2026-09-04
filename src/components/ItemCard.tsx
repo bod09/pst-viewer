@@ -6,8 +6,13 @@ function dateOnly(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+/** A safe href for a website field. Only web addresses are linked, so a
+ *  record carrying something like a javascript: URL cannot be clicked. */
 function withProtocol(url: string): string {
-  return /^[a-z]+:\/\//i.test(url) ? url : `https://${url}`
+  const trimmed = url.trim()
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return '' // some other scheme: not linkable
+  return `https://${trimmed}`
 }
 
 function timeRange(start: number | null, end: number | null, allDay: boolean): string {
