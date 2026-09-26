@@ -12,6 +12,7 @@ import {
 } from './msg'
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
+import { pstOptions } from './pstOptions'
 import {
   makeChunkedReader,
   beginReadingPass,
@@ -1601,7 +1602,7 @@ const api = {
     let reader: ChunkedReader | undefined
     try {
       reader = makeChunkedReader(file)
-      pstFile = await openPst(reader)
+      pstFile = await openPst(reader, pstOptions)
     } catch (primaryError) {
       reader = undefined
       const attempt = await safeAsync(() => salvageOpenPst(file), null)
@@ -1790,23 +1791,32 @@ const api = {
     const listed = entry.metaLists.get(folderId)
     if (listed) return listed
 
-    let emails: IPSTMessage[] = []
+    let sequence: MessageSequence | null = null
     let enumFailed = false
     try {
-      emails = await folderEmails(entry, folderId)
+      sequence = await folderSequence(entry, folderId)
     } catch {
       enumFailed = true
     }
     const metas: MessageMeta[] = []
+    const readable: IPSTMessage[] = []
     let failed = 0
-    for (const m of emails) {
+    for (let index = 0; index < (sequence?.count ?? 0); index++) {
       try {
-        metas.push(toMeta(m, folderId))
+        const m = await sequence!.get(index)
+        const meta = toMeta(m, folderId)
+        metas.push(meta)
+        readable.push(m)
+        entry.messages.set(meta.id, m)
+        entry.locationById.set(meta.id, { folderId, index })
       } catch {
         // Skip an individual unreadable message rather than failing the folder.
         failed++
       }
     }
+    // Retain only successfully parsed handles, so cold-folder eviction still
+    // releases them after indexing without a broken item hiding the whole list.
+    if (sequence && !entry.emailLists.has(folderId)) entry.emailLists.set(folderId, readable)
     // If the whole table was unreadable, fall back to the folder's declared count
     // so the user still learns the contents are damaged.
     const unreadable = enumFailed
