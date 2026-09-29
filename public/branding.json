@@ -2,6 +2,7 @@
   "name": "PST Viewer",
   "tagline": "Local · Offline · Private",
   "logo": "",
+  "logoSize": 0,
   "accent": "",
   "theme": ""
 }

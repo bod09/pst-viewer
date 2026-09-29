@@ -59,9 +59,9 @@ See [DEPLOY.md](DEPLOY.md) for all options: GitHub Pages, Docker, Caddy (`npm ru
 
 ## Branding
 
-A deployment can be rebranded (name, tagline, logo, accent and theme colours)
-with no rebuild. Users can still pick their own colours in Settings, which win
-on their device.
+A deployment can be rebranded (name, tagline, logo and its size, accent and
+theme colours) with no rebuild. Users can still pick their own colours in
+Settings, which win on their device.
 
 **Docker** - set environment variables. The logo is a URL: mount an image
 file next to the app, point at a hosted one, or use a `data:` URI.
@@ -73,6 +73,7 @@ file next to the app, point at a hosted one, or use a `data:` URI.
       BRAND_ACCENT: "#7c3aed"
       BRAND_THEME: "#1e293b"
       BRAND_LOGO: "/logo.svg"
+      BRAND_LOGO_SIZE: "40"
     volumes:
       - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
 ```
@@ -86,6 +87,7 @@ environment variables take precedence):
   "name": "Acme Mail Archive",
   "tagline": "Internal use only",
   "logo": "logo.svg",
+  "logoSize": 40,
   "accent": "#7c3aed",
   "theme": "#1e293b"
 }
@@ -94,6 +96,11 @@ environment variables take precedence):
 - `name` - shown in the header and the browser tab
 - `tagline` - the short line under the name
 - `logo` - image URL for the header logo; empty keeps the default icon
+- `logoSize` - logo height in pixels (16 to 44, default 28). The width follows
+  the image's own proportions, so a wide wordmark stays readable instead of
+  being squeezed into a square. In the narrow mailbox pane a wide logo is
+  scaled down to leave room for the name, so it can end up shorter than asked;
+  widening the pane gives it the full height
 - `accent` - any CSS colour; the UI's accent shades are derived from it
 - `theme` - base colour for backgrounds and panels; its hue, vividness and
   lightness set the whole scheme (a light colour gives a light theme)

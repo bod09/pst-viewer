@@ -14,16 +14,31 @@ export interface Branding {
   tagline: string
   /** Image URL for the header logo (path, or data: URI). Empty = default icon. */
   logo: string
+  /** Header logo height in pixels. A wordmark needs more room than a square
+   *  mark to read at the same weight as the name beside it. */
+  logoSize: number
   /** Accent colour (any CSS colour). Tints are derived from it. Empty = default. */
   accent: string
   /** Theme base colour driving backgrounds/panels/text. Empty = default dark. */
   theme: string
 }
 
+/**
+ * Header logo height, in pixels.
+ *
+ * The nav pane's header is a fixed 56px bar, so the logo has to stay inside
+ * it for the row to keep its shape. The range leaves a little breathing room
+ * at the top of that bar rather than letting a logo fill it edge to edge.
+ */
+export const DEFAULT_LOGO_SIZE = 28
+const MIN_LOGO_SIZE = 16
+const MAX_LOGO_SIZE = 44
+
 export const DEFAULT_BRANDING: Branding = {
   name: 'PST Viewer',
   tagline: 'Local · Offline · Private',
   logo: '',
+  logoSize: DEFAULT_LOGO_SIZE,
   accent: '',
   theme: '',
 }
@@ -200,6 +215,15 @@ function apply(b: Branding) {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
+/** A logo height from config, kept inside what the header row can show.
+ *  Anything missing or unreadable falls back to the default rather than
+ *  collapsing the logo to nothing. */
+const logoSize = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(str(v))
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_LOGO_SIZE
+  return Math.min(MAX_LOGO_SIZE, Math.max(MIN_LOGO_SIZE, Math.round(n)))
+}
+
 /** Load branding.json (if customised) and apply it. Safe to call fire-and-forget. */
 export async function initBranding(): Promise<void> {
   // The user's colour choices apply even if the branding file never loads.
@@ -215,6 +239,7 @@ export async function initBranding(): Promise<void> {
       name: str(o.name) || DEFAULT_BRANDING.name,
       tagline: str(o.tagline) || DEFAULT_BRANDING.tagline,
       logo: str(o.logo),
+      logoSize: logoSize(o.logoSize),
       accent: str(o.accent),
       theme: str(o.theme),
     })

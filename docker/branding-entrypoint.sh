@@ -13,12 +13,22 @@ esc() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-if [ -n "${BRAND_NAME:-}${BRAND_TAGLINE:-}${BRAND_LOGO:-}${BRAND_ACCENT:-}${BRAND_THEME:-}" ]; then
+# The logo size goes into the JSON as a number, not a string, so anything that
+# is not a plain integer has to become one. A stray "40px" left in unquoted
+# would make the whole file unparseable and lose every other brand setting
+# with it; 0 means "use the default".
+num() {
+  n=$(printf '%s' "${1:-}" | tr -cd '0-9' | sed 's/^0*//')
+  printf '%s' "${n:-0}"
+}
+
+if [ -n "${BRAND_NAME:-}${BRAND_TAGLINE:-}${BRAND_LOGO:-}${BRAND_LOGO_SIZE:-}${BRAND_ACCENT:-}${BRAND_THEME:-}" ]; then
   cat > /tmp/branding.json <<JSON
 {
   "name": "$(esc "${BRAND_NAME:-PST Viewer}")",
   "tagline": "$(esc "${BRAND_TAGLINE:-Local · Offline · Private}")",
   "logo": "$(esc "${BRAND_LOGO:-}")",
+  "logoSize": $(num "${BRAND_LOGO_SIZE:-}"),
   "accent": "$(esc "${BRAND_ACCENT:-}")",
   "theme": "$(esc "${BRAND_THEME:-}")"
 }

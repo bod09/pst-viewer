@@ -120,6 +120,7 @@ full `branding.json` works too - see the Branding section in README.md.)
       BRAND_ACCENT: "#7c3aed"
       BRAND_THEME: "#1e293b"
       BRAND_LOGO: "/logo.svg"
+      BRAND_LOGO_SIZE: "40"
     volumes:
       - ./logo.svg:/usr/share/nginx/html/logo.svg:ro
 ```
