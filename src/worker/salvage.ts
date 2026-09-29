@@ -1,5 +1,6 @@
 import { openPst, type IPSTFile, type ReadFileApi } from '@hiraokahypertools/pst-extractor'
 import { makeChunkedReader } from './chunkReader'
+import { pstOptions } from './pstOptions'
 
 /**
  * Built-in recovery for damaged PST/OST files.
@@ -402,7 +403,7 @@ export async function salvageOpenPst(file: File): Promise<SalvageOutcome | null>
   for (const plan of plans) {
     if (!plan) continue
     try {
-      const pst = await openPst(plan.reader)
+      const pst = await openPst(plan.reader, pstOptions)
       const score = await probeQuality(pst)
       if (!best || score > best.score) {
         if (best) await best.pst.close().catch(() => {})
