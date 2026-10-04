@@ -52,6 +52,22 @@ const eml = [
 ].join('\r\n')
 await writeFile(join(outDir, 'mail.eml'), eml)
 
+// Encoded words that try to pass off a different address as the sender (and
+// as a recipient), next to an encoded name that is entirely legitimate. The
+// addresses shown must be the ones outside the encoded words.
+const spoof = [
+  'From: =?UTF-8?Q?IT_Support_<helpdesk@company.example>?= <attacker@evil.example>',
+  'To: =?UTF-8?B?w4lsb8Ovc2U=?= <eloise@example.com>, =?UTF-8?Q?Boss_<ceo@company.example>?= <intern@example.com>',
+  'Subject: Spoofed sender test',
+  'Date: Tue, 12 Mar 2024 11:00:00 +0000',
+  'MIME-Version: 1.0',
+  'Content-Type: text/plain; charset=utf-8',
+  '',
+  'The sender and second recipient carry a different address inside their names.',
+  '',
+].join('\r\n')
+await writeFile(join(outDir, 'spoof-sender.eml'), spoof)
+
 // A .msg is a CFB file: one stream per property, plus a header listing them.
 const streams = {}
 const props = []
@@ -84,4 +100,4 @@ const zip = zipSync({
 })
 await writeFile(join(outDir, 'batch.zip'), Buffer.from(zip))
 
-console.log(`wrote mail.eml, mail.msg and batch.zip to ${outDir}`)
+console.log(`wrote mail.eml, spoof-sender.eml, mail.msg and batch.zip to ${outDir}`)

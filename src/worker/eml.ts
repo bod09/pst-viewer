@@ -1,4 +1,11 @@
-import PostalMime, { type Address, type Attachment, type Email, type Mailbox } from 'postal-mime'
+import PostalMime, {
+  addressParser,
+  decodeWords,
+  type Address,
+  type Attachment,
+  type Email,
+  type Mailbox,
+} from 'postal-mime'
 import { Consts, type IPSTMessage } from '@hiraokahypertools/pst-extractor'
 
 /**
@@ -6,6 +13,54 @@ import { Consts, type IPSTMessage } from '@hiraokahypertools/pst-extractor'
  * presenting the pst-extractor message surface, exactly like the .msg adapters
  * in msg.ts, so the whole worker pipeline works on .eml unchanged.
  */
+
+/** A run of RFC 2047 encoded words. The whitespace between adjacent words is
+ *  not part of the text, so a run is decoded as one. */
+const ENCODED_RUN = /=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=(?:\s+=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=)*/g
+const PLACEHOLDER = /pstvencoded(\d+)x/g
+
+/**
+ * Read an address header the way RFC 2047 intends: structure first, encoded
+ * words decoded afterwards.
+ *
+ * postal-mime decodes encoded words before it looks for addresses, and when it
+ * then finds two it keeps the first. An encoded word can only ever be display
+ * text, but it can carry anything once decoded, so a sender could write
+ *
+ *     From: =?UTF-8?Q?Name_<boss@company.example>?= <attacker@evil.example>
+ *
+ * and have the decoded text's address shown as the sender while the real one
+ * was pushed into the name. Here each run of encoded words is swapped for a
+ * plain token before parsing, so whatever is inside it cannot be mistaken for
+ * structure, and only the names are decoded afterwards. The name above then
+ * reads "Name <boss@company.example>" beside the true address, so the attempt
+ * is visible rather than believed.
+ */
+export function structuredAddresses(raw: string): Address[] {
+  const runs: string[] = []
+  const inert = raw.replace(ENCODED_RUN, (run) => `pstvencoded${runs.push(run) - 1}x`)
+  const decoded = (s: string) => s.replace(PLACEHOLDER, (_, i) => decodeWords(runs[Number(i)]))
+  // An encoded word is not allowed inside an address, so one found there is
+  // kept as written rather than decoded into an address it never was.
+  const verbatim = (s: string) => s.replace(PLACEHOLDER, (_, i) => runs[Number(i)])
+
+  const mailbox = (m: Mailbox): Mailbox[] => {
+    const name = decoded(m.name)
+    const address = verbatim(m.address)
+    if (address) return [{ name, address }]
+    // Nothing outside the encoded words: some mailers encode a whole
+    // "Name <address>" in one go. With no real address to contradict it,
+    // reading one out of the text cannot misattribute anything.
+    const inner = addressParser(name, { flatten: true }).filter(
+      (a): a is Mailbox => !a.group && Boolean(a.address),
+    )
+    return inner.length ? inner : [{ name, address: '' }]
+  }
+
+  return addressParser(inert).flatMap((a): Address[] =>
+    a.group ? [{ name: decoded(a.name), group: a.group.flatMap(mailbox) }] : mailbox(a),
+  )
+}
 
 /** Flatten address groups into plain mailboxes. */
 function mailboxes(list: Address[] | undefined): Mailbox[] {
@@ -193,6 +248,18 @@ class EmlMessageAdapter {
   }
 }
 
+/** Replace postal-mime's reading of the address headers with one that cannot
+ *  be steered by encoded words (see structuredAddresses). */
+function rereadAddresses(email: Email): void {
+  const raw = (key: string) => email.headers.filter((h) => h.key === key).map((h) => h.value)
+  const from = raw('from')
+  if (from.length) email.from = structuredAddresses(from[0])[0]
+  for (const key of ['to', 'cc', 'bcc'] as const) {
+    const values = raw(key)
+    if (values.length) email[key] = structuredAddresses(values.join(', '))
+  }
+}
+
 /** Parse one .eml (RFC822) file into a PST-shaped message adapter. */
 export async function parseEml(data: ArrayBuffer, nodeId: string): Promise<IPSTMessage> {
   const email = await PostalMime.parse(data, {
@@ -207,6 +274,7 @@ export async function parseEml(data: ArrayBuffer, nodeId: string): Promise<IPSTM
     email.headerLines.length > 0 &&
     Boolean(email.subject || email.from || email.date || email.to?.length || email.messageId)
   if (!plausible) throw new Error('not an RFC822 message')
+  rereadAddresses(email)
   return new EmlMessageAdapter(email, nodeId) as unknown as IPSTMessage
 }
 
