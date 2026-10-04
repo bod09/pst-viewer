@@ -118,6 +118,11 @@ There is no server. When you open a file, the browser reads it **directly from y
 
 React + Vite + TypeScript + Tailwind. PST parsing via [`@hiraokahypertools/pst-extractor`](https://www.npmjs.com/package/@hiraokahypertools/pst-extractor), `.msg` parsing via [`@kenjiuno/msgreader`](https://www.npmjs.com/package/@kenjiuno/msgreader), and `.eml` parsing via [`postal-mime`](https://www.npmjs.com/package/postal-mime), all in a Web Worker. Search via MiniSearch, PDF rendering via pdf.js, spreadsheets via SheetJS, Word via docx-preview, OCR via Tesseract.js, zip handling via fflate, HTML sanitizing via DOMPurify, S/MIME (PKCS#7) parsing via node-forge. TNEF (winmail.dat) and MIME are parsed in-house. PWA via vite-plugin-pwa (Workbox).
 
+## Contributing
+
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
+security problem privately, see [SECURITY.md](SECURITY.md).
+
 ## Known limitations
 
 - **PowerPoint (`.pptx`/`.ppt`)** and **OpenDocument text (`.odt`)** attachments are download-only (no reliable in-browser renderer).
