@@ -39,7 +39,7 @@ export function SelectAvatar({
   return (
     <label
       className="group/sel flex cursor-pointer items-center pl-2.5 pr-2.5"
-      data-tip="Select for PDF export"
+      data-tip="Select for export"
       onClick={(e) => e.stopPropagation()}
     >
       <span className="relative flex h-8 w-8 items-center justify-center">

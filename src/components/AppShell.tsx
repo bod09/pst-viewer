@@ -8,9 +8,10 @@ import { SearchBar } from './SearchBar'
 import { SearchResults } from './SearchResults'
 import { Resizer } from './Resizer'
 import { dragHasFiles, filterAccepted } from '../lib/files'
-import { Printer, Spinner } from './icons'
+import { Download, Printer, Spinner } from './icons'
 import { BrandHeader } from './BrandHeader'
 import { SettingsButton } from './Settings'
+import { EmlExportDialog } from './EmlExportDialog'
 
 export function AppShell() {
   const sources = useApp((s) => s.sources)
@@ -106,6 +107,8 @@ export function AppShell() {
 
       {rejected && <DropRejected message={rejected} onDone={() => setRejected(null)} />}
 
+      <EmlExportDialog />
+
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-sky-500/10 backdrop-blur-sm">
           <div className="rounded-2xl border-2 border-dashed border-sky-400 bg-slate-900/80 px-10 py-8 text-lg font-medium text-sky-200">
@@ -172,6 +175,7 @@ function ExportBar() {
   const exporting = useApp((s) => s.exporting)
   const exportSelected = useApp((s) => s.exportSelected)
   const clearExport = useApp((s) => s.clearExport)
+  const exportSelectedEml = useApp((s) => s.exportSelectedEml)
   if (count === 0) return null
 
   const btn =
@@ -188,6 +192,14 @@ function ExportBar() {
           className="rounded-md px-3 py-1.5 text-slate-300 transition hover:bg-slate-800/60"
         >
           Clear
+        </button>
+        <button
+          onClick={exportSelectedEml}
+          className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 font-medium text-slate-200 transition hover:bg-slate-700/60"
+          data-tip="Save each selected email as a .eml file, in folders like the mailbox's"
+        >
+          <Download className="h-4 w-4" />
+          Export EML
         </button>
         {count === 1 ? (
           <button

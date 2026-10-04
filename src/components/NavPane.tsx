@@ -10,6 +10,7 @@ import {
   Calendar,
   Caret,
   Chat,
+  Download,
   Drafts,
   FolderIcon,
   Inbox,
@@ -170,6 +171,7 @@ function NavAddFiles() {
 
 function SourceTree({ source }: { source: Source }) {
   const removeSource = useApp((s) => s.removeSource)
+  const exportFolderEml = useApp((s) => s.exportFolderEml)
   const renameSource = useApp((s) => s.renameSource)
   const showEmpty = useApp((s) => s.showEmptyFolders)
   const [editing, setEditing] = useState(false)
@@ -246,6 +248,16 @@ function SourceTree({ source }: { source: Source }) {
         {source.status === 'error' && <Alert className="h-4 w-4 shrink-0 text-rose-400" />}
         {!editing && (
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            {source.status === 'ready' && source.index && source.index.totalMessages > 0 && (
+              <button
+                onClick={() => exportFolderEml(source.id)}
+                className="text-slate-400 transition hover:text-slate-200"
+                data-tip="Export the whole mailbox as .eml files"
+                aria-label={`Export ${source.label} as .eml files`}
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
             {source.status === 'ready' && (
               <button
                 onClick={startEdit}
@@ -321,6 +333,7 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
   )
   const toggleFolder = useApp((s) => s.toggleFolder)
   const selectFolder = useApp((s) => s.selectFolder)
+  const exportFolderEml = useApp((s) => s.exportFolderEml)
   const showEmpty = useApp((s) => s.showEmptyFolders)
   const childNodes = visibleChildren(node.children, showEmpty)
   const hasChildren = childNodes.length > 0
@@ -382,6 +395,24 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
         </span>
+        {subtreeMessages(node) > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              exportFolderEml(sourceId, node.id)
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 opacity-0 transition hover:text-slate-200 focus-visible:opacity-100 group-hover/row:opacity-100"
+            data-tip={
+              hasChildren
+                ? 'Export this folder and its subfolders as .eml files'
+                : 'Export this folder as .eml files'
+            }
+            aria-label={`Export ${node.name} as .eml files`}
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
+        )}
         {node.messageCount > 0 && (
           <span className="shrink-0 text-[11px] tabular-nums text-slate-400">
             {node.messageCount}

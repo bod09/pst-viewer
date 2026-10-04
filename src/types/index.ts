@@ -218,3 +218,20 @@ export interface SearchHit {
   hasAttachments: boolean
   score: number
 }
+
+/**
+ * One step of writing a message out as an .eml file, sent by the worker to
+ * whoever is saving it. A message arrives as `start`, then its text in one or
+ * more `data` pieces, then `end`. `skip` means the message could not be read:
+ * on its own it is simply counted, and after a `start` it also means the
+ * half-written file should be thrown away. The receiver answers each step
+ * with true to carry on, or false to stop the export there.
+ */
+export type EmlExportStep =
+  | { kind: 'start'; subject: string; date: number | null; folderId: string }
+  | { kind: 'data'; data: Uint8Array }
+  | { kind: 'end' }
+  | { kind: 'skip' }
+
+/** Receives an export's steps; resolves false to stop it. */
+export type EmlExportSink = (step: EmlExportStep) => Promise<boolean>

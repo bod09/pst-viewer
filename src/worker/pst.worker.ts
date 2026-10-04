@@ -20,6 +20,7 @@ import {
   type ChunkedReader,
 } from './chunkReader'
 import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
+import { buildEml, emlParts, type EmlAttachment } from '../lib/emlExport'
 import {
   Consts,
   openPst,
@@ -41,6 +42,7 @@ import type {
   ContactCard,
   DistListCard,
   ContactMatch,
+  EmlExportSink,
   EmbeddedMessageResult,
   FolderMessages,
   FolderNode,
@@ -1580,6 +1582,125 @@ async function runIndexPass(
     return { fromCache: false, complete }
 }
 
+/**
+ * Run `fn` with a message's attachment handles and recovered files (winmail.dat,
+ * S/MIME) registered only for as long as it takes.
+ *
+ * Building a message's content leaves both behind in the source's maps, which
+ * is right for the message being read and wrong for an export: kept for every
+ * message written, they would hold the whole mailbox in memory. Whatever was
+ * there before (the open message's own) is put back afterwards.
+ */
+async function withScratch<T>(entry: SourceEntry, msgId: string, fn: () => Promise<T>): Promise<T> {
+  const attachments = entry.attachments.get(msgId)
+  const recovered = entry.tnef.get(msgId)
+  entry.attachments.delete(msgId)
+  entry.tnef.delete(msgId)
+  try {
+    return await fn()
+  } finally {
+    if (attachments) entry.attachments.set(msgId, attachments)
+    else entry.attachments.delete(msgId)
+    if (recovered) entry.tnef.set(msgId, recovered)
+    else entry.tnef.delete(msgId)
+  }
+}
+
+const utf8 = new TextEncoder()
+
+/**
+ * The attachments to write into a message's .eml.
+ *
+ * Inline images are already written as related parts, so only those are
+ * skipped; anything else marked inline is a real attachment that would
+ * otherwise vanish from the export. A message attached to a message is rebuilt
+ * as its own .eml, so a forwarded mail survives the round trip instead of
+ * being dropped. Call inside withScratch, which holds the handles this reads.
+ */
+async function emlAttachments(
+  entry: SourceEntry,
+  msgId: string,
+  content: MessageContent,
+  depth = 0,
+): Promise<EmlAttachment[]> {
+  const handles = entry.attachments.get(msgId) ?? []
+  const recovered = entry.tnef.get(msgId) ?? []
+  const written = new Set(content.inlineImages.map((i) => i.cid))
+  const files: EmlAttachment[] = []
+  for (const a of content.attachments) {
+    if (a.isEmbeddedMessage) {
+      if (depth >= 3) continue // stop a chain of forwards going on forever
+      const handle = handles[a.index]
+      const inner = handle ? await safeAsync(() => handle.getEmbeddedPSTMessage(), null) : null
+      if (!inner) continue
+      const innerId = `${msgId}/emb${a.index}`
+      const eml = await withScratch(entry, innerId, async () => {
+        const c = await buildMessageContent(inner, innerId, entry)
+        const nested = await emlAttachments(entry, innerId, c, depth + 1)
+        return { subject: c.subject, text: buildEml(c, nested) }
+      })
+      files.push({
+        name: /\.eml$/i.test(a.name) ? a.name : `${a.name || eml.subject || 'message'}.eml`,
+        mime: 'message/rfc822',
+        data: utf8.encode(eml.text).buffer as ArrayBuffer,
+      })
+      continue
+    }
+    if (a.isInline && a.cid && written.has(a.cid)) continue
+    // Negative index = a file recovered from a winmail.dat or S/MIME envelope.
+    if (a.index < 0) {
+      const t = recovered[-1 - a.index]
+      if (t) files.push({ name: a.name || t.name, mime: a.mime || t.mime, data: t.data })
+      continue
+    }
+    const handle = handles[a.index]
+    const data = handle ? safe(() => handle.fileData, undefined) : undefined
+    if (!handle || !data || data.byteLength === 0) continue
+    files.push({
+      name: a.name || attachmentName(handle, a.index, false),
+      mime: a.mime || safe(() => handle.mimeTag, ''),
+      data,
+    })
+  }
+  return files
+}
+
+/**
+ * Write one message out as .eml through `write`, a piece at a time (see
+ * EmlExportStep). A message that cannot be read or rebuilt is reported as a
+ * skip rather than thrown, so one damaged message never ends an export.
+ * Returns false when the receiver asked to stop.
+ */
+async function streamEml(
+  entry: SourceEntry,
+  m: IPSTMessage,
+  msgId: string,
+  folderId: string,
+  write: EmlExportSink,
+): Promise<boolean> {
+  let parts: Generator<string, void, undefined>
+  try {
+    const { content, attachments } = await withScratch(entry, msgId, async () => {
+      const content = await buildMessageContent(m, msgId, entry)
+      return { content, attachments: await emlAttachments(entry, msgId, content) }
+    })
+    parts = emlParts(content, attachments)
+    const start = { kind: 'start', subject: content.subject, date: content.date, folderId } as const
+    if (!(await write(start))) return false
+  } catch {
+    return write({ kind: 'skip' })
+  }
+  try {
+    for (const part of parts) {
+      const data = utf8.encode(part)
+      if (!(await write(Comlink.transfer({ kind: 'data', data }, [data.buffer])))) return false
+    }
+  } catch {
+    return write({ kind: 'skip' })
+  }
+  return write({ kind: 'end' })
+}
+
 const api = {
   async ping(): Promise<'pong'> {
     return 'pong'
@@ -1931,6 +2052,66 @@ const api = {
     entry.messages.set(embId, msg)
     const content = await buildMessageContent(msg, embId, entry)
     return { id: embId, content }
+  },
+
+  /**
+   * Write one folder's messages out as .eml (see streamEml), reading them one
+   * at a time and keeping none. Messages that cannot be read are skipped and
+   * reported through `write`; the result adds those the folder holds but could
+   * not even list, so a damaged folder still accounts for all its mail.
+   */
+  async exportFolderEml(
+    sourceId: string,
+    folderId: string,
+    write: EmlExportSink,
+  ): Promise<{ unlisted: number }> {
+    const entry = sources.get(sourceId)
+    if (!entry) throw new Error('This mailbox is no longer open.')
+    const folder = entry.folders.get(folderId)
+    if (!folder) return { unlisted: 0 }
+    const declared = safe(() => folder.contentCount, 0)
+    const extra = entry.extraUnreadable?.get(folderId) ?? 0
+    // A full read of the folder, so read ahead as indexing does.
+    beginReadingPass()
+    try {
+      const sequence = await readFolderUnderPressure(entry, folderId)
+      // Same rule as the message list: a folder that cannot be read at all
+      // still shows that something in it was lost.
+      if (!sequence) return { unlisted: Math.max(declared, 1) + extra }
+      for (let index = 0; index < sequence.count; index++) {
+        if (!sources.has(sourceId)) throw new Error('This mailbox is no longer open.')
+        let m: IPSTMessage
+        let msgId: string
+        try {
+          m = await sequence.get(index)
+          msgId = String(m.primaryNodeId)
+        } catch {
+          if (!(await write({ kind: 'skip' }))) break
+          continue
+        }
+        if (!(await streamEml(entry, m, msgId, folderId, write))) break
+      }
+      return { unlisted: Math.max(0, declared - sequence.count) + extra }
+    } finally {
+      endReadingPass()
+    }
+  },
+
+  /** Write a single message out as .eml (see streamEml). */
+  async exportMessageEml(sourceId: string, messageId: string, write: EmlExportSink): Promise<void> {
+    const entry = sources.get(sourceId)
+    const m = entry
+      ? await safeAsync(() => messageById(entry, sourceId, messageId), undefined)
+      : undefined
+    if (!entry || !m) {
+      await write({ kind: 'skip' })
+      return
+    }
+    const folderId =
+      entry.locationById.get(messageId)?.folderId ??
+      metaDocs.get(`${sourceId}:${messageId}`)?.folderId ??
+      ''
+    await streamEml(entry, m, messageId, folderId, write)
   },
 
   /**
