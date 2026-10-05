@@ -269,12 +269,16 @@ describe('attachments', () => {
   })
 
   test.each([
-    ['a quote', 'evil".exe'],
-    ['a line break', 'invoice.pdf\r\nContent-Type: text/html\r\n\r\n<script>alert(1)</script>'],
-    ['a semicolon and a second parameter', 'a.txt; filename="b.exe"'],
-    ['a backslash', 'back\\slash".txt'],
-    ['a line break in a non-ASCII name', 'ré\r\nContent-Type: text/html'],
-  ])('a name with %s cannot close its parameter or add a header', async (_what, name) => {
+    ['a quote', 'evil".exe', 'evil_.exe'],
+    [
+      'a line break',
+      'invoice.pdf\r\nContent-Type: text/html\r\n\r\n<script>alert(1)</script>',
+      'invoice.pdf Content-Type: text/html <script>alert(1)</script>',
+    ],
+    ['a semicolon and a second parameter', 'a.txt; filename="b.exe"', 'a.txt; filename=_b.exe_'],
+    ['a backslash', 'back\\slash".txt', 'back_slash_.txt'],
+    ['a line break in a non-ASCII name', 'ré\r\nContent-Type: text/html', 'ré Content-Type: text/html'],
+  ])('a name with %s cannot close its parameter or add a header', async (_what, name, readsBackAs) => {
     const data = noise(32)
     const eml = build(messageContent({ text: 'body' }), [attachment(name, data, 'application/octet-stream')])
     // Exactly the headers this code writes, and nothing the name smuggled in.
@@ -290,6 +294,9 @@ describe('attachments', () => {
     expect(email.html).toBeUndefined()
     expect(email.attachments).toHaveLength(1)
     expect(email.attachments[0].mimeType).toBe('application/octet-stream')
+    // The whole name is still the name: nothing was cut off at a quote, and
+    // nothing after it was read as another parameter.
+    expect(email.attachments[0].filename).toBe(readsBackAs)
     expect(bytesOf(email.attachments[0].content)).toEqual(data)
   })
 
@@ -309,6 +316,13 @@ describe('attachments', () => {
     const got = bytesOf(email.attachments[0].content)
     expect(got.length).toBe(length)
     expect(Buffer.from(got).equals(Buffer.from(data))).toBe(true)
+    // A forgiving parser reads badly joined pieces too, so look at the text
+    // itself: full 76-character lines, and padding only at the very end.
+    const start = eml.indexOf('\r\n\r\n', eml.indexOf('filename="big.bin"')) + 4
+    const lines = eml.slice(start, eml.indexOf('\r\n\r\n--', start)).split('\r\n')
+    expect(lines.slice(0, -1).every((line) => line.length === 76 && !line.includes('='))).toBe(true)
+    expect(lines.at(-1)).toMatch(/^[A-Za-z0-9+/]{1,76}={0,2}$/)
+    expect(lines.join('')).toBe(Buffer.from(data).toString('base64'))
     // No single piece holds the whole attachment.
     expect(Math.max(...parts.map((p) => p.length))).toBeLessThan(PIECE * 1.4)
   })

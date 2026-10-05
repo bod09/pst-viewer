@@ -29,6 +29,27 @@ test.describe('the start page', () => {
     expect(failed).toEqual([])
   })
 
+  test('carries a policy that forbids inline script and talking to other servers', async ({ page }) => {
+    // The last line of defence if a message's markup ever got past the
+    // sanitiser and the sandbox: the page itself will not run it.
+    await page.goto('./')
+    const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content')
+    const directive = (name: string) => policy?.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) ?? ''
+    expect(directive('script-src')).toBe("script-src 'self' 'wasm-unsafe-eval'")
+    expect(directive('connect-src')).toBe("connect-src 'self'")
+    expect(directive('default-src')).toBe("default-src 'self'")
+    expect(directive('object-src')).toBe("object-src 'none'")
+    expect(directive('form-action')).toBe("form-action 'none'")
+    // And the browser enforces it: an inline script added to the page does not run.
+    const ran = await page.evaluate(() => {
+      const script = document.createElement('script')
+      script.textContent = 'window.__inlineRan = true'
+      document.head.appendChild(script)
+      return Boolean((window as unknown as { __inlineRan?: boolean }).__inlineRan)
+    })
+    expect(ran).toBe(false)
+  })
+
   test('raises no errors in the console', async ({ page }) => {
     const errors: string[] = []
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))

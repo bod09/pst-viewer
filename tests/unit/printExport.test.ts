@@ -87,6 +87,16 @@ describe('buildPrintDocument', () => {
       html: '<svg><style>&lt;/style&gt;&lt;img src=x onerror=alert(1)&gt;</style></svg><p>x</p>',
     })
     expect(doc.querySelectorAll('img, [onerror], script')).toHaveLength(0)
+    // Its text is not copied into the page's own style element at all. (If it
+    // were, escaping would still keep it inert; this checks the first line of
+    // defence, not the second.)
+    const carried = [...doc.querySelectorAll('section.email > style')].map((el) => el.textContent).join('')
+    expect(carried).not.toContain('onerror')
+  })
+
+  test('an ordinary style block is carried into the printed page', () => {
+    const doc = print({ html: '<html><head><style>p.note { color: #123456 }</style></head><body><p class="note">x</p></body></html>' })
+    expect(doc.querySelector('section.email > style')?.textContent).toContain('p.note { color: #123456 }')
   })
 
   test('inline pictures are embedded, so they survive into the printed page', () => {
