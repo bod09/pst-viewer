@@ -207,7 +207,7 @@ export function buildEml(content: MessageContent, attachments: EmlAttachment[]):
 }
 
 /** A filesystem-safe .eml filename derived from the subject. */
-export function emlFilename(content: Pick<MessageContent, 'subject'>): string {
+export function emlFilename(content: MessageContent): string {
   const base =
     (content.subject || 'message')
       .replace(/[^\w.-]+/g, '_')
