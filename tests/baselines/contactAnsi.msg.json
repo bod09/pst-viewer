@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "contactAnsi.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "b450645debe2cf0a"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "7d2dc5d6d65b0c29",
+     "from": "b41c463b8ec253b9",
+     "to": "e3b0c44298fc1c14",
+     "date": 1658338598000,
+     "att": false,
+     "cls": "IPM.Contact",
+     "body": "7eb70257593da06f",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

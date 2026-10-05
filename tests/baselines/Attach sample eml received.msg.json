@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "Attach sample eml received.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "04d7b48339271ea6"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "f5f7f8accae6c445",
+     "from": "ba8c7fdb64e4aa14",
+     "to": "4443d638667a5c0f",
+     "date": 1764823096000,
+     "att": true,
+     "cls": "IPM.Note",
+     "body": "8d15d234f1800bf7",
+     "atts": "3d6b0d7e08b63706"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "mail.eml",
+ "full": true,
+ "redacted": false,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "Messages"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "Quarterly zebra report",
+     "from": "Alice Example <alice@example.com>",
+     "to": "Bob Tester",
+     "date": 1710238500000,
+     "att": true,
+     "cls": "IPM.Note",
+     "body": "4e68ad2f4dc14445",
+     "atts": "chart.png"
+    }
+   ]
+  }
+ ]
+}

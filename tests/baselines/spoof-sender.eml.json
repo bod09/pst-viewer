@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "spoof-sender.eml",
+ "full": true,
+ "redacted": false,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "Messages"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "Spoofed sender test",
+     "from": "IT Support <helpdesk@company.example> <attacker@evil.example>",
+     "to": "Éloïse; Boss <ceo@company.example>",
+     "date": 1710241200000,
+     "att": false,
+     "cls": "IPM.Note",
+     "body": "210b25550d38ac1f",
+     "atts": ""
+    }
+   ]
+  }
+ ]
+}

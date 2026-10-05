@@ -31,26 +31,71 @@ offline, installable version, at http://localhost:4173.
 
 ## Checking your change
 
-CI runs `npm run build` on every pull request, which type-checks and builds.
-Run it locally before pushing.
+```bash
+npm run check        # type-check, lint, tests and a production build
+npm run test:e2e     # the built app, driven in a real browser
+```
 
-There is no unit test suite, so `npm test` only prints an error. What there is
-instead is a fidelity check, which drives the real parsing worker over a
-mailbox and compares every message, in order, against a baseline: id, subject,
-sender, recipients, date and a hash of the body.
+CI runs both on every pull request, and a pull request can only be merged once
+they pass. Run them before pushing; together they take about a minute.
 
-If your change touches anything under `src/worker/`, record a baseline before
+| Command | What it checks |
+| --- | --- |
+| `npm run typecheck` | Types, in the app and in the tests |
+| `npm run lint` | Mistakes a type-checker does not see ([oxlint](https://oxc.rs/docs/guide/usage/linter); the rules are in `.oxlintrc.json`) |
+| `npm test` | The parsing, sanitising, search and export code, called directly ([Vitest](https://vitest.dev)). `npm run test:watch` re-runs as you edit |
+| `npm run test:coverage` | The same tests, failing if the code that handles hostile mail has lost its tests |
+| `npm run test:e2e` | The production build in Chromium ([Playwright](https://playwright.dev)): opening files, hostile mail, search, export, working offline |
+
+The browser tests need a browser, once: `npx playwright install chromium`.
+
+[tests/README.md](tests/README.md) explains how the tests are laid out and how
+to add one. A fix for a bug should come with a test that fails without it.
+
+### Test mail
+
+Tests use two kinds of mail, and neither is anyone's private mail:
+
+- **Made-up messages**, built in `tests/support/fixtures.mjs`. To have them as
+  files, for trying things by hand, run `npm run fixtures` (they go to
+  `fixtures/`, which is git-ignored).
+- **Public test files**: real `.pst`, `.ost` and `.msg` files from the test data
+  of the libraries that read them. `npm run mailboxes` downloads them once
+  (about 47 MB) into `fixtures/public/`, each pinned to an exact commit and
+  checked by hash. Until you do, the tests that need them are skipped, with a
+  note saying so. CI always runs them.
+
+### If your change alters what is read from a mailbox
+
+`npm test` includes a fidelity check: for every test file there is a baseline
+in `tests/baselines/` recording each folder, each message in order, and a hash
+of each body. If the worker reads any of it differently, the test says which
+folder, message and field.
+
+When that is what your change is meant to do, re-record them and commit the
+result:
+
+```bash
+npm run baselines
+```
+
+Then say in the pull request why each difference is right. If the baselines
+change and you did not expect them to, the code is wrong, not the baselines.
+
+### Checking against your own mailboxes
+
+The test files are small. A change to anything under `src/worker/` should also
+be tried on the biggest and oddest mailboxes you have, since a change can look
+fine on a small file and still go wrong on a large one. Record a baseline before
 you start and check against it after:
 
 ```bash
-npm run fixtures                                  # synthetic .eml/.msg/.zip in fixtures/
 npm run fidelity -- path/to/mailbox.pst --update  # on main, before your change
 npm run fidelity -- path/to/mailbox.pst           # after your change
 ```
 
-Baselines are written to `.fidelity/`, which is git-ignored, because they record
-real subjects and addresses. Use the biggest and oddest mailboxes you have; a
-change can look fine on a small file and still go wrong on a large one.
+These baselines are written to `.fidelity/`, which is git-ignored, because they
+record real subjects and addresses. They stay on your machine.
 
 For changes to what is shown on screen, please include a screenshot, or a short
 recording if the change is about movement or a sequence of steps.
@@ -66,6 +111,7 @@ recording if the change is about movement or a sequence of steps.
 | `src/store/store.ts` | App state (zustand) |
 | `src/lib/sanitizeHtml.ts` | Email HTML sanitising; rendered only inside the sandboxed frame in `src/components/EmailFrame.tsx` |
 | `patches/` | Local fixes to `@hiraokahypertools/pst-extractor`, applied on install |
+| `tests/` | Unit tests, worker tests on real files, browser tests ([tests/README.md](tests/README.md)) |
 
 ## Working with large mailboxes
 
@@ -97,6 +143,6 @@ better sent there as well.
 
 - Keep each one to a single change; unrelated fixes are easier to review apart.
 - Say what it changes, why, and how you tested it, including which mailboxes or
-  files you tried.
+  files you tried. New behaviour and bug fixes come with tests.
 - If an AI tool helped write it, say so in the description.
 - Pull requests are squash-merged, so the title becomes the commit message.

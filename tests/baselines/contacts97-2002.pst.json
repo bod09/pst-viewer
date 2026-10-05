@@ -1,0 +1,44 @@
+{
+ "format": 2,
+ "file": "contacts97-2002.pst",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "06c6fc680c841219"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "5ba304926b0cdfd9"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "2097188",
+     "subject": "6d32ba5189d94d48",
+     "from": "b41c463b8ec253b9",
+     "to": "e3b0c44298fc1c14",
+     "date": 1658338598013,
+     "att": false,
+     "cls": "IPM.Contact",
+     "body": "7eb70257593da06f",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

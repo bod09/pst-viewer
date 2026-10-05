@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "A schedule.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "d5d0a30b517e3bea"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "4ae109c3a530bc0d",
+     "from": "e99d42c6f4001d24",
+     "to": "fcaef2c575195dcc",
+     "date": 1634116448000,
+     "att": false,
+     "cls": "IPM.Appointment",
+     "body": "ca717d5309ff4769",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

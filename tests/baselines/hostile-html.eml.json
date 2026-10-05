@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "hostile-html.eml",
+ "full": true,
+ "redacted": false,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "Messages"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "Hostile markup test",
+     "from": "Mallory Example <mallory@example.com>",
+     "to": "Bob Tester",
+     "date": 1710322200000,
+     "att": false,
+     "cls": "IPM.Note",
+     "body": "9638da34ad395302",
+     "atts": "attachment-1"
+    }
+   ]
+  }
+ ]
+}

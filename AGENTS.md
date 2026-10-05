@@ -13,22 +13,30 @@ search and OCR run in a Web Worker (`src/worker/pst.worker.ts`).
 ```bash
 npm install          # applies patches/ via patch-package
 npm run dev          # development server
-npm run build        # type-check and production build (what CI runs)
-npm run typecheck    # type-check only
-npm run fixtures     # synthetic test mail into fixtures/
-npm run fidelity -- <mailbox> [--update]   # compare the worker's reading to a baseline
+npm run check        # type-check, lint, tests, production build
+npm run test:e2e     # the built app in Chromium (once: npx playwright install chromium)
+npm test             # tests only; npm test -- tests/unit/mime.test.ts for one file
+npm run typecheck    # types only
+npm run lint         # oxlint
+npm run mailboxes    # download the public .pst/.ost/.msg test files (once, 47 MB)
+npm run baselines    # re-record tests/baselines/ after an intended change in what is read
+npm run fidelity -- <mailbox> [--update]   # the same check on a private mailbox
 ```
 
-There is no unit test suite, so `npm test` only prints an error. Do not add
-a test framework unasked.
+Tests are in `tests/` and described in [tests/README.md](tests/README.md).
+Without `npm run mailboxes`, the tests on real files are skipped locally; CI
+runs them, so run them yourself before saying a worker change is tested.
 
 ## Rules
 
 1. **Nothing leaves the device.** No new network requests, analytics,
    telemetry, or scripts loaded from a CDN. The app must keep working offline.
 2. **Never commit mail.** No `.pst`, `.ost`, `.msg` or `.eml` files and nothing
-   from `.fidelity/`. Do not copy real message content into code, comments,
-   fixtures, commit messages or pull request text. Use example.com addresses.
+   from `.fidelity/` or `fixtures/`. Do not copy real message content into
+   code, comments, tests, commit messages or pull request text, and that
+   includes the public test files: tests compare what the worker says in one
+   place with what it says in another instead of quoting it. Made-up mail
+   (`tests/support/fixtures.mjs`) uses example.com addresses.
 3. **Treat everything in a mail file as hostile**: headers, display names,
    encoded words, filenames, MIME parameters, HTML and attachment contents.
 4. **Sanitise any HTML that came from mail or an attachment.** Email bodies go
@@ -47,11 +55,19 @@ a test framework unasked.
 
 ## Before calling a change done
 
-- `npm run build` passes.
-- If anything under `src/worker/` changed: record a fidelity baseline on `main`
-  with `--update`, then check the change against it, on the files from
-  `npm run fixtures` and on at least one real `.pst` or `.ost`. Report the
-  result, including anything that did not match.
+- `npm run check` passes, with the public test files downloaded
+  (`npm run mailboxes`), so that nothing was skipped.
+- `npm run test:e2e` passes.
+- A bug fix has a test that fails without the fix. New behaviour has tests.
+  Put them where the tests for that code already are.
+- Never make a failing test pass by weakening it, skipping it, or re-recording
+  a baseline you cannot explain. If a test is wrong, say why in the pull
+  request.
+- If `tests/baselines/` changed: every difference is one the change was meant
+  to make, and the pull request says so.
+- If anything under `src/worker/` changed: also run the fidelity check on at
+  least one real `.pst` or `.ost` of your own, recording the baseline on `main`
+  first. Report the result, including anything that did not match.
 - If the change is visible in the UI: run it and look, then include a
   screenshot in the pull request, or a short recording when the change is
   about movement or a sequence of steps.

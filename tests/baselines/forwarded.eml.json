@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "forwarded.eml",
+ "full": true,
+ "redacted": false,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "Messages"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "Fwd: Original walrus memo",
+     "from": "Alice Example <alice@example.com>",
+     "to": "Bob Tester",
+     "date": 1710244800000,
+     "att": true,
+     "cls": "IPM.Note",
+     "body": "7d3419abb627110d",
+     "atts": "Original walrus memo.eml"
+    }
+   ]
+  }
+ ]
+}

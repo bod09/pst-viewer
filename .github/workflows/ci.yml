@@ -1,14 +1,27 @@
 name: CI
 
-# Validate every pull request (including Dependabot's) so an update can only be
-# merged once it still type-checks and builds. Pushes to main are already built
-# by the deploy workflow.
+# Every pull request (Dependabot's included) and every push to main is
+# type-checked, linted, tested and built here, and driven in a real browser.
+# The `build` job at the end is the one branch protection requires, so a pull
+# request can only be merged, or auto-merged, once all of it has passed.
 on:
   pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
+  checks:
+    name: Type-check, lint, tests, build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -16,4 +29,83 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Real .pst, .ost and .msg files for the tests: public, pinned and
+      # checked by hash (tests/public-mailboxes.json). Kept between runs.
+      - uses: actions/cache@v6
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
+      - run: npm run mailboxes
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:coverage
       - run: npm run build
+
+  e2e:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v6
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
+      - run: npm run mailboxes
+      # The browser itself is a large download, so it is kept between runs
+      # and fetched again only when the Playwright version changes.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install the browser's system libraries
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run test:e2e
+      # What a failed test saw: a screenshot, and a trace that replays it step
+      # by step (https://trace.playwright.dev). Only made-up and public test
+      # mail is ever on screen.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: browser-test-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  # Branch protection requires a check called `build`, which is what this
+  # workflow's only job used to be called. It is kept as the single gate so
+  # the setting never has to change when jobs are added: it passes only if
+  # every job above did. (Without `if: always()` it would be skipped when one
+  # failed, and GitHub treats a skipped required check as passed.)
+  build:
+    name: build
+    if: always()
+    needs: [checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A CI job did not pass ($result). See the jobs above."
+              exit 1
+            fi
+          done

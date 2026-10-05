@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "A weekly 1.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "d5d0a30b517e3bea"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "de5fbd95f105a250",
+     "from": "4e18b837289b2e4a",
+     "to": "e3b0c44298fc1c14",
+     "date": 1670828138000,
+     "att": false,
+     "cls": "IPM.Appointment",
+     "body": "7eb70257593da06f",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

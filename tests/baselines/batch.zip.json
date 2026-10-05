@@ -1,0 +1,50 @@
+{
+ "format": 2,
+ "file": "batch.zip",
+ "full": true,
+ "redacted": false,
+ "messages": 2,
+ "bodies": 2,
+ "folders": [
+  {
+   "path": [
+    "(loose messages)"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "(loose messages)",
+    "Messages"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "Quarterly zebra report",
+     "from": "Alice Example <alice@example.com>",
+     "to": "Bob Tester",
+     "date": 1710238500000,
+     "att": true,
+     "cls": "IPM.Note",
+     "body": "4e68ad2f4dc14445",
+     "atts": "chart.png"
+    },
+    {
+     "id": "msg1",
+     "subject": "Distinctive msg subject wombat",
+     "from": "Carol Sender <carol@example.com>",
+     "to": "",
+     "date": null,
+     "att": false,
+     "cls": "IPM.Note",
+     "body": "7c1570af91a1d992",
+     "atts": ""
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "Simple.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "04d7b48339271ea6"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "3fee95da5ab69ebf",
+     "from": "300ecc65a39e2b01",
+     "to": "e3b0c44298fc1c14",
+     "date": 1754839857000,
+     "att": false,
+     "cls": "IPM.Note",
+     "body": "0a52caa8b1ca6d8b",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

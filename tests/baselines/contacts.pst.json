@@ -1,0 +1,53 @@
+{
+ "format": 2,
+ "file": "contacts.pst",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "94eadfded0e4ab99"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "94eadfded0e4ab99",
+    "8dc8497915f16c21"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "6325d000b91e2a15"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "2097188",
+     "subject": "7d2dc5d6d65b0c29",
+     "from": "b41c463b8ec253b9",
+     "to": "e3b0c44298fc1c14",
+     "date": 1658338598013,
+     "att": false,
+     "cls": "IPM.Contact",
+     "body": "7eb70257593da06f",
+     "atts": "e3b0c44298fc1c14"
+    }
+   ]
+  }
+ ]
+}

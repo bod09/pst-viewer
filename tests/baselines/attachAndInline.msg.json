@@ -1,0 +1,36 @@
+{
+ "format": 2,
+ "file": "attachAndInline.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "04d7b48339271ea6"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "515ef74bbce53f71",
+     "from": "300ecc65a39e2b01",
+     "to": "e96a21d82a09e9d9",
+     "date": 1627424390000,
+     "att": true,
+     "cls": "IPM.Note",
+     "body": "0414536a0561bed0",
+     "atts": "e85e323fda06320e"
+    }
+   ]
+  }
+ ]
+}

@@ -13,15 +13,16 @@ declare const self: { location: { origin: string } }
 // sites are served from a subpath, so the CI build sets BASE_PATH=/pst-viewer/.
 const base = process.env.BASE_PATH || '/'
 
+// Shared with vitest.config.ts, so tests resolve modules the way the app does.
+export const alias = {
+  // msgreader pulls in iconv-lite, which needs Node's Buffer; swap in a
+  // small TextDecoder-based shim (see src/lib/iconv-lite-shim.ts).
+  'iconv-lite': new URL('./src/lib/iconv-lite-shim.ts', import.meta.url).pathname,
+}
+
 export default defineConfig({
   base,
-  resolve: {
-    alias: {
-      // msgreader pulls in iconv-lite, which needs Node's Buffer; swap in a
-      // small TextDecoder-based shim (see src/lib/iconv-lite-shim.ts).
-      'iconv-lite': new URL('./src/lib/iconv-lite-shim.ts', import.meta.url).pathname,
-    },
-  },
+  resolve: { alias },
   plugins: [
     react(),
     tailwindcss(),
