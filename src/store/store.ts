@@ -220,7 +220,15 @@ function writeNum(key: string, n: number) {
 
 /** Whether targetId is ancestorId itself or lives anywhere inside its subtree. */
 function folderContains(root: FolderNode, ancestorId: string, targetId: string): boolean {
-  const anc = findFolder(root, ancestorId)
+  const find = (n: FolderNode): FolderNode | null => {
+    if (n.id === ancestorId) return n
+    for (const c of n.children) {
+      const hit = find(c)
+      if (hit) return hit
+    }
+    return null
+  }
+  const anc = find(root)
   if (!anc) return false
   const has = (n: FolderNode): boolean => n.id === targetId || n.children.some(has)
   return has(anc)
@@ -1129,12 +1137,12 @@ export const useApp = create<AppState>((set, get) => {
       const name = folderId ? top.name : source.label
       runEmlExport({ title: name, total, folders }, name, async (ctx) => {
         const exportOne = async (id: string, dir: ExportDirectory, holdsMail: boolean) => {
-          const { unlisted } = await pst.exportFolderEml(
+          const { notListed } = await pst.exportFolderEml(
             sourceId,
             id,
             Comlink.proxy(ctx.sink(() => dir)),
           )
-          if (!ctx.stopped()) ctx.progress({ folderDone: holdsMail, skipped: unlisted })
+          if (!ctx.stopped()) ctx.progress({ folderDone: holdsMail, skipped: notListed })
         }
         // Depth first, one folder at a time, each into its own directory.
         const visit = async (node: FolderNode, dir: ExportDirectory): Promise<void> => {

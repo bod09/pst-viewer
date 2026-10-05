@@ -2117,11 +2117,11 @@ const api = {
     sourceId: string,
     folderId: string,
     write: EmlExportSink,
-  ): Promise<{ unlisted: number }> {
+  ): Promise<{ notListed: number }> {
     const entry = sources.get(sourceId)
     if (!entry) throw new Error('This mailbox is no longer open.')
     const folder = folderHandle(entry, folderId)
-    if (!folder) return { unlisted: 0 }
+    if (!folder) return { notListed: 0 }
     const declared = safe(() => folder.contentCount, 0)
     const extra = entry.extraUnreadable?.get(folderId) ?? 0
     // A full read of the folder, so read ahead as indexing does.
@@ -2130,7 +2130,7 @@ const api = {
       const sequence = await readFolderUnderPressure(entry, folderId)
       // Same rule as the message list: a folder that cannot be read at all
       // still shows that something in it was lost.
-      if (!sequence) return { unlisted: Math.max(declared, 1) + extra }
+      if (!sequence) return { notListed: Math.max(declared, 1) + extra }
       for (let index = 0; index < sequence.count; index++) {
         if (!sources.has(sourceId)) throw new Error('This mailbox is no longer open.')
         let m: IPSTMessage
@@ -2144,7 +2144,7 @@ const api = {
         }
         if (!(await streamEml(entry, m, msgId, folderId, write))) break
       }
-      return { unlisted: Math.max(0, declared - sequence.count) + extra }
+      return { notListed: Math.max(0, declared - sequence.count) + extra }
     } finally {
       endReadingPass()
     }

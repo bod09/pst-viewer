@@ -61,7 +61,7 @@ export async function pickExportFolder(): Promise<FileSystemDirectoryHandle | nu
  * - `bytes`: well inside the 255 bytes most file systems allow per name, and
  *   the 143 of eCryptfs (encrypted home folders on Linux).
  */
-export const NAME_LIMITS = {
+const NAME_LIMITS = {
   path: 160,
   dir: 40,
   file: 72,
@@ -109,7 +109,7 @@ const RESERVED_SHELL = /^(desktop\.ini|thumbs\.db)$/i
 // same export runs on all of them. `[` and `]` are left out of the characters
 // that rule a short name out, which only makes this stricter.
 const NOT_IN_SHORT_NAME = /[\s"\\/:+|<>=;?,*]/u
-export function couldBeShortNameWithTilde(name: string): boolean {
+function couldBeShortNameWithTilde(name: string): boolean {
   if (name.length > 12 || !name.includes('~') || NOT_IN_SHORT_NAME.test(name)) return false
   const dot = name.indexOf('.')
   if (dot < 0) return name.length <= 8
@@ -163,7 +163,7 @@ function fit(
  * a prefix; and the result is cut to `max` UTF-16 units and NAME_LIMITS.bytes
  * bytes. Letters in any script are kept.
  */
-export function safeName(raw: string, fallback: string, max: number = NAME_LIMITS.file): string {
+function safeName(raw: string, fallback: string, max: number = NAME_LIMITS.file): string {
   return fit(clean(raw), max, fallback)
 }
 
@@ -173,7 +173,7 @@ export function safeName(raw: string, fallback: string, max: number = NAME_LIMIT
  * `.url`, `.{CLSID}` and every type Safe Browsing rates dangerous, a list
  * that is not available to a page. With no dot, there is no extension.
  */
-export function safeFolderName(
+function safeFolderName(
   raw: string,
   fallback: string,
   max: number = NAME_LIMITS.dir,
@@ -182,7 +182,7 @@ export function safeFolderName(
 }
 
 /** "2001-05-14 1530 ", in local time, so exported files sort by date. */
-export function datePrefix(date: number | null): string {
+function datePrefix(date: number | null): string {
   if (date == null || !Number.isFinite(date)) return ''
   const d = new Date(date)
   if (Number.isNaN(d.getTime())) return ''
@@ -194,7 +194,7 @@ export function datePrefix(date: number | null): string {
 }
 
 /** The file name (without extension) for one exported message, at most `max` units. */
-export function messageBaseName(
+function messageBaseName(
   subject: string,
   date: number | null,
   max: number = NAME_LIMITS.file - 4,
@@ -211,11 +211,11 @@ export function messageBaseName(
  * decomposing compatibility characters makes more names clash than any one
  * file system would, which only costs a ` (2)`.
  */
-export const nameKey = (name: string) =>
+const nameKey = (name: string) =>
   name.normalize('NFKD').toUpperCase().toLowerCase().normalize('NFKD')
 
 /** `base` + `ext`, or `base (i)` + `ext`, within `max` units, as it will be written. */
-export function candidateName(base: string, ext: string, max: number, i = 1): string {
+function candidateName(base: string, ext: string, max: number, i = 1): string {
   const suffix = i === 1 ? '' : ` (${i})`
   // The suffix and extension are ASCII: one byte per unit.
   const room = suffix.length + ext.length
@@ -229,7 +229,7 @@ export function candidateName(base: string, ext: string, max: number, i = 1): st
  * Compared by nameKey, because messages with the same subject are common.
  * Folders and files share the namespace.
  */
-export class NameSet {
+class NameSet {
   private taken = new Set<string>()
 
   has(name: string): boolean {
@@ -260,7 +260,7 @@ export const describeError = (err: unknown): string =>
  * Anything else (a name refused, a path too long, one file locked) is about one
  * file, and only that file is left out.
  */
-export function stopsExport(err: unknown): boolean {
+function stopsExport(err: unknown): boolean {
   return (
     isDom(err, 'QuotaExceededError') || isDom(err, 'NotAllowedError') || isDom(err, 'SecurityError')
   )
@@ -424,7 +424,7 @@ export class ExportDirectory {
 }
 
 /** One .eml being written: created on open, kept only if it is closed. */
-export class EmlFileWriter {
+class EmlFileWriter {
   private constructor(
     private dir: FileSystemDirectoryHandle,
     private name: string,
