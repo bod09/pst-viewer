@@ -13,6 +13,7 @@ import {
 import { isCfbFile, parseEml } from './eml'
 import { salvageOpenPst } from './salvage'
 import { pstOptions } from './pstOptions'
+import { ansiStringDecoder, chooseAnsiCodepage, DEFAULT_ANSI_CODEPAGE, isAnsiPst } from './ansiCodepage'
 import {
   makeChunkedReader,
   beginReadingPass,
@@ -1778,15 +1779,23 @@ const api = {
     let pstFile: IPSTFile
     let recovered = false
     let reader: ChunkedReader | undefined
+    // The code page an old (ANSI) file's 8-bit strings turn out to be in. The
+    // decoder starts on windows-1252, as the parser always did, and is switched
+    // once the file has been asked (see ansiCodepage.ts); a Unicode file never is.
+    const ansi = ansiStringDecoder()
+    let ansiCodepage = ansi.codepage
     try {
       reader = makeChunkedReader(file)
-      pstFile = await openPst(reader, pstOptions)
+      pstFile = await openPst(reader, { ...pstOptions, convertAnsiStringImmediately: ansi.convert })
     } catch (primaryError) {
       reader = undefined
       const attempt = await safeAsync(() => salvageOpenPst(file), null)
       if (!attempt) throw primaryError
       pstFile = attempt.pst
       recovered = true
+    }
+    if (!recovered && (await isAnsiPst(file))) {
+      ansiCodepage = await safeAsync(() => chooseAnsiCodepage(pstFile, ansi), ansi.codepage)
     }
     const entry: SourceEntry = {
       file: pstFile,
@@ -1825,7 +1834,8 @@ const api = {
 
     // A previous session's finished search index for this exact file (same
     // name/size/mtime) lets indexSource skip re-reading every message.
-    entry.fingerprint = fingerprintOf(file)
+    // Read under another code page, the file is another file to the index.
+    entry.fingerprint = fingerprintOf(file) + (ansiCodepage === DEFAULT_ANSI_CODEPAGE ? '' : `|cp${ansiCodepage}`)
     const cached = await getCachedIndex(entry.fingerprint)
     entry.cachedDocs = cached?.docs ?? null
     if (cached?.people.length) {

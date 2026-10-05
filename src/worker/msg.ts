@@ -16,6 +16,7 @@ import {
   type IPSTMessage,
 } from '@hiraokahypertools/pst-extractor'
 import type { AppointmentCard, ContactCard } from '../types'
+import { ansiCodepageFromHints } from './ansiCodepage'
 
 /**
  * Outlook `.msg` support: parse a standalone .msg file (CFB/MAPI, via
@@ -264,40 +265,13 @@ class MsgFolderAdapter {
 const asPstMessage = (m: MsgMessageAdapter) => m as unknown as IPSTMessage
 export const asPstAttachment = (a: MsgAttachmentAdapter) => a as unknown as IPSTAttachment
 
-// Default ANSI code page for a message language (PidTagMessageLocaleId), for
-// messages that don't record PidTagMessageCodepage directly.
-const LOCALE_ANSI_CP: Record<number, number> = {
-  1041: 932, // Japanese
-  1042: 949, // Korean
-  2052: 936, // Chinese (simplified)
-  1028: 950, // Chinese (traditional)
-  1049: 1251, 1058: 1251, 1026: 1251, // Russian / Ukrainian / Bulgarian
-  1032: 1253, // Greek
-  1037: 1255, // Hebrew
-  1025: 1256, // Arabic
-  1054: 874, // Thai
-  1055: 1254, // Turkish
-  1029: 1250, 1038: 1250, 1045: 1250, 1048: 1250, 1051: 1250, 1060: 1250, // Central European
-  1061: 1257, 1062: 1257, 1063: 1257, // Baltic
-}
-
-// Transport-only internet encodings mapped to the ANSI code page actually used
-// for stored 8-bit strings (e.g. iso-2022-jp mail stores Shift-JIS text).
-const NET_ANSI_CP: Record<number, number> = {
-  50220: 932, 50221: 932, 50222: 932, 51932: 932,
-  51949: 949,
-  52936: 936,
-}
-
 /** Best guess at the code page of a message's PT_STRING8 properties. */
 function ansiCodepageOf(fields: FieldsData): number | undefined {
-  if (typeof fields.messageCodepage === 'number') return fields.messageCodepage
-  const viaLocale =
-    typeof fields.messageLocaleId === 'number' ? LOCALE_ANSI_CP[fields.messageLocaleId] : undefined
-  if (viaLocale !== undefined) return viaLocale
-  const net = fields.internetCodepage
-  if (typeof net === 'number') return NET_ANSI_CP[net] ?? net
-  return undefined
+  return ansiCodepageFromHints({
+    messageCodepage: fields.messageCodepage,
+    localeId: fields.messageLocaleId,
+    internetCodepage: fields.internetCodepage,
+  })
 }
 
 /** Any 8-bit ("ANSI", PT_STRING8) string property anywhere in the message? */

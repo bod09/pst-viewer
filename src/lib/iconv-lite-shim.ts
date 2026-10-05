@@ -7,7 +7,11 @@
  * TextDecoder covers those code pages natively in every browser we target.
  */
 
-function normalizeLabel(encoding: string): string {
+/**
+ * The TextDecoder label for an encoding named the way mail names it: a bare
+ * code page number, cpNNNN, windows-NNNN or a label TextDecoder already knows.
+ */
+export function encodingLabel(encoding: string): string {
   const e = (encoding || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   // Bare code-page numbers and cpNNNN/winNNNN spellings → WHATWG labels.
   const m = /^(?:cp|win|windows)?(\d{3,5})$/.exec(e)
@@ -37,7 +41,7 @@ function normalizeLabel(encoding: string): string {
 
 export function decode(bytes: Uint8Array, encoding: string): string {
   try {
-    return new TextDecoder(normalizeLabel(encoding), { fatal: false }).decode(bytes)
+    return new TextDecoder(encodingLabel(encoding), { fatal: false }).decode(bytes)
   } catch {
     return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
   }
