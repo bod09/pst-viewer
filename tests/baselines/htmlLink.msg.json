@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "htmlLink.msg",
  "full": true,
  "redacted": true,
@@ -27,8 +27,18 @@
      "date": 1690459123000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "0ffbf2d5ae7a0564",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": "0f7922edb1f40f2d",
+     "text": "4602cdfafd7d4c7d",
+     "people": "bc7e6c3b14eff264",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   }

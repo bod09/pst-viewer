@@ -1,12 +1,12 @@
 /**
- * Download the public test mailboxes the tests read real .pst and .ost files
- * from (see tests/public-mailboxes.json).
+ * Download the public test files the tests read real mail from: .pst and .ost
+ * mailboxes and .msg messages (see tests/public-mailboxes.json).
  *
- * They come from the pst-extractor project's own test data. Each is pinned to
- * an exact commit and checked against a SHA-256, so what the tests read is
- * exactly what was reviewed, whatever happens to that repository later. They
- * go to fixtures/public/, which is git-ignored: nothing here ends up in a
- * commit.
+ * They come from the test data of the pst-extractor and msgreader projects.
+ * Each is pinned to an exact commit and checked against a SHA-256, so what the
+ * tests read is exactly what was reviewed, whatever happens to those
+ * repositories later. They go to fixtures/public/, which is git-ignored:
+ * nothing here ends up in a commit.
  *
  *   node scripts/fetch-mailboxes.mjs           # download what is missing
  *   node scripts/fetch-mailboxes.mjs --check   # only verify; never touch the network
@@ -16,70 +16,151 @@
  */
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const DIR = join(ROOT, 'fixtures/public')
-const checkOnly = process.argv.includes('--check')
+const ATTEMPTS = 3
+/** Give up on a download that sends nothing for this long (not a limit on the whole download). */
+const STALL_MS = 30_000
 
-/** @type {{ files: { name: string, bytes: number, sha256: string, urls: string[] }[] }} */
+const args = process.argv.slice(2)
+const unknown = args.filter((a) => a !== '--check')
+if (unknown.length) {
+  console.error(`unknown argument ${unknown[0]}\nusage: node scripts/fetch-mailboxes.mjs [--check]`)
+  process.exit(2)
+}
+const checkOnly = args.includes('--check')
+
+/** @typedef {{ name: string, bytes: number, sha256: string, urls: string[] }} Entry */
+/** @type {{ files: Entry[] }} */
 const manifest = JSON.parse(await readFile(join(ROOT, 'tests/public-mailboxes.json'), 'utf8'))
+
+// The manifest is data, and data gets less of a look in review than code does.
+// A name is only ever a file name in fixtures/public, and a source only https.
+for (const entry of manifest.files) {
+  if (entry.name !== basename(entry.name) || entry.name.startsWith('.') || /[\\/]/.test(entry.name)) {
+    console.error(`refusing the manifest: "${entry.name}" is not a plain file name`)
+    process.exit(2)
+  }
+  if (!/^[0-9a-f]{64}$/.test(entry.sha256) || !entry.urls.length || !entry.urls.every((u) => u.startsWith('https://'))) {
+    console.error(`refusing the manifest: "${entry.name}" needs a sha256 and https sources`)
+    process.exit(2)
+  }
+}
 
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
-/** Whether the file is already here and is the right one. */
-async function present(/** @type {(typeof manifest.files)[number]} */ entry) {
+/**
+ * Whether the file is here and is the right one.
+ *
+ * @param {Entry} entry
+ * @returns {Promise<'ok' | 'missing' | 'changed'>}
+ */
+async function state(entry) {
+  let bytes
   try {
-    return sha256(await readFile(join(DIR, entry.name))) === entry.sha256
+    bytes = await readFile(join(DIR, entry.name))
   } catch {
-    return false
+    return 'missing'
+  }
+  return sha256(bytes) === entry.sha256 ? 'ok' : 'changed'
+}
+
+/**
+ * Fetch one URL fully. The timer is reset by every piece that arrives, so a
+ * slow connection is fine and a dead one is not waited on for ever.
+ *
+ * @param {string} url
+ */
+async function download(url) {
+  const controller = new AbortController()
+  let timer = setTimeout(() => controller.abort(), STALL_MS)
+  try {
+    const response = await fetch(url, { signal: controller.signal, redirect: 'follow' })
+    if (!response.ok || !response.body) {
+      // "Not found" will still be not found a second later; "busy" may not be.
+      const worthRetrying = response.status >= 500 || response.status === 408 || response.status === 429
+      throw Object.assign(new Error(`HTTP ${response.status}`), { permanent: !worthRetrying })
+    }
+    /** @type {Uint8Array[]} */
+    const pieces = []
+    for await (const piece of response.body) {
+      clearTimeout(timer)
+      timer = setTimeout(() => controller.abort(), STALL_MS)
+      pieces.push(piece)
+    }
+    return new Uint8Array(Buffer.concat(pieces))
+  } finally {
+    clearTimeout(timer)
   }
 }
 
-/** Fetch one URL fully, giving up if the server stalls. */
-async function download(/** @type {string} */ url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(120_000), redirect: 'follow' })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return new Uint8Array(await response.arrayBuffer())
+/** What went wrong, including the reason Node tucks away behind "fetch failed". */
+const reason = (/** @type {unknown} */ err) => {
+  if (!(err instanceof Error)) return String(err)
+  if (err.name === 'AbortError') return `no data for ${STALL_MS / 1000}s`
+  const cause = err.cause instanceof Error ? ` (${err.cause.message})` : ''
+  return `${err.message}${cause}`
+}
+
+/**
+ * Get one file from the first source that serves the right bytes, trying each
+ * a few times: one refused connection should not fail a whole CI run.
+ *
+ * @param {Entry} entry
+ */
+async function fetchEntry(entry) {
+  for (const url of entry.urls) {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      try {
+        const bytes = await download(url)
+        // The hash is the whole point: a file that is not byte for byte the
+        // one that was reviewed is not kept, whoever served it. Trying again
+        // would not change what the source holds, so move to the next one.
+        if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256) {
+          console.error(`  ${new URL(url).host}: not the expected file (${bytes.length} bytes, sha256 ${sha256(bytes).slice(0, 12)}…)`)
+          break
+        }
+        // Written under another name first, so a download cut short never
+        // leaves a file that looks complete.
+        const partial = join(DIR, `${entry.name}.partial`)
+        await writeFile(partial, bytes)
+        await rename(partial, join(DIR, entry.name))
+        return true
+      } catch (err) {
+        const last = attempt === ATTEMPTS || (err instanceof Error && 'permanent' in err && err.permanent === true)
+        console.error(`  ${new URL(url).host}: ${reason(err)}${last ? '' : ', trying again'}`)
+        await rm(join(DIR, `${entry.name}.partial`), { force: true })
+        if (last) break
+        await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt))
+      }
+    }
+  }
+  return false
 }
 
 await mkdir(DIR, { recursive: true })
 let failed = 0
 for (const entry of manifest.files) {
-  if (await present(entry)) {
+  const found = await state(entry)
+  if (found === 'ok') {
     console.log(`ok       ${entry.name}`)
     continue
   }
   if (checkOnly) {
-    console.error(`missing  ${entry.name}`)
+    console.error(`${found.padEnd(8)} ${entry.name}`)
     failed++
     continue
   }
-  let saved = false
-  for (const url of entry.urls) {
-    try {
-      const bytes = await download(url)
-      // The hash is the whole point: a file that is not byte for byte the one
-      // that was reviewed is not kept, whoever served it.
-      if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256) {
-        throw new Error(`not the expected file (${bytes.length} bytes, sha256 ${sha256(bytes).slice(0, 12)}…)`)
-      }
-      // Written under another name first, so a download cut short never
-      // leaves a file that looks complete.
-      const partial = join(DIR, `${entry.name}.partial`)
-      await writeFile(partial, bytes)
-      await rename(partial, join(DIR, entry.name))
-      console.log(`fetched  ${entry.name} (${(bytes.length / 1024 / 1024).toFixed(1)} MB)`)
-      saved = true
-      break
-    } catch (err) {
-      console.error(`  ${new URL(url).host}: ${err instanceof Error ? err.message : err}`)
-      await rm(join(DIR, `${entry.name}.partial`), { force: true })
-    }
-  }
-  if (!saved) {
+  // A file of the right name and the wrong contents must not be left to be
+  // read by a test, whether or not the right one can be fetched.
+  if (found === 'changed') await rm(join(DIR, entry.name), { force: true })
+  if (await fetchEntry(entry)) {
+    console.log(`fetched  ${entry.name} (${(entry.bytes / 1024 / 1024).toFixed(1)} MB)`)
+  } else {
     console.error(`FAILED   ${entry.name}`)
     failed++
   }

@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "batch.zip",
  "full": true,
  "redacted": false,
@@ -30,8 +30,24 @@
      "date": 1710238500000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "4e68ad2f4dc14445",
-     "atts": "chart.png"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "4e68ad2f4dc14445",
+     "people": "b84d2964e823632e",
+     "headers": "f7fb0984fa6e6845",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "[\"chart.png\"]",
+     "files": [
+      [
+       78,
+       0,
+       0
+      ]
+     ],
+     "types": "1d5f9c412c7c087c",
+     "bytes": "63d2f51d50423688"
     },
     {
      "id": "msg1",
@@ -41,8 +57,18 @@
      "date": null,
      "att": false,
      "cls": "IPM.Note",
-     "body": "7c1570af91a1d992",
-     "atts": ""
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "7c1570af91a1d992",
+     "people": "d3d95396af21cb21",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "[]",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   }

@@ -80,6 +80,24 @@ describe('detectType', () => {
     expect(detectType(null, 'noext', '')).toEqual({ ext: '', mime: 'application/octet-stream', category: 'other' })
   })
 
+  test('an unfamiliar subtype still belongs to its family', () => {
+    expect(detectType(null, 'photo', 'image/pjpeg')).toEqual({ ext: 'pjpeg', mime: 'image/pjpeg', category: 'image' })
+    expect(detectType(null, 'clip', 'video/x-unknown').category).toBe('video')
+    expect(detectType(null, 'sound', 'audio/x-unknown; rate=8000').category).toBe('audio')
+    expect(detectType(null, 'notes', 'text/x-unknown').category).toBe('text')
+  })
+
+  test.each(['image/(', 'image/../../evil.exe', 'image/a b', 'image/<script>', 'image/.*', 'image/', `image/${'x'.repeat(50)}`])(
+    'a declared type of %j does not put anything odd in the file extension',
+    (mime) => {
+      const got = detectType(null, 'picture', mime)
+      expect(got.ext).toMatch(/^[a-z0-9]*$/)
+      expect(got.category).toBe('image')
+      const withBytes = detectType(new Uint8Array([0, 1, 2, 3, 0, 255]), 'picture', mime)
+      expect(withBytes.ext).toMatch(/^[a-z0-9]*$/)
+    },
+  )
+
   test('binary bytes with no known signature fall through to the name', () => {
     const binary = new Uint8Array([0, 1, 2, 3, 0, 255, 254, 0])
     expect(detectType(binary, 'data.bin', '')).toMatchObject({ ext: 'bin', category: 'other' })

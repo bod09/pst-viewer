@@ -100,6 +100,15 @@ describe('links', () => {
     ])
   })
 
+  test('an area of an image map is a link too, and cannot name the frame it opens in', () => {
+    const area = dom(
+      '<map name="m"><area href="https://example.com/area" target="_self" shape="rect" coords="0,0,5,5"></map>',
+    ).querySelector('area')
+    expect(area?.getAttribute('href')).toBe('https://example.com/area')
+    expect(area?.getAttribute('target')).toBe('_blank')
+    expect(area?.getAttribute('rel')).toBe('noopener noreferrer nofollow')
+  })
+
   test('links inside svg get the same treatment', () => {
     const a = dom('<svg><a href="https://example.com/svg"><text>x</text></a></svg>').querySelector('svg a')
     expect(a?.getAttribute('href')).toBe('https://example.com/svg')
@@ -138,6 +147,8 @@ describe('tracking pixels', () => {
     ['zero size in style', `<img src="${REMOTE}/p.gif" style="width:0;height:0">`],
     ['protocol-relative', '<img src="//tracker.example/p.gif" width="1" height="1">'],
     ['a tab inside the scheme', '<img src="ht\ttps://tracker.example/p.gif" width="1" height="1">'],
+    ['backslashes for slashes', '<img src="https:\\\\tracker.example\\p.gif" width="1" height="1">'],
+    ['two backslashes and no scheme', '<img src="\\\\tracker.example/p.gif" width="1" height="1">'],
   ])('an invisible remote image is dropped: %s', (_what, html) => {
     expect(dom(html).querySelectorAll('img')).toHaveLength(0)
   })
@@ -164,29 +175,39 @@ describe('with remote content switched off', () => {
 
   /**
    * Everything in the result that a browser would fetch without being asked.
-   * Written apart from the sanitiser's own list of attributes on purpose.
+   *
+   * Written apart from the sanitiser on purpose. It does not know which
+   * attributes matter: it asks the URL parser about every attribute of every
+   * element, treats any CSS that could fetch as a fetch, and so objects to
+   * anything left behind, whether or not the sanitiser has heard of it.
    */
   function fetches(doc: Document): string[] {
     const found: string[] = []
-    const remote = (v: string) => /^(?:https?:)?\/\//i.test(v.replace(/[\t\n\r]/g, '').trim())
+    const elsewhere = (value: string) => {
+      try {
+        const url = new URL(value, 'https://test-page.invalid/dir/')
+        return url.host !== 'test-page.invalid' && /^(https?|wss?|ftp|file):$/.test(url.protocol)
+      } catch {
+        return false
+      }
+    }
+    const cssFetches = (css: string) => /url|image|@import|\\/i.test(css.replace(/url\(\s*#[\w-]+\s*\)/g, ''))
     for (const el of doc.querySelectorAll('*')) {
       const link = el.localName === 'a' || el.localName === 'area'
+      const html = el.namespaceURI === 'http://www.w3.org/1999/xhtml'
       for (const attr of el.attributes) {
         const name = attr.name.toLowerCase()
+        if (name === 'http-equiv' || name === 'content') continue // the policy itself
         if (link && (name === 'href' || name === 'xlink:href')) continue
-        if (name === 'srcset') {
-          for (const candidate of attr.value.split(',')) {
-            if (remote(candidate.trim().split(/\s+/)[0] ?? '')) found.push(`${el.localName} srcset`)
-          }
-        } else if (name === 'style') {
-          if (/url\(|image-set\(|@import/i.test(attr.value)) found.push(`${el.localName} style`)
-        } else if (remote(attr.value)) {
-          found.push(`${el.localName} ${name}`)
+        if (name === 'style' || (!html && /\(/.test(attr.value))) {
+          if (cssFetches(attr.value)) found.push(`${el.localName} ${name} (css)`)
         }
+        const candidates = name === 'srcset' ? attr.value.split(',').map((c) => c.trim().split(/\s+/)[0] ?? '') : [attr.value]
+        if (candidates.some(elsewhere)) found.push(`${el.localName} ${name}`)
       }
     }
     for (const style of doc.querySelectorAll('style')) {
-      if (/url\(|@import|image-set\(/i.test(style.textContent ?? '')) found.push('style element')
+      if (cssFetches(style.textContent ?? '')) found.push('style element')
     }
     return found
   }
@@ -215,8 +236,44 @@ describe('with remote content switched off', () => {
     ['an svg use', `<svg><use href="${REMOTE}/i.svg#a"></use></svg>`],
     ['an svg style', `<svg><style>rect { fill: url(${REMOTE}/f.svg#a) }</style></svg>`],
     ['a math style', `<math><mtext><style>* { background: url(${REMOTE}/m.png) }</style></mtext></math>`],
+    // Spellings of an address that a pattern for "http://" or "//" does not see, and the browser does.
+    ['an image with backslashes for slashes', '<img src="https:\\\\tracker.example\\a.png">'],
+    ['an image starting with two backslashes', '<img src="\\\\tracker.example/a.png">'],
+    ['an image starting with a slash and a backslash', '<img src="/\\tracker.example/a.png">'],
+    ['an image with a control character in front', '<img src="&#1;https://tracker.example/a.png">'],
+    ['an image with spaces and a line break in front', '<img src=" \n https://tracker.example/a.png">'],
+    ['an image with one slash after the scheme', '<img src="https:/tracker.example/a.png">'],
+    ['an image with no slash after the scheme', '<img src="https:tracker.example/a.png">'],
+    ['an image over another scheme', '<img src="ftp://tracker.example/a.png">'],
+    ['a srcset candidate with backslashes', '<img srcset="\\\\tracker.example/a.png 2x">'],
+    ['a poster with backslashes', '<video poster="https:\\\\tracker.example\\p.png"></video>'],
+    ['an svg image with backslashes', '<svg><image href="\\\\tracker.example/i.png"></image></svg>'],
+    ['an image input with backslashes', '<input type="image" src="/\\tracker.example/i.png">'],
+    // CSS that a search for a complete "url(...)" does not see.
+    ['an inline background that is never closed', `<div style="background:url(${REMOTE}/bg.png">x</div>`],
+    ['an inline background with an escaped function name', `<div style="background:\\75rl(${REMOTE}/bg.png)">x</div>`],
+    ['an inline background in upper case', `<div style="BACKGROUND:URL(${REMOTE}/bg.png)">x</div>`],
+    ['an inline cursor', `<div style="color:red;cursor:url(${REMOTE}/c.cur),auto">x</div>`],
+    ['an inline list image', `<ul style="list-style-image:url('${REMOTE}/l.png')"><li>x</li></ul>`],
+    ['an svg fill', `<svg><rect fill="url(${REMOTE}/f.svg#a)"></rect></svg>`],
+    ['an svg filter', `<svg><rect filter="url(${REMOTE}/f.svg#a)"></rect></svg>`],
+    ['an svg mask with an escape', `<svg><rect mask="\\75rl(${REMOTE}/f.svg#a)"></rect></svg>`],
   ])('nothing is fetched for %s', (_what, html) => {
     expect(fetches(blocked(html))).toEqual([])
+  })
+
+  test('a declaration that would fetch is dropped; the rest of the style stays', () => {
+    const div = blocked(
+      `<div style="color: red; background: url(${REMOTE}/a.png); font-weight: bold; cursor: url(x.cur)">x</div>`,
+    ).querySelector('div')
+    expect(div?.getAttribute('style')).toBe('color: red; font-weight: bold')
+    expect(blocked(`<div style="background: url(${REMOTE}/a.png)">x</div>`).querySelector('div')?.hasAttribute('style')).toBe(false)
+  })
+
+  test('a reference to something inside the same svg is kept', () => {
+    const rect = blocked('<svg><defs><linearGradient id="g"></linearGradient></defs><rect fill="url(#g)" width="5"></rect></svg>').querySelector('rect')
+    expect(rect?.getAttribute('fill')).toBe('url(#g)')
+    expect(rect?.getAttribute('width')).toBe('5')
   })
 
   test('the checker above does notice remote content when it is allowed', () => {
@@ -227,7 +284,14 @@ describe('with remote content switched off', () => {
         `<div style="background: url(${REMOTE}/c.png)">x</div><svg><image href="${REMOTE}/d.png"></image></svg>`,
       true,
     )
-    expect(fetches(doc).sort()).toEqual(['div style', 'image href', 'img src', 'img srcset', 'style element'])
+    expect(fetches(doc).sort()).toEqual(['div style (css)', 'image href', 'img src', 'img srcset', 'style element'])
+    // Including the spellings that are easy to miss.
+    const odd = dom(
+      '<img src="\\\\tracker.example/a.png"><img src="https:\\\\tracker.example\\b.png" width="50">' +
+        `<div style="background:\\75rl(${REMOTE}/c.png)">x</div><svg><rect fill="url(${REMOTE}/f.svg#a)"></rect></svg>`,
+      true,
+    )
+    expect(fetches(odd).sort()).toEqual(['div style (css)', 'img src', 'img src', 'rect fill (css)'])
   })
 
   test('a blocked image is marked, so the reader can be told something is missing', () => {
@@ -270,6 +334,21 @@ describe('with remote content switched off', () => {
     )
     // And when remote content is allowed, no policy is added.
     expect(sanitize('<p>x</p>', true)).not.toContain('Content-Security-Policy')
+  })
+
+  test.each([
+    ['an attribute containing "<head>"', '<html title="<head>"><head></head><body><p>x</p></body></html>'],
+    ['a head with ">" inside an attribute', '<html><head data-x="a>b"></head><body><p>x</p></body></html>'],
+    ['no head at all', '<p>x</p>'],
+    ['a frameset instead of a body', '<html><frameset></frameset></html>'],
+    ['nothing', ''],
+  ])('the policy is in place whatever the message does with its head: %s', (_what, html) => {
+    const doc = blocked(html)
+    const policies = [...doc.head.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]')]
+    expect(policies).toHaveLength(1)
+    expect(policies[0].getAttribute('content')).toContain("default-src 'none'")
+    // It comes before anything that could fetch.
+    expect(doc.head.firstElementChild).toBe(policies[0])
   })
 
   test('a message cannot bring a policy of its own', () => {

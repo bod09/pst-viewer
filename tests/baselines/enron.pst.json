@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "enron.pst",
  "full": true,
  "redacted": true,
@@ -44,8 +44,24 @@
      "date": 998606991000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "bbacd396a319a8d3",
-     "atts": "42565030fb6c70b5"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "bbacd396a319a8d3",
+     "people": "c230857873f8cec2",
+     "headers": "e1c8209feb3f293e",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "b40034d3cf2acb4f",
+     "files": [
+      [
+       120,
+       0,
+       0
+      ]
+     ],
+     "types": "bf5e3f0081536068",
+     "bytes": "a0a8afab7885a27b"
     }
    ]
   },
@@ -66,8 +82,74 @@
      "date": 1003781182000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "8d901996ae8f71b9",
-     "atts": "7cac192e754831d8"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "8d901996ae8f71b9",
+     "people": "3f3cc014a956c7c9",
+     "headers": "b77b43b053691191",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "7ed347665d7fe757",
+     "files": [
+      [
+       53760,
+       0,
+       0
+      ],
+      [
+       61440,
+       0,
+       0
+      ],
+      [
+       60928,
+       0,
+       0
+      ],
+      [
+       57344,
+       0,
+       0
+      ],
+      [
+       58368,
+       0,
+       0
+      ],
+      [
+       57344,
+       0,
+       0
+      ],
+      [
+       57856,
+       0,
+       0
+      ],
+      [
+       57856,
+       0,
+       0
+      ],
+      [
+       60928,
+       0,
+       0
+      ],
+      [
+       58880,
+       0,
+       0
+      ],
+      [
+       57344,
+       0,
+       0
+      ]
+     ],
+     "types": "62fc50210a884038",
+     "bytes": "cee7d708ef6fd52a"
     },
     {
      "id": "2097220",
@@ -77,8 +159,18 @@
      "date": 1003943257000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "1dfd33a5d0fd87f1",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "1dfd33a5d0fd87f1",
+     "people": "c8a947f3f19f21ee",
+     "headers": "671ec4fc941bec72",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097252",
@@ -88,8 +180,18 @@
      "date": 1003943977000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "b3774b863e081a6c",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b3774b863e081a6c",
+     "people": "a3a96d58c00f73ba",
+     "headers": "1234d0dfde1d87d8",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097284",
@@ -99,8 +201,18 @@
      "date": 1004028409000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "e656b02044d41b41",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "e656b02044d41b41",
+     "people": "bf47c44167b3af35",
+     "headers": "4ad79ad30be2addf",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097316",
@@ -110,8 +222,18 @@
      "date": 1004044975000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "a225fbca58da1241",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "a225fbca58da1241",
+     "people": "bf47c44167b3af35",
+     "headers": "bd7811218f4721cf",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097348",
@@ -121,8 +243,18 @@
      "date": 1004048160000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "5b5c13b1b785c4bb",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "5b5c13b1b785c4bb",
+     "people": "fa8db3cb8d00a42a",
+     "headers": "26c6c628f988bdfb",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097380",
@@ -132,8 +264,24 @@
      "date": 1004108360000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "29567cf552c7b9df",
-     "atts": "0d69db1354a3fed4"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "29567cf552c7b9df",
+     "people": "d4a012b2bd52150f",
+     "headers": "10b893c10d318a1d",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "0b3992a2369b9b0a",
+     "files": [
+      [
+       30720,
+       0,
+       0
+      ]
+     ],
+     "types": "a059c62c8ed2afca",
+     "bytes": "719539bb79c0d159"
     },
     {
      "id": "2097412",
@@ -143,8 +291,24 @@
      "date": 1004045502000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "ef300c45e4570437",
-     "atts": "3d70e550dc4cc63f"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "ef300c45e4570437",
+     "people": "5f62ac917bbd740d",
+     "headers": "c87579bcb3606c51",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "8ea2effef731f1c6",
+     "files": [
+      [
+       75776,
+       0,
+       0
+      ]
+     ],
+     "types": "a059c62c8ed2afca",
+     "bytes": "69e2f5841a39f1b8"
     },
     {
      "id": "2097444",
@@ -154,8 +318,18 @@
      "date": 1004129443000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "22fee66406d18411",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "22fee66406d18411",
+     "people": "f15e167d5b6452bc",
+     "headers": "c56f8fd49328e269",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097476",
@@ -165,8 +339,24 @@
      "date": 1004130432000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "1b13d44cf53744ab",
-     "atts": "0d69db1354a3fed4"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "1b13d44cf53744ab",
+     "people": "d4a012b2bd52150f",
+     "headers": "8135c1414239a5f7",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "0b3992a2369b9b0a",
+     "files": [
+      [
+       35840,
+       0,
+       0
+      ]
+     ],
+     "types": "a059c62c8ed2afca",
+     "bytes": "1f39f684f1829794"
     },
     {
      "id": "2097508",
@@ -176,8 +366,18 @@
      "date": 1004377725000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "bea9f84e799eaacd",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "bea9f84e799eaacd",
+     "people": "4790dd33878ffc81",
+     "headers": "00cca9a3483b74fd",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097540",
@@ -187,8 +387,24 @@
      "date": 1004133483000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "a8744312f087af4b",
-     "atts": "ef7ca228df9b7d4a"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "a8744312f087af4b",
+     "people": "e67d6623690f3c14",
+     "headers": "1aed880de0e4b73f",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "045c83ce8b62e6e1",
+     "files": [
+      [
+       17920,
+       0,
+       0
+      ]
+     ],
+     "types": "a059c62c8ed2afca",
+     "bytes": "ee03577eec7860df"
     },
     {
      "id": "2097572",
@@ -198,8 +414,24 @@
      "date": 1004380120000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "ed4b50ec25b43277",
-     "atts": "2f8d74d4312b8632"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "ed4b50ec25b43277",
+     "people": "bb002abd0048aa9e",
+     "headers": "1b8e5ff99a41c75d",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "d48318d24dceff61",
+     "files": [
+      [
+       30208,
+       0,
+       0
+      ]
+     ],
+     "types": "b35a1b6d295f326a",
+     "bytes": "d861306e1a425ecd"
     },
     {
      "id": "2097604",
@@ -209,8 +441,18 @@
      "date": 1004393342000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "64d6d3459da09f89",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "64d6d3459da09f89",
+     "people": "ebb64880ef0de6c5",
+     "headers": "e8bb348a4e2316de",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   },
@@ -231,8 +473,18 @@
      "date": 999151383000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "5f8fe4451f8e5c0b",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "5f8fe4451f8e5c0b",
+     "people": "95935c851b435a9e",
+     "headers": "55bb8f954b4145dd",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097668",
@@ -242,8 +494,24 @@
      "date": 980858640000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "6a2fbf330c22b3a6",
-     "atts": "3c3626a951d61093"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "6a2fbf330c22b3a6",
+     "people": "b96125783cbbd525",
+     "headers": "3c8f787ce1489c39",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "e1cadefb82427575",
+     "files": [
+      [
+       93696,
+       0,
+       0
+      ]
+     ],
+     "types": "b35a1b6d295f326a",
+     "bytes": "08538df5cf427a2e"
     },
     {
      "id": "2097700",
@@ -253,8 +521,18 @@
      "date": 1001372295000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "2771d40f76d645a3",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "2771d40f76d645a3",
+     "people": "c94afae5447d4f97",
+     "headers": "46cbc913ecd13338",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097732",
@@ -264,8 +542,18 @@
      "date": 1001650805000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "8db55f9e9a868f51",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "8db55f9e9a868f51",
+     "people": "ed675b897838df8e",
+     "headers": "def202fdeaed6114",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097764",
@@ -275,8 +563,24 @@
      "date": 999815014000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "09ca93e567b45ac0",
-     "atts": "1f7a49fbb0542c4b"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "09ca93e567b45ac0",
+     "people": "237847aa75f2e386",
+     "headers": "041879a9a5f31988",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "9a3c8fa2dcc6250c",
+     "files": [
+      [
+       20992,
+       0,
+       0
+      ]
+     ],
+     "types": "b35a1b6d295f326a",
+     "bytes": "7121d7fd3fb99a2b"
     },
     {
      "id": "2097796",
@@ -286,8 +590,18 @@
      "date": 1002327258000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "f0a0d80e807793da",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "f0a0d80e807793da",
+     "people": "b5669425365ba1ec",
+     "headers": "c2ea2cab16e74725",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097828",
@@ -297,8 +611,18 @@
      "date": 1003223723000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "f966ade5ecc78d1e",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "f966ade5ecc78d1e",
+     "people": "cfd73dc2a27935ac",
+     "headers": "9ed09758fe805ddd",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   },
@@ -319,8 +643,18 @@
      "date": 1004413960000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "787d75e3dab7077e",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "787d75e3dab7077e",
+     "people": "f435e26438113a56",
+     "headers": "776aafe010b3ebca",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097892",
@@ -330,8 +664,18 @@
      "date": 1004422588000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "b453698843cc6681",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b453698843cc6681",
+     "people": "cc4bdac494406b63",
+     "headers": "f853be7127c9026d",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   },
@@ -352,8 +696,18 @@
      "date": 970844586000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "fc2bccf93acff7e8",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "fc2bccf93acff7e8",
+     "people": "247a50962a5a3011",
+     "headers": "ed2dd996b906d1dd",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2097956",
@@ -363,8 +717,29 @@
      "date": 981522540000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "45181ab26d79eecf",
-     "atts": "3668e6f91c5d1002"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "45181ab26d79eecf",
+     "people": "18ee43303d09b413",
+     "headers": "8b22dceb900277c4",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "5f0f139aabad4803",
+     "files": [
+      [
+       21504,
+       0,
+       0
+      ],
+      [
+       19968,
+       0,
+       0
+      ]
+     ],
+     "types": "66951321677e34dc",
+     "bytes": "b40fd7f632fda394"
     },
     {
      "id": "2097988",
@@ -374,8 +749,24 @@
      "date": 981095460000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "b453698843cc6681",
-     "atts": "25b21eb24031f6aa"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b453698843cc6681",
+     "people": "37b1bf6ebc41e5e4",
+     "headers": "96058db17ef9427a",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "6dfa3af344581b57",
+     "files": [
+      [
+       206848,
+       0,
+       0
+      ]
+     ],
+     "types": "feb51fc2ad169d3e",
+     "bytes": "a745a4210b5f6f32"
     },
     {
      "id": "2098020",
@@ -385,8 +776,18 @@
      "date": 982341780000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "975bd977ff4142ac",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "975bd977ff4142ac",
+     "people": "453a38ba22d4281d",
+     "headers": "e66cec91b1cb1603",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098052",
@@ -396,8 +797,18 @@
      "date": 982387680000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "553603ca417d5b22",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "553603ca417d5b22",
+     "people": "34fefd1f2ecfda75",
+     "headers": "cdf6aad7920fcbc6",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098084",
@@ -407,8 +818,18 @@
      "date": 983241487000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "86ce93847e635f5f",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "86ce93847e635f5f",
+     "people": "77a76c707d3c9652",
+     "headers": "18d23b11d38acf18",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098116",
@@ -418,8 +839,18 @@
      "date": 983314623000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "c3c7cd45f25dfeb6",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "c3c7cd45f25dfeb6",
+     "people": "77a76c707d3c9652",
+     "headers": "ceb88898e6e79da0",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098148",
@@ -429,8 +860,18 @@
      "date": 983974918000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "4399997457c63553",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "4399997457c63553",
+     "people": "17edca636ffa76f5",
+     "headers": "28c50e1a5a5a1d01",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098180",
@@ -440,8 +881,18 @@
      "date": 984435122000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "22ee2863a24831e6",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "22ee2863a24831e6",
+     "people": "304f76fd94c8ebd1",
+     "headers": "7397c5f8c59cbe98",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098212",
@@ -451,8 +902,18 @@
      "date": 984496957000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "b3f23e16b67ec17f",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b3f23e16b67ec17f",
+     "people": "c7ecac7cbd008329",
+     "headers": "de8e2142ee048d43",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098244",
@@ -462,8 +923,18 @@
      "date": 985135871000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "f67bc99600d69915",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "f67bc99600d69915",
+     "people": "865c38c0da9857f6",
+     "headers": "2ee3005443b1d5a8",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098276",
@@ -473,8 +944,18 @@
      "date": 985196075000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "9ea6db3e9174bb2a",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "9ea6db3e9174bb2a",
+     "people": "7bf4b3c3f5911b39",
+     "headers": "831b4957208e87ea",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098308",
@@ -484,8 +965,18 @@
      "date": 985641996000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "229ae9f16ed59a40",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "229ae9f16ed59a40",
+     "people": "c58d0fbe07e15373",
+     "headers": "a20e4af5a323feb7",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098340",
@@ -495,8 +986,18 @@
      "date": 985713941000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "07d50b7540ac41e4",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "07d50b7540ac41e4",
+     "people": "eaf7e8d396be0b63",
+     "headers": "e74ea020d73ae4e7",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098372",
@@ -506,8 +1007,24 @@
      "date": 986863003000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "d4d8daefcaea7f6f",
-     "atts": "c8e250dca2afdedf"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "d4d8daefcaea7f6f",
+     "people": "2fab04a833876492",
+     "headers": "63df04852ab56e08",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "ddc6444958a1190d",
+     "files": [
+      [
+       204,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "acd3bf018f9c829d"
     },
     {
      "id": "2098404",
@@ -517,8 +1034,24 @@
      "date": 986864519000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "6f9716fd05145be3",
-     "atts": "774dbe8b9db02021"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "6f9716fd05145be3",
+     "people": "2fab04a833876492",
+     "headers": "07eaf6a36f7d096c",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4185d943b34b77fd",
+     "files": [
+      [
+       204,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "c94f54dc09eb08a3"
     },
     {
      "id": "2098436",
@@ -528,8 +1061,24 @@
      "date": 986864876000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "d5117446f3f7a673",
-     "atts": "7117c1dfacab3579"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "d5117446f3f7a673",
+     "people": "2fab04a833876492",
+     "headers": "fe24a6faff883a55",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "e7a38c8f9b2fa7e7",
+     "files": [
+      [
+       204,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "7981b703811031cc"
     },
     {
      "id": "2098468",
@@ -539,8 +1088,24 @@
      "date": 986865027000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "20468ec649663f4f",
-     "atts": "2dbc2f72ea92d3c9"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "20468ec649663f4f",
+     "people": "2fab04a833876492",
+     "headers": "714540f6fd449c95",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "8f37543f8ebe6b36",
+     "files": [
+      [
+       204,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "9e165df25d7300d1"
     },
     {
      "id": "2098500",
@@ -550,8 +1115,39 @@
      "date": 986914501000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "31d46297f5769323",
-     "atts": "7887022d32e25313"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "31d46297f5769323",
+     "people": "2ab7c9b1cf9f4b9f",
+     "headers": "3e1a199bde837dff",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "5c52ce7343757c7c",
+     "files": [
+      [
+       18839,
+       0,
+       0
+      ],
+      [
+       16526,
+       0,
+       0
+      ],
+      [
+       180214,
+       0,
+       0
+      ],
+      [
+       168092,
+       0,
+       0
+      ]
+     ],
+     "types": "f7590686bf718d2f",
+     "bytes": "0c801cab0f4ad3f2"
     },
     {
      "id": "2098532",
@@ -561,8 +1157,18 @@
      "date": 986918163000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "f6e609bc35bbb532",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "f6e609bc35bbb532",
+     "people": "b56bdaa1ac042a06",
+     "headers": "c0ba1684382b759c",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098564",
@@ -572,8 +1178,24 @@
      "date": 987019856000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "435bed3bd1286caa",
-     "atts": "bdd301451e1dd0ce"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "435bed3bd1286caa",
+     "people": "2fab04a833876492",
+     "headers": "73e44251b77bd554",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "2561fb4f4d4a3de7",
+     "files": [
+      [
+       3072,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "13c414d94f032e87"
     },
     {
      "id": "2098596",
@@ -583,8 +1205,18 @@
      "date": 987517826000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "887dd17efbb45b0b",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "887dd17efbb45b0b",
+     "people": "2ab7c9b1cf9f4b9f",
+     "headers": "e0181bcd2e32fc1f",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098628",
@@ -594,8 +1226,24 @@
      "date": 987695613000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "24a83409d29cc3fb",
-     "atts": "6d3e757effd8b933"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "24a83409d29cc3fb",
+     "people": "2ab7c9b1cf9f4b9f",
+     "headers": "986fb8e9a439c565",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "0436c7f0a34c457e",
+     "files": [
+      [
+       41056,
+       0,
+       0
+      ]
+     ],
+     "types": "bf5e3f0081536068",
+     "bytes": "c2c1622623f99529"
     },
     {
      "id": "2098660",
@@ -605,8 +1253,24 @@
      "date": 987958548000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "a443c5502ff74b78",
-     "atts": "29a9b763804239b1"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "a443c5502ff74b78",
+     "people": "2ab7c9b1cf9f4b9f",
+     "headers": "600578993ecd3994",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "c8d0d6f79d882411",
+     "files": [
+      [
+       105164,
+       0,
+       0
+      ]
+     ],
+     "types": "bf5e3f0081536068",
+     "bytes": "5cea1e88fc300489"
     },
     {
      "id": "2098692",
@@ -616,8 +1280,24 @@
      "date": 988047709000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "57af5cdd7d02d944",
-     "atts": "8b9ced25c906c0fd"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "57af5cdd7d02d944",
+     "people": "552ac92703e40785",
+     "headers": "68f4ebabc6b2ec8e",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "f4f1c150f43a8672",
+     "files": [
+      [
+       64,
+       0,
+       0
+      ]
+     ],
+     "types": "cd12f10703fe8bd0",
+     "bytes": "8744354e434eae69"
     },
     {
      "id": "2098724",
@@ -627,8 +1307,18 @@
      "date": 988209867000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "deeee55ba1188048",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "deeee55ba1188048",
+     "people": "0c6229b7333fcc69",
+     "headers": "467d96a538daed52",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098756",
@@ -638,8 +1328,18 @@
      "date": 988651031000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "c52ffad3117858bc",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "c52ffad3117858bc",
+     "people": "f992b8998383f401",
+     "headers": "20bca1572dd92c1d",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098788",
@@ -649,8 +1349,59 @@
      "date": 984770153000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "95ed64c520cb694f",
-     "atts": "eaee9a3be004b04c"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "95ed64c520cb694f",
+     "people": "af0b0d6ea9d629ec",
+     "headers": "bb20a8f97470d678",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "f3d1e349f8a97a55",
+     "files": [
+      [
+       638408,
+       0,
+       0
+      ],
+      [
+       353291,
+       0,
+       0
+      ],
+      [
+       683042,
+       0,
+       0
+      ],
+      [
+       562704,
+       0,
+       0
+      ],
+      [
+       536884,
+       0,
+       0
+      ],
+      [
+       485586,
+       0,
+       0
+      ],
+      [
+       506422,
+       0,
+       0
+      ],
+      [
+       479978,
+       0,
+       0
+      ]
+     ],
+     "types": "3a29d13e14be6064",
+     "bytes": "5c19f9dce6a8ec8b"
     },
     {
      "id": "2098820",
@@ -660,8 +1411,59 @@
      "date": 984770093000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "2dbc09b9243cef7c",
-     "atts": "9af55ace87226426"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "2dbc09b9243cef7c",
+     "people": "af0b0d6ea9d629ec",
+     "headers": "071b82245df88bca",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "19b56cb2928eddaa",
+     "files": [
+      [
+       561150,
+       0,
+       0
+      ],
+      [
+       733032,
+       0,
+       0
+      ],
+      [
+       629763,
+       0,
+       0
+      ],
+      [
+       642495,
+       0,
+       0
+      ],
+      [
+       605645,
+       0,
+       0
+      ],
+      [
+       535304,
+       0,
+       0
+      ],
+      [
+       576516,
+       0,
+       0
+      ],
+      [
+       516827,
+       0,
+       0
+      ]
+     ],
+     "types": "3a29d13e14be6064",
+     "bytes": "3667c1398a743904"
     },
     {
      "id": "2098852",
@@ -671,8 +1473,18 @@
      "date": 988655500000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "b12c40ed34f2e45e",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b12c40ed34f2e45e",
+     "people": "2ab7c9b1cf9f4b9f",
+     "headers": "a541e79632fbf274",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098884",
@@ -682,8 +1494,29 @@
      "date": 988748913000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "d6de736171a64cf3",
-     "atts": "8cce76894f152d59"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "d6de736171a64cf3",
+     "people": "de6b2872561f3a04",
+     "headers": "c057de3581949a50",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "1a90b4aa2a560ad2",
+     "files": [
+      [
+       55,
+       0,
+       0
+      ],
+      [
+       52,
+       0,
+       0
+      ]
+     ],
+     "types": "406c3fe0776cf0f6",
+     "bytes": "b072019bd6b8a98f"
     },
     {
      "id": "2098916",
@@ -693,8 +1526,79 @@
      "date": 989111212000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "5b83926a65aaf6ef",
-     "atts": "e37ac0547f7f9958"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "5b83926a65aaf6ef",
+     "people": "fbc6cea245a66bdc",
+     "headers": "046b554008c6f226",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "75d173d7aa35d581",
+     "files": [
+      [
+       64,
+       0,
+       0
+      ],
+      [
+       32,
+       0,
+       0
+      ],
+      [
+       35,
+       0,
+       0
+      ],
+      [
+       63,
+       0,
+       0
+      ],
+      [
+       66,
+       0,
+       0
+      ],
+      [
+       67,
+       0,
+       0
+      ],
+      [
+       64,
+       0,
+       0
+      ],
+      [
+       68,
+       0,
+       0
+      ],
+      [
+       64,
+       0,
+       0
+      ],
+      [
+       57,
+       0,
+       0
+      ],
+      [
+       68,
+       0,
+       0
+      ],
+      [
+       32,
+       0,
+       0
+      ]
+     ],
+     "types": "9aedb91757abec68",
+     "bytes": "4d95a5769222aca1"
     },
     {
      "id": "2098948",
@@ -704,8 +1608,18 @@
      "date": 989249354000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "e5cc428bca4be137",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "e5cc428bca4be137",
+     "people": "caae57a5ac147784",
+     "headers": "0ff37f564c8d23ee",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2098980",
@@ -715,8 +1629,18 @@
      "date": 989256865000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "4c7f60d6e419528f",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "4c7f60d6e419528f",
+     "people": "7bf4b3c3f5911b39",
+     "headers": "17f70909a9dd5443",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099012",
@@ -726,8 +1650,18 @@
      "date": 989344293000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "0cafda8c988a7490",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "0cafda8c988a7490",
+     "people": "0c6229b7333fcc69",
+     "headers": "c91e97284b309c84",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099044",
@@ -737,8 +1671,18 @@
      "date": 989543094000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "4e34dfed6ab8e8fd",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "4e34dfed6ab8e8fd",
+     "people": "947f23b38dea0d7d",
+     "headers": "20f7645d456c6556",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099076",
@@ -748,8 +1692,24 @@
      "date": 991425394000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "b453698843cc6681",
-     "atts": "a3c44ac0e02b06d0"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b453698843cc6681",
+     "people": "b56b9e9aa52d2de6",
+     "headers": "b6a540781c0970d3",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "ec8fce8ac6bd62a7",
+     "files": [
+      [
+       19456,
+       0,
+       0
+      ]
+     ],
+     "types": "b35a1b6d295f326a",
+     "bytes": "7da6e554acb9b3cc"
     },
     {
      "id": "2099108",
@@ -759,8 +1719,18 @@
      "date": 991435405000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "b1328b421e367e26",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b1328b421e367e26",
+     "people": "a33849fc81ab324d",
+     "headers": "6910165bd7b8d261",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099140",
@@ -770,8 +1740,24 @@
      "date": 991633536000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "b025ad00d40bf43e",
-     "atts": "bbaa17da435ea422"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "b025ad00d40bf43e",
+     "people": "83091f0a8ca10399",
+     "headers": "1a26d611677a3e2c",
+     "marks": "fa6d8104e9ebdfe8",
+     "card": null,
+     "atts": "a4d7dff9b19aaa5e",
+     "files": [
+      [
+       15360,
+       0,
+       0
+      ]
+     ],
+     "types": "a059c62c8ed2afca",
+     "bytes": "065e818f1eaac1a3"
     },
     {
      "id": "2099172",
@@ -781,8 +1767,18 @@
      "date": 991862197000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "fe58c019105d7129",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "fe58c019105d7129",
+     "people": "271c7f74ceb646b6",
+     "headers": "d8de1c99cde136c3",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099204",
@@ -792,8 +1788,24 @@
      "date": 992037283000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "d7991847c24edd4c",
-     "atts": "109b68dfed1ab355"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "d7991847c24edd4c",
+     "people": "2e6983be9de847fa",
+     "headers": "de369aa563e291c9",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "13cf40e1aae10741",
+     "files": [
+      [
+       49012,
+       0,
+       0
+      ]
+     ],
+     "types": "bf5e3f0081536068",
+     "bytes": "b3cd2aac7fdd7dfc"
     },
     {
      "id": "2099236",
@@ -803,8 +1815,18 @@
      "date": 992379186000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "400702f78765ae43",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "400702f78765ae43",
+     "people": "e3670299f00b02ef",
+     "headers": "deb76976f1ff959b",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099268",
@@ -814,8 +1836,18 @@
      "date": 992381189000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "a7a048bdc1c455a9",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "a7a048bdc1c455a9",
+     "people": "0e4afa77518e5d69",
+     "headers": "d9eea8815d1f50d5",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099300",
@@ -825,8 +1857,18 @@
      "date": 992489277000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "ea30ebe0c2836fd8",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "ea30ebe0c2836fd8",
+     "people": "e1a46b629f34248c",
+     "headers": "2213c174025eab22",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099332",
@@ -836,8 +1878,24 @@
      "date": 992983769000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "98bd145697324ef5",
-     "atts": "986746812db7cc0c"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "98bd145697324ef5",
+     "people": "da02f43dc909b6d0",
+     "headers": "87992200e4a974ae",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "00d025a16dc5143e",
+     "files": [
+      [
+       866304,
+       0,
+       0
+      ]
+     ],
+     "types": "b35a1b6d295f326a",
+     "bytes": "6801aed67e1a4dcd"
     },
     {
      "id": "2099364",
@@ -847,8 +1905,18 @@
      "date": 993056278000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "1e6432b3d89eed08",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "1e6432b3d89eed08",
+     "people": "8e5fce856cc3ec2a",
+     "headers": "0fa145cabc520837",
+     "marks": "fa6d8104e9ebdfe8",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     },
     {
      "id": "2099396",
@@ -858,8 +1926,29 @@
      "date": 993223332000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "e9e48a4211a958ae",
-     "atts": "df575b96b08602d6"
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "e9e48a4211a958ae",
+     "people": "5293b1ac3386ea86",
+     "headers": "ed319198f227baba",
+     "marks": "af9ff5d38570c5de",
+     "card": null,
+     "atts": "29476e89913c2793",
+     "files": [
+      [
+       20480,
+       0,
+       0
+      ],
+      [
+       89600,
+       0,
+       0
+      ]
+     ],
+     "types": "8eec4b02e7b99719",
+     "bytes": "be7ac8b653872706"
     }
    ]
   }

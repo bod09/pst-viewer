@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './support'
+import { type Page } from '@playwright/test'
 
 /** Serve this as the deployment's branding.json. */
 async function brand(page: Page, body: string | Record<string, unknown>) {

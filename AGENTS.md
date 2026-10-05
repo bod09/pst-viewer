@@ -1,8 +1,7 @@
 # AGENTS.md
 
 Instructions for AI coding agents working in this repository. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) as well; this file adds to it and does not
-repeat it.
+[CONTRIBUTING.md](CONTRIBUTING.md) as well; this file adds to it.
 
 PST Viewer is an in-browser viewer for Outlook `.pst`/`.ost` mailboxes and
 `.msg`, `.eml` and `.zip` files. Vite, React, TypeScript and Tailwind; parsing,
@@ -13,19 +12,24 @@ search and OCR run in a Web Worker (`src/worker/pst.worker.ts`).
 ```bash
 npm install          # applies patches/ via patch-package
 npm run dev          # development server
-npm run check        # type-check, lint, tests, production build
+npm run check        # type-check, lint, tests with coverage limits, production build
 npm run test:e2e     # the built app in Chromium (once: npx playwright install chromium)
 npm test             # tests only; npm test -- tests/unit/mime.test.ts for one file
 npm run typecheck    # types only
 npm run lint         # oxlint
 npm run mailboxes    # download the public .pst/.ost/.msg test files (once, 47 MB)
-npm run baselines    # re-record tests/baselines/ after an intended change in what is read
-npm run fidelity -- <mailbox> [--update]   # the same check on a private mailbox
+npm run baselines    # re-record tests/baselines/ (only for an intended change, see below)
+npm run fidelity -- <mailbox> [--update] [--full]   # the same check on a private mailbox
 ```
 
-Tests are in `tests/` and described in [tests/README.md](tests/README.md).
-Without `npm run mailboxes`, the tests on real files are skipped locally; CI
-runs them, so run them yourself before saying a worker change is tested.
+`npm run check` and `npm run test:e2e` are exactly what CI runs. Tests are in
+`tests/` and described in [tests/README.md](tests/README.md).
+
+Tests that read real `.pst`, `.ost` and `.msg` files need `npm run mailboxes`
+first. Without it they are skipped, unless `CI` or `REQUIRE_MAILBOXES=1` is
+set in the environment, in which case they fail instead. Many agent sandboxes
+set `CI`; if a fresh clone fails saying the public test files are missing, run
+`npm run mailboxes`.
 
 ## Rules
 
@@ -33,10 +37,11 @@ runs them, so run them yourself before saying a worker change is tested.
    telemetry, or scripts loaded from a CDN. The app must keep working offline.
 2. **Never commit mail.** No `.pst`, `.ost`, `.msg` or `.eml` files and nothing
    from `.fidelity/` or `fixtures/`. Do not copy real message content into
-   code, comments, tests, commit messages or pull request text, and that
-   includes the public test files: tests compare what the worker says in one
-   place with what it says in another instead of quoting it. Made-up mail
-   (`tests/support/fixtures.mjs`) uses example.com addresses.
+   code, comments, tests, commit messages, pull request text, screenshots or
+   recordings. The public test files count as real mail: a test on them
+   compares what the worker says in one place with what it says in another,
+   and never quotes them. Made-up mail (`tests/support/fixtures.mjs`) uses
+   example.com and `.example` addresses.
 3. **Treat everything in a mail file as hostile**: headers, display names,
    encoded words, filenames, MIME parameters, HTML and attachment contents.
 4. **Sanitise any HTML that came from mail or an attachment.** Email bodies go
@@ -45,7 +50,7 @@ runs them, so run them yourself before saying a worker change is tested.
    rendered as HTML goes through DOMPurify with a narrow allow-list, as the
    spreadsheet preview does in `AttachmentPreview.tsx`.
 5. **Mind memory on large mailboxes.** Read messages one at a time with
-   `folderSequence()`, never `folder.getEmails()` in a loop over a mailbox.
+   `folderSequence()`, never with `folder.getEmails()`.
    Skip and count unreadable messages instead of failing. Do not keep parsed
    messages once their data has been extracted.
 6. **Do not hand-edit `node_modules/`** without regenerating the patch in
@@ -55,25 +60,56 @@ runs them, so run them yourself before saying a worker change is tested.
 
 ## Before calling a change done
 
-- `npm run check` passes, with the public test files downloaded
-  (`npm run mailboxes`), so that nothing was skipped.
-- `npm run test:e2e` passes.
+- `REQUIRE_MAILBOXES=1 npm run check` passes. With that set, missing public
+  test files are a failure instead of a skip (run `npm run mailboxes` first).
+- `REQUIRE_MAILBOXES=1 npm run test:e2e` passes.
 - A bug fix has a test that fails without the fix. New behaviour has tests.
   Put them where the tests for that code already are.
-- Never make a failing test pass by weakening it, skipping it, or re-recording
-  a baseline you cannot explain. If a test is wrong, say why in the pull
-  request.
-- If `tests/baselines/` changed: every difference is one the change was meant
-  to make, and the pull request says so.
-- If anything under `src/worker/` changed: also run the fidelity check on at
-  least one real `.pst` or `.ost` of your own, recording the baseline on `main`
-  first. Report the result, including anything that did not match.
-- If the change is visible in the UI: run it and look, then include a
-  screenshot in the pull request, or a short recording when the change is
-  about movement or a sequence of steps.
+- If the change is visible in the UI: start the app (`npm run dev`), open the
+  made-up files from `npm run fixtures`, and look. Include a screenshot in the
+  pull request, or a short recording when the change is about movement or a
+  sequence of steps. Screenshots and recordings show made-up mail only, never
+  a real mailbox and never the public test files.
 
 Say which of these you ran. If something could not be checked, say that
 plainly rather than describing the change as verified.
+
+### Never make a failing check pass by weakening it
+
+That means: no skipped, deleted or loosened tests; no lint rule switched off
+and no disable comment added to get past one; no coverage limit lowered in
+`vitest.config.ts`; no hash or size changed in `tests/public-mailboxes.json`;
+no edit to `.github/workflows/` to stop something running.
+
+Run `npm run baselines` only when the task is to change what is read from a
+mailbox. If a baseline test fails and that was not the task, the code is
+wrong: fix the code. When re-recording is right, `git diff --stat
+tests/baselines/` must list only the files the change was meant to affect,
+and the pull request must say why each one changed.
+
+If you believe a test itself is wrong, change it in a commit of its own and
+say in the pull request what was wrong with it.
+
+### Changes under `src/worker/`
+
+The test files are small, so a worker change should also be checked against a
+large real mailbox. Ask the person you are working for which private mailbox
+to use. Do not go looking for one on disk, and do not use the files in
+`fixtures/public/` for this (`npm test` already covers them).
+
+```bash
+git stash            # or commit your work first
+git switch main
+npm run fidelity -- <mailbox> --update     # record how main reads it
+git switch -                               # back to your branch (then: git stash pop)
+npm run fidelity -- <mailbox>              # compare
+```
+
+Report whether it matched and, if not, how many differences and in which
+fields. The output names real folders, subjects and people: do not copy those
+lines into a pull request, a commit message or an issue. The same goes for a
+failing `npm run fidelity` on the public test files. If no mailbox is
+available, say that this check was not run.
 
 ## Pull requests
 

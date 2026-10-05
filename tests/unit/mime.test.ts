@@ -175,11 +175,16 @@ describe('extractMimeBody', () => {
   })
 
   test('a message nested without end stops instead of running away', () => {
-    // Each level wraps the next in another multipart with the same boundary.
-    let raw = 'Content-Type: text/plain\r\n\r\ndeepest'
-    for (let i = 0; i < 40; i++) {
-      raw = `Content-Type: multipart/mixed; boundary="L${i}"\r\n\r\n--L${i}\r\n${raw}\r\n--L${i}--\r\n`
+    // Each level wraps the one before in another multipart.
+    const nested = (levels: number) => {
+      let raw = 'Content-Type: text/plain\r\n\r\ndeepest'
+      for (let i = 0; i < levels; i++) {
+        raw = `Content-Type: multipart/mixed; boundary="L${i}"\r\n\r\n--L${i}\r\n${raw}\r\n--L${i}--\r\n`
+      }
+      return latin1(raw)
     }
-    expect(extractMimeBody(latin1(raw))).toEqual({ html: null, text: null, attachments: [] })
+    // A few levels are ordinary mail and are read; a great many are given up on.
+    expect(extractMimeBody(nested(5)).text).toBe('deepest')
+    expect(extractMimeBody(nested(40))).toEqual({ html: null, text: null, attachments: [] })
   })
 })

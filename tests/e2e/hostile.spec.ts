@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { emailFrame, fixture, openFiles, openMessage, setSetting, watchRequests } from './support'
+import { type Page } from '@playwright/test'
+import { emailFrame, expect, fixture, openFiles, openMessage, setSetting, test } from './support'
 
 /**
  * A message built to attack whoever opens it (see hostileHtmlEml in
@@ -28,7 +28,6 @@ async function openHostile(page: Page) {
 }
 
 test('no script in the message runs, by any of the routes it tries', async ({ page }) => {
-  await watchRequests(page)
   const escaped = await listenForEscapes(page)
   const dialogs: string[] = []
   page.on('dialog', (d) => {
@@ -50,14 +49,13 @@ test('no script in the message runs, by any of the routes it tries', async ({ pa
   await expect(page).toHaveTitle('PST Viewer')
 })
 
-test('with pictures from the internet allowed, only pictures are fetched, and not the tracking pixel', async ({ page }) => {
-  const requests = await watchRequests(page)
+test('with pictures from the internet allowed, only pictures are fetched, and not the tracking pixel', async ({ page, requests }) => {
   await openHostile(page)
 
   const fetched = requests.outside.map((u) => u.replace(TRACKER, ''))
   expect(fetched).toContain('/picture.png')
   expect(fetched).not.toContain('/pixel.gif')
-  // Nothing but pictures: no frame, no stylesheet, no form target.
+  // Nothing but pictures: no frame, no stylesheet (linked or imported), no form target.
   expect(fetched.filter((path) => !path.endsWith('.png'))).toEqual([])
   expect(requests.outside.every((u) => u.startsWith(TRACKER))).toBe(true)
 
@@ -65,8 +63,7 @@ test('with pictures from the internet allowed, only pictures are fetched, and no
   await expect(emailFrame(page).locator('#tracking-pixel')).toHaveCount(0)
 })
 
-test('with pictures from the internet off, opening the message contacts nobody', async ({ page }) => {
-  const requests = await watchRequests(page)
+test('with pictures from the internet off, opening the message contacts nobody', async ({ page, requests }) => {
   await page.goto('./')
   await setSetting(page, 'Load images from the internet', false)
   await openHostile(page)
@@ -82,8 +79,7 @@ test('with pictures from the internet off, opening the message contacts nobody',
   await expect(frame.locator('#real-link')).toHaveAttribute('href', 'https://example.com/page')
 })
 
-test('the setting is remembered the next time the app is opened', async ({ page }) => {
-  const requests = await watchRequests(page)
+test('the setting is remembered the next time the app is opened', async ({ page, requests }) => {
   await page.goto('./')
   await setSetting(page, 'Load images from the internet', false)
   await page.reload()
@@ -91,13 +87,28 @@ test('the setting is remembered the next time the app is opened', async ({ page 
   expect(requests.outside).toEqual([])
 })
 
-test('a link opens in a new tab, and only when clicked', async ({ page }) => {
-  const requests = await watchRequests(page)
+test('a link opens in a new tab, and only when clicked', async ({ page, requests }) => {
   await openHostile(page)
   expect(requests.outside.filter((u) => u.includes('example.com/page'))).toEqual([])
   const popup = page.waitForEvent('popup')
   await emailFrame(page).locator('#real-link').click()
-  expect((await popup).url()).toBe('https://example.com/page')
+  await expect(await popup).toHaveURL('https://example.com/page')
+})
+
+test('a link still opens with pictures from the internet off', async ({ page }) => {
+  await page.goto('./')
+  await setSetting(page, 'Load images from the internet', false)
+  await openHostile(page)
+  const popup = page.waitForEvent('popup')
+  await emailFrame(page).locator('#real-link').click()
+  await expect(await popup).toHaveURL('https://example.com/page')
+})
+
+test('a link drawn inside a picture opens like any other', async ({ page }) => {
+  await openHostile(page)
+  const popup = page.waitForEvent('popup')
+  await emailFrame(page).locator('#svg-link').click()
+  await expect(await popup).toHaveURL('https://example.com/svg')
 })
 
 test('the sender shown is the real one, not the one hidden in the name', async ({ page }) => {

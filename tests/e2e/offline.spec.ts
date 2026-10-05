@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { fixture, messageRow, openFiles, openMessage, reader } from './support'
+import { expect, fixture, messageRow, openFiles, openMessage, reader, test } from './support'
 
 // The service worker is what makes the app work with no connection, so this
 // is the one place it is allowed to install (see playwright.config.ts).

@@ -1,10 +1,8 @@
-import { expect, test } from '@playwright/test'
-import { fixture, openFiles, openMessage, reader, watchRequests } from './support'
+import { expect, fixture, openFiles, openMessage, reader, test } from './support'
 
 // The same app, built to be served from /pst-viewer/ as GitHub Pages serves
 // it. Everything it loads has to come from under that path.
-test('served from a subpath, the app loads everything from under it and works', async ({ page, baseURL }) => {
-  const requests = await watchRequests(page)
+test('served from a subpath, the app loads everything from under it and works', async ({ page, baseURL, requests }) => {
   await page.goto('./')
   await expect(page.getByRole('heading', { name: 'Open your mailbox' })).toBeVisible()
   await openFiles(page, fixture('mail.eml'))

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'vitest'
 import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import type { FolderNode, SourceIndex } from '../../src/types'
+import { sha } from '../../scripts/lib/fidelity.mjs'
 import { fileOf } from '../support/files'
 import { havePublicMailboxes, publicMailbox } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
@@ -17,11 +18,17 @@ const all = (node: FolderNode): FolderNode[] => [node, ...node.children.flatMap(
 
 let api: PstWorkerApi
 
-/** Subjects of every message that can be listed, sorted. */
+/**
+ * Every message that can be listed, as a sorted list of hashes of what the
+ * list shows for it. Hashes, so that a failing comparison prints which entries
+ * differ without printing anyone's mail into a test log.
+ */
 async function listed(sourceId: string, index: SourceIndex): Promise<string[]> {
   const subjects: string[] = []
   for (const folder of all(index.rootFolder)) {
-    for (const m of (await api.getFolderMessages(sourceId, folder.id)).messages) subjects.push(m.subject)
+    for (const m of (await api.getFolderMessages(sourceId, folder.id)).messages) {
+      subjects.push(sha(`${m.subject}\n${m.fromEmail}\n${m.date}`))
+    }
   }
   return subjects.sort()
 }
@@ -111,7 +118,12 @@ describe('a file that is not a mailbox at all', () => {
     ['the right first bytes and nothing else', Uint8Array.from({ length: 2000 }, (_, i) => [0x21, 0x42, 0x44, 0x4e][i] ?? 0)],
   ])('%s: is refused', async (_what, bytes) => {
     await expect(api.openSource('junk', fileOf('junk.pst', bytes))).rejects.toThrow(/./)
-    // And it leaves nothing half-open behind.
-    expect(await api.getFolderMessages('junk', 'anything')).toEqual({ messages: [], unreadable: 0 })
+    // And it leaves nothing half-open behind: no mailbox by that id to index
+    // or to search in.
+    expect(await api.indexSource('junk')).toEqual({ fromCache: false, complete: false })
+    expect(await api.search('mailbox:junk')).toEqual([])
+    await expect(api.exportFolderEml('junk', 'anything', async () => true)).rejects.toThrow(
+      'This mailbox is no longer open.',
+    )
   })
 })

@@ -15,11 +15,13 @@ Found a security problem? Please don't open an issue; see
   Settings.
 - **Real mail never goes in the repository.** `.pst`, `.ost`, `.msg` and `.eml`
   files are git-ignored for that reason. Test with your own mailboxes locally,
-  or with the synthetic files from `npm run fixtures`.
+  or with the made-up files from `npm run fixtures`. The same goes for pull
+  request text, screenshots and recordings: show made-up mail only.
 
 ## Getting started
 
-You need [Node.js](https://nodejs.org) 22.
+You need a current [Node.js](https://nodejs.org) 22 (22.22 or newer, which the
+test tools require; building alone works on older versions, see DEPLOY.md).
 
 ```bash
 npm install        # also applies the patches in patches/
@@ -32,22 +34,31 @@ offline, installable version, at http://localhost:4173.
 ## Checking your change
 
 ```bash
-npm run check        # type-check, lint, tests and a production build
+npx playwright install chromium   # once, for the browser tests
+npm run mailboxes                 # once, downloads the public test files (47 MB)
+
+npm run check        # type-check, lint, tests, production build
 npm run test:e2e     # the built app, driven in a real browser
 ```
 
-CI runs both on every pull request, and a pull request can only be merged once
-they pass. Run them before pushing; together they take about a minute.
+CI runs the same two commands on every pull request, and a pull request can
+only be merged once they pass. Run them before pushing; together they take
+about a minute.
 
-| Command | What it checks |
-| --- | --- |
-| `npm run typecheck` | Types, in the app and in the tests |
-| `npm run lint` | Mistakes a type-checker does not see ([oxlint](https://oxc.rs/docs/guide/usage/linter); the rules are in `.oxlintrc.json`) |
-| `npm test` | The parsing, sanitising, search and export code, called directly ([Vitest](https://vitest.dev)). `npm run test:watch` re-runs as you edit |
-| `npm run test:coverage` | The same tests, failing if the code that handles hostile mail has lost its tests |
-| `npm run test:e2e` | The production build in Chromium ([Playwright](https://playwright.dev)): opening files, hostile mail, search, export, working offline |
+| Command | What it checks | When it fails |
+| --- | --- | --- |
+| `npm run typecheck` | Types, in the app and in the tests | The compiler names the file and line |
+| `npm run lint` | Mistakes a type-checker does not see ([oxlint](https://oxc.rs/docs/guide/usage/linter); the rules are in `.oxlintrc.json`). Prints nothing when all is well | It prints the file, line and rule. Fix the code rather than switching the rule off |
+| `npm test` | The parsing, sanitising, search and export code, called directly ([Vitest](https://vitest.dev)). `npm run test:watch` re-runs as you edit | The failing test says what it expected and what it got |
+| `npm run test:coverage` | The same tests, and fails if too little of the code that handles hostile mail or writes exported files is run by them. The limits are in `vitest.config.ts` | Open `coverage/index.html` to see which lines no test reached, and add tests for them |
+| `npm run test:e2e` | The production build in Chromium ([Playwright](https://playwright.dev)): opening files, hostile mail, search, export, working offline | `test-results/` has a screenshot and a trace of each failure (see [tests/README.md](tests/README.md)) |
 
-The browser tests need a browser, once: `npx playwright install chromium`.
+`npm run check` runs the first four (with coverage) and then
+`npm run build`.
+
+The browser tests build the app twice and serve it on ports 4174 and 4175;
+they fail if either port is in use. On Linux, if Chromium does not start, run
+`npx playwright install-deps chromium`.
 
 [tests/README.md](tests/README.md) explains how the tests are laid out and how
 to add one. A fix for a bug should come with a test that fails without it.
@@ -62,25 +73,36 @@ Tests use two kinds of mail, and neither is anyone's private mail:
 - **Public test files**: real `.pst`, `.ost` and `.msg` files from the test data
   of the libraries that read them. `npm run mailboxes` downloads them once
   (about 47 MB) into `fixtures/public/`, each pinned to an exact commit and
-  checked by hash. Until you do, the tests that need them are skipped, with a
-  note saying so. CI always runs them.
+  checked by hash. Until you do, the tests that need them are skipped (`npm
+  test` says so at the top of its output). CI always runs them. They are
+  public, but still other people's mail: do not quote them in a test, a pull
+  request or a screenshot.
 
 ### If your change alters what is read from a mailbox
 
-`npm test` includes a fidelity check: for every test file there is a baseline
-in `tests/baselines/` recording each folder, each message in order, and a hash
-of each body. If the worker reads any of it differently, the test says which
-folder, message and field.
+`npm test` includes a fidelity check: for every piece of test mail there is a
+baseline in `tests/baselines/` recording each folder, each message in order,
+and hashes of everything the reader shows for it (bodies, people, headers,
+attachments, contact and appointment details). If the worker reads any of it
+differently, the test says which folder, message and field.
 
-When that is what your change is meant to do, re-record them and commit the
-result:
+When that is what your change is meant to do:
 
-```bash
-npm run baselines
-```
+1. Run `npm test` and read the failures first. They are the only place the
+   difference is described: the baselines of the public files hold hashes,
+   so their diff shows that something changed but not what.
+2. Re-record: `npm run baselines` (it needs the public test files, so run
+   `npm run mailboxes` first if you have not).
+3. Check that `git diff --stat tests/baselines/` lists only the files you
+   expected, and commit them.
+4. Say in the pull request why each difference is right, without quoting the
+   mail.
 
-Then say in the pull request why each difference is right. If the baselines
-change and you did not expect them to, the code is wrong, not the baselines.
+If the baselines change and you did not expect them to, the code is wrong,
+not the baselines.
+
+To see what a difference in a public file is about, on your own machine:
+`npm run fidelity -- fixtures/public/<file> --baselines tests/baselines`.
 
 ### Checking against your own mailboxes
 
@@ -94,11 +116,15 @@ npm run fidelity -- path/to/mailbox.pst --update  # on main, before your change
 npm run fidelity -- path/to/mailbox.pst           # after your change
 ```
 
-These baselines are written to `.fidelity/`, which is git-ignored, because they
-record real subjects and addresses. They stay on your machine.
+By default one message in ten is opened and compared in full, which keeps it
+quick on a mailbox of many gigabytes; add `--full` to `--update` to open every
+one. These baselines are written to `.fidelity/`, which is git-ignored, because
+they record real subjects and addresses. They stay on your machine, and so
+should the output: describe a difference in a pull request without pasting it.
 
 For changes to what is shown on screen, please include a screenshot, or a short
-recording if the change is about movement or a sequence of steps.
+recording if the change is about movement or a sequence of steps, showing
+made-up mail (`npm run fixtures`).
 
 ## Where things live
 
@@ -144,5 +170,5 @@ better sent there as well.
 - Keep each one to a single change; unrelated fixes are easier to review apart.
 - Say what it changes, why, and how you tested it, including which mailboxes or
   files you tried. New behaviour and bug fixes come with tests.
-- If an AI tool helped write it, say so in the description.
+- If an AI tool helped write it, say so in the description and name the tool.
 - Pull requests are squash-merged, so the title becomes the commit message.

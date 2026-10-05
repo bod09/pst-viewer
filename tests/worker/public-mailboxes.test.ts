@@ -2,6 +2,7 @@ import PostalMime from 'postal-mime'
 import { beforeAll, describe, expect, test } from 'vitest'
 import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import type { EmlExportStep, FolderNode, MessageMeta, SourceIndex } from '../../src/types'
+import { sha } from '../../scripts/lib/fidelity.mjs'
 import { havePublicMailboxes, publicMailbox, publicMailboxNames } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
 
@@ -13,7 +14,8 @@ import { loadWorker } from '../support/worker'
  * a baseline cannot express: that everything listed can be opened, found by
  * search and exported. Nothing from inside the mailboxes is written into this
  * file; the tests compare what the worker says in one place with what it says
- * in another.
+ * in another. Text is compared as hashes, so a failure names the message
+ * without printing its subject or its people into a test log.
  */
 const all = (node: FolderNode): FolderNode[] => [node, ...node.children.flatMap(all)]
 
@@ -63,9 +65,9 @@ describe.skipIf(!havePublicMailboxes)('every public mailbox', () => {
     for (const m of messages) {
       const content = await api.getMessageContent(name, m.id)
       expect(content, m.id).not.toBeNull()
-      expect(content!.subject, m.id).toBe(m.subject)
-      expect(content!.date, m.id).toBe(m.date)
-      expect(content!.fromEmail, m.id).toBe(m.fromEmail)
+      expect(sha(content!.subject), `${m.id} subject`).toBe(sha(m.subject))
+      expect(content!.date, `${m.id} date`).toBe(m.date)
+      expect(sha(content!.fromEmail), `${m.id} sender`).toBe(sha(m.fromEmail))
       // A message is something to read: an email has a body (other items have a card).
       const hasBody = typeof (content!.html ?? content!.text) === 'string'
       expect(hasBody || content!.itemKind !== 'email', `${m.id} body`).toBe(true)
@@ -83,15 +85,17 @@ describe.skipIf(!havePublicMailboxes)('every public mailbox', () => {
 
   test.each(publicMailboxNames)('%s: every message can be found by its own subject', async (name) => {
     const { messages } = opened.get(name)!
-    // A filter reads the stored subject directly; a word goes through the index.
-    for (const m of messages) {
-      // A message with no subject is listed under a placeholder, which is not
-      // text of the message and so not something to search for.
-      if (m.subject.startsWith('(')) continue
-      const word = m.subject.split(/[^\p{L}]+/u).find((w) => w.length >= 5)
-      if (!word) continue
-      const hits = await api.search(`mailbox:"${name}" ${word}`)
-      expect(hits.map((h) => h.messageId), `${m.id} by a word of its subject`).toContain(m.id)
+    // A word of at least five letters from each subject. (A message with no
+    // subject is listed under a placeholder in brackets, which is not its text.)
+    const searchable = messages
+      .filter((m) => !m.subject.startsWith('('))
+      .map((m) => ({ id: m.id, word: m.subject.split(/[^\p{L}]+/u).find((w) => w.length >= 5) }))
+      .filter((m): m is { id: string; word: string } => Boolean(m.word))
+    // Most messages have one; if hardly any did, the loop below would prove little.
+    expect(searchable.length).toBeGreaterThan(messages.length / 2)
+    for (const m of searchable) {
+      const hits = await api.search(`mailbox:"${name}" ${m.word}`)
+      expect(hits.some((h) => h.messageId === m.id), `${m.id} by a word of its subject`).toBe(true)
     }
     const everything = await api.search(`mailbox:"${name}"`)
     expect(everything.map((h) => h.messageId).sort()).toEqual(messages.map((m) => m.id).sort())
@@ -116,7 +120,7 @@ describe.skipIf(!havePublicMailboxes)('every public mailbox', () => {
     }
     expect(skipped).toBe(0)
     expect(notListed).toBe(0)
-    expect(exported.map((e) => e.subject)).toEqual(messages.map((m) => m.subject))
+    expect(exported.map((e) => sha(e.subject))).toEqual(messages.map((m) => sha(m.subject)))
 
     for (const [i, e] of exported.entries()) {
       const text = new TextDecoder().decode(e.bytes)

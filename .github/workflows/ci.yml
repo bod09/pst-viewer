@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request makes the older run pointless.
+# A newer push to the same pull request makes the older run pointless. Pushes
+# to main each get their own group (the commit), so none is cancelled or
+# left waiting behind another.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -30,15 +32,24 @@ jobs:
           cache: npm
       - run: npm ci
       # Real .pst, .ost and .msg files for the tests: public, pinned and
-      # checked by hash (tests/public-mailboxes.json). Kept between runs.
-      - uses: actions/cache@v6
+      # checked by hash (tests/public-mailboxes.json). Kept between runs, and
+      # saved as soon as they are fetched so a failing run keeps them too.
+      - uses: actions/cache/restore@v6
+        id: public-files
         with:
           path: fixtures/public
           key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
       - run: npm run mailboxes
+      - uses: actions/cache/save@v6
+        if: steps.public-files.outputs.cache-hit != 'true'
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:coverage
+      # A skipped test is reported as success by the test runner. Not here.
+      - run: node scripts/check-test-reports.mjs vitest
       - run: npm run build
 
   e2e:
@@ -52,7 +63,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v6
+      # Restored only: the other job saves this cache, and two jobs saving the
+      # same key at once just race.
+      - uses: actions/cache/restore@v6
         with:
           path: fixtures/public
           key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
@@ -62,7 +75,7 @@ jobs:
       - name: Playwright version
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         id: browser
         with:
           path: ~/.cache/ms-playwright
@@ -70,27 +83,36 @@ jobs:
       - name: Install the browser
         if: steps.browser.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+      - uses: actions/cache/save@v6
+        if: steps.browser.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install the browser's system libraries
         if: steps.browser.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
       - run: npm run test:e2e
-      # What a failed test saw: a screenshot, and a trace that replays it step
-      # by step (https://trace.playwright.dev). Only made-up and public test
-      # mail is ever on screen.
+      - run: node scripts/check-test-reports.mjs playwright
+      # What the tests saw: for a failure, a screenshot and a trace that
+      # replays it step by step (https://trace.playwright.dev). Kept for
+      # every run, since a test that passed only on its second try is worth
+      # looking at too. Only made-up and public test mail is ever on screen.
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
           name: browser-test-report
           path: |
             playwright-report
             test-results
+          if-no-files-found: ignore
           retention-days: 7
 
   # Branch protection requires a check called `build`, which is what this
   # workflow's only job used to be called. It is kept as the single gate so
   # the setting never has to change when jobs are added: it passes only if
-  # every job above did. (Without `if: always()` it would be skipped when one
-  # failed, and GitHub treats a skipped required check as passed.)
+  # every job listed in `needs` did, so a new job must be added to that list.
+  # (Without `if: always()` it would be skipped when one failed, and GitHub
+  # treats a skipped required check as passed.)
   build:
     name: build
     if: always()
@@ -103,6 +125,10 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           echo "results: $RESULTS"
+          if [ -z "$RESULTS" ]; then
+            echo "::error::No job results to check."
+            exit 1
+          fi
           for result in $RESULTS; do
             if [ "$result" != "success" ]; then
               echo "::error::A CI job did not pass ($result). See the jobs above."

@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { emailFrame, fixture, messageList, openFiles, reader } from './support'
+import { type Page } from '@playwright/test'
+import { emailFrame, expect, fixture, messageList, openFiles, reader, test } from './support'
 
 const searchBox = (page: Page) => page.getByRole('searchbox', { name: 'Search all mail…' })
 const results = (page: Page) => page.getByRole('listbox', { name: 'Search results' }).getByRole('option')

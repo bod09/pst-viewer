@@ -33,9 +33,30 @@
     "typescript/no-explicit-any": "error",
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "error",
+    // AGENTS.md rule 4: HTML from mail is shown only after sanitising. Each
+    // place that injects HTML has to say, in a comment that disables this
+    // rule, how its HTML was made safe.
+    "react/no-danger": "error",
     // A test left as `.only` silently turns every other test off.
     "vitest/no-focused-tests": "error",
     "vitest/no-identical-title": "error"
   },
+  "overrides": [
+    {
+      // AGENTS.md rule 1: nothing leaves the device. The app may not make a
+      // network request, except where a comment disabling this rule explains
+      // why that one is safe (today: fetching its own branding.json).
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "fetch", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "XMLHttpRequest", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "WebSocket", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "EventSource", "message": "The app makes no network requests (AGENTS.md rule 1)." }
+        ]
+      }
+    }
+  ],
   "ignorePatterns": ["dist", "deploy", "public", "patches", "fixtures", "node_modules", "playwright-report", "test-results", "coverage"]
 }

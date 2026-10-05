@@ -46,7 +46,17 @@ function problemsWith(name: string): string[] {
   if (/[\u2028\u2029]/.test(name)) problems.push('line separator')
   if (name !== name.trim()) problems.push('leading or trailing space')
   if (/^[.~]|[.~ ]$/.test(name)) problems.push('leading or trailing dot or tilde')
-  if (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name)) problems.push('device name')
+  // Devices, with or without an extension, and with spaces before the dot.
+  if (/^(con|prn|aux|nul|clock\$|conin\$|conout\$|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3])\s*(\.|$)/i.test(name)) {
+    problems.push('device name')
+  }
+  // Code points Unicode sets aside as "not a character", which Chromium refuses.
+  const nonCharacter = (cp: number) => (cp >= 0xfdd0 && cp <= 0xfdef) || (cp & 0xfffe) === 0xfffe
+  if ([...name].some((ch) => nonCharacter(ch.codePointAt(0)!))) problems.push('non-character')
+  // A name Windows could take for another file's 8.3 short name, like GIT~1.
+  if (name.includes('~') && /^[^\s."\\/:+|<>=;?,*]{1,8}(\.[^\s."\\/:+|<>=;?,*]{0,3})?$/.test(name)) {
+    problems.push('could be a short name')
+  }
   if (/^(desktop\.ini|thumbs\.db)$/i.test(name)) problems.push('shell name')
   if (!name.isWellFormed()) problems.push('unpaired surrogate')
   if (name.length > 72) problems.push(`${name.length} units long`)
@@ -69,6 +79,13 @@ const HOSTILE = [
   'COM1',
   'LPT9.anything.at.all',
   'CLOCK$',
+  'CONIN$',
+  'conout$',
+  'COM\u00b9',
+  'LPT\u00b3.txt',
+  'CON .txt',
+  'a~1',
+  'x\u{1FFFE}y\u{10FFFF}',
   'desktop.ini',
   'Thumbs.db',
   '.hidden',
@@ -122,10 +139,12 @@ describe('file names', () => {
 
   test('the checker above does object to unsafe names', () => {
     // Guards the guard: each of these must be caught, or the test above proves nothing.
-    for (const bad of ['a/b', 'a\\b', 'CON', 'nul.txt', ' x', 'x.', '.x', 'x\u202Ey', 'x\n', '', 'x'.repeat(73), '\uD800']) {
-      expect(problemsWith(bad), JSON.stringify(bad)).not.toEqual([])
-    }
-    expect(problemsWith('2024-03-12 1015 Quarterly zebra report.eml')).toEqual([])
+    const bad = ['a/b', 'a\\b', 'CON', 'nul.txt', ' x', 'x.', '.x', 'x\u202Ey', 'x\n', '', 'x'.repeat(73), '\uD800']
+    bad.push('CLOCK$', 'conin$', 'CONOUT$.txt', 'COM\u00b9.txt', 'CON .txt', 'lpt0', 'x\uFFFE', 'x\uFDD0y', 'x\u{1FFFF}')
+    bad.push('GIT~1', 'a~1.eml', 'PROGRA~1.EXE')
+    for (const name of bad) expect(problemsWith(name), JSON.stringify(name)).not.toEqual([])
+    const fine = ['2024-03-12 1015 Quarterly zebra report.eml', 'GIT_1.eml', 'a long name with a ~ in it.eml', 'Console.eml', 'COM10.eml']
+    for (const name of fine) expect(problemsWith(name), name).toEqual([])
   })
 
   test('ordinary subjects are kept as written, in any script', async () => {

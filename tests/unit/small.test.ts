@@ -46,12 +46,16 @@ describe('dates', () => {
     }
   })
 
-  test('a real date is shown', () => {
+  test('a real date is shown, in whatever way the reader\'s own language writes it', () => {
+    // Which words and which calendar depends on the machine, so the year is
+    // asked for the same way the code asks, rather than written here.
     const march = new Date(2024, 2, 12, 10, 15).getTime()
-    expect(formatDate(march)).toContain('2024')
-    expect(formatDateShort(march)).toContain('2024')
-    // Today shows as a time, without the year.
-    expect(formatDateShort(Date.now())).not.toContain(String(new Date().getFullYear()))
+    const year = new Date(march).toLocaleDateString(undefined, { year: 'numeric' }).replace(/[^\p{Nd}]/gu, '')
+    expect(year).not.toBe('')
+    expect(formatDate(march)).toContain(year)
+    expect(formatDateShort(march)).toContain(year)
+    // Today shows as a time, shorter than a date with its year.
+    expect(formatDateShort(Date.now()).length).toBeLessThan(formatDate(Date.now()).length)
   })
 })
 

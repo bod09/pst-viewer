@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "spoof-sender.eml",
  "full": true,
  "redacted": false,
@@ -27,8 +27,18 @@
      "date": 1710241200000,
      "att": false,
      "cls": "IPM.Note",
-     "body": "210b25550d38ac1f",
-     "atts": ""
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "210b25550d38ac1f",
+     "people": "1978fbc9d67abee9",
+     "headers": "a9f196d3805a102a",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "[]",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   }

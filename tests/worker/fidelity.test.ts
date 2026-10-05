@@ -53,15 +53,29 @@ describe('the baselines themselves', () => {
   // Only mail made up for this repository may appear in it as text.
   test.each(baselines.filter((b) => !isFixture(b.name)))('$name: holds no text from the mailbox', ({ baseline }) => {
     expect(baseline.redacted).toBe(true)
+    // Every piece of text anywhere in it must be a hash, except the few
+    // fields that can only hold an id or one of a fixed set of words. Written
+    // this way round so that a field added later is covered without anyone
+    // remembering to list it.
+    const allowed: Record<string, RegExp> = {
+      file: /^.+$/, // the name of the public file itself
+      id: /^[\w/.:-]+$/,
+      cls: /^[\w. -]*$/, // IPM.Note and the like
+      kind: /^(email|contact|appointment|distlist|task|journal|note)$/,
+    }
     const hash = /^[0-9a-f]{16}$/
-    for (const folder of baseline.folders) {
-      for (const part of folder.path) expect(part).toMatch(hash)
-      for (const row of folder.rows) {
-        for (const key of ['subject', 'from', 'to', 'atts', 'body'].filter((k) => row[k] !== undefined)) {
-          expect(row[key], `${key} of ${row.id}`).toMatch(hash)
-        }
+    const unhashed: string[] = []
+    const walk = (value: unknown, key: string) => {
+      if (typeof value === 'string') {
+        if (!(allowed[key] ?? hash).test(value)) unhashed.push(key)
+      } else if (Array.isArray(value)) {
+        for (const item of value) walk(item, key)
+      } else if (value && typeof value === 'object') {
+        for (const [k, v] of Object.entries(value)) walk(v, k)
       }
     }
+    walk(baseline, '')
+    expect(unhashed).toEqual([])
   })
 })
 
@@ -82,7 +96,10 @@ describe('public test files read as recorded', () => {
   test.skipIf(!havePublicMailboxes).each(baselines.filter((b) => !isFixture(b.name)))(
     '$name',
     async ({ name, baseline }) => {
-      const { problems, current } = await check(api, publicMailbox(name), baseline, scanZipForPsts)
+      // Not revealing the text: this output can end up in a public test log.
+      // To see what a difference is about, on your own machine:
+      //   npm run fidelity -- "fixtures/public/<file>" --baselines tests/baselines
+      const { problems, current } = await check(api, publicMailbox(name), baseline, scanZipForPsts, { reveal: false })
       expect(problems).toEqual([])
       expect(current.messages).toBe(baseline.messages)
     },

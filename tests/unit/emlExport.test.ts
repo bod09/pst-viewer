@@ -14,6 +14,10 @@ const parse = (eml: string) =>
 
 const bytesOf = (content: unknown) => new Uint8Array(content as ArrayBuffer)
 
+/** The value of a header, with the lines it was folded over joined again. */
+const header = (eml: string, name: string) =>
+  (new RegExp(`^${name}: (.*(?:\\r\\n[ \\t].*)*)`, 'm').exec(eml)?.[1] ?? '').replace(/\r\n(?=[ \t])/g, '')
+
 /** Deterministic bytes that are not valid UTF-8 and cover every value. */
 function noise(length: number): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(length)
@@ -121,9 +125,51 @@ describe('headers', () => {
       { name: '', address: 'Boss <ceo@company.example>, Other <x@example.com>' },
     ])
     // And the app's own reader agrees (it does not trust postal-mime here).
-    const header = (name: string) => new RegExp(`^${name}: (.*)$`, 'm').exec(eml)?.[1] ?? ''
-    expect(structuredAddresses(header('From'))).toEqual([email.from])
-    expect(structuredAddresses(header('To'))).toEqual(email.to)
+    expect(structuredAddresses(header(eml, 'From'))).toEqual([email.from])
+    expect(structuredAddresses(header(eml, 'To'))).toEqual(email.to)
+  })
+
+  test('text that looks like an encoded word is read back as the text it was', async () => {
+    // Written out plain, a reader would decode it into something else.
+    const sneaky = '=?UTF-8?Q?Boss_=3Cceo=40company.example=3E?='
+    const eml = build(
+      messageContent({ subject: sneaky, fromName: sneaky, fromEmail: 'attacker@evil.example' }),
+      [attachment(`${sneaky}.pdf`, noise(8))],
+    )
+    const email = await parse(eml)
+    expect(email.subject).toBe(sneaky)
+    expect(email.from).toEqual({ name: sneaky, address: 'attacker@evil.example' })
+    expect(email.attachments[0].filename).toBe(`${sneaky}.pdf`)
+    expect(structuredAddresses(header(eml, 'From'))).toEqual([email.from])
+  })
+
+  test.each([
+    ['plain', 'word '.repeat(600)],
+    ['accented', 'é'.repeat(3000)],
+    ['in another script, with characters outside the basic plane', '語\u{1F600}'.repeat(1000)],
+  ])('a very long %s subject or name is folded, and reads back whole', async (_what, long) => {
+    const text = long.trim()
+    const eml = build(messageContent({ subject: text, fromName: text, fromEmail: 'alice@example.com' }))
+    const head = eml.slice(0, eml.indexOf('\r\n\r\n'))
+    // No encoded word over the 75 characters allowed, no line anywhere near the 998.
+    expect(Math.max(...(head.match(/=\?UTF-8\?B\?[^?]*\?=/g) ?? []).map((w) => w.length))).toBeLessThanOrEqual(75)
+    expect(Math.max(...head.split('\r\n').map((l) => l.length))).toBeLessThanOrEqual(100)
+    const email = await parse(eml)
+    expect(email.subject).toBe(text)
+    expect(email.from).toEqual({ name: text, address: 'alice@example.com' })
+  })
+
+  test('people with nothing but spaces for a name or address are left out, not written as blanks', () => {
+    const eml = build(
+      messageContent({
+        fromName: '   ',
+        fromEmail: ' \t ',
+        to: [{ name: '  ', email: '' }, { name: ' Bob Tester ', email: ' bob@example.com ' }, { name: '', email: '   ' }],
+        cc: [{ name: ' ', email: ' ' }],
+      }),
+    )
+    const head = eml.slice(0, eml.indexOf('\r\n\r\n')).split('\r\n')
+    expect(head.slice(0, 2)).toEqual(['To: Bob Tester <bob@example.com>', 'Subject: Subject'])
   })
 
   test('the real transport headers are kept, minus the ones describing the old body', () => {
@@ -162,6 +208,22 @@ describe('headers', () => {
       'From: Alice Example <alice@example.com>',
       'Subject: =?UTF-8?B?UsOpdW5pb24=?=',
       'X-Mailer: Example Mailer 1.0',
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="utf-8"',
+      'Content-Transfer-Encoding: base64',
+    ])
+  })
+
+  test('a lone carriage return in the original headers cannot hide a header inside another', () => {
+    const eml = build(
+      messageContent({ headers: 'X-A: one\rContent-Type: text/html\rX-B: two\r\nSubject: Kept\r\n' }),
+    )
+    const head = eml.slice(0, eml.indexOf('\r\n\r\n'))
+    expect(head).not.toMatch(/\r(?!\n)/)
+    expect(head.split('\r\n')).toEqual([
+      'X-A: one',
+      'X-B: two',
+      'Subject: Kept',
       'MIME-Version: 1.0',
       'Content-Type: text/plain; charset="utf-8"',
       'Content-Transfer-Encoding: base64',
@@ -298,6 +360,47 @@ describe('attachments', () => {
     // nothing after it was read as another parameter.
     expect(email.attachments[0].filename).toBe(readsBackAs)
     expect(bytesOf(email.attachments[0].content)).toEqual(data)
+  })
+
+  test.each([
+    ['a line break and headers', 'text/plain\r\nX-Injected: 1\r\n\r\n<script>alert(1)</script>'],
+    ['a parameter of its own', 'text/html; charset="x"; name="evil.html"'],
+    ['no slash', 'garbage'],
+    ['spaces', 'text / plain'],
+    ['nothing', ''],
+  ])('a file type with %s cannot add to the headers', async (_what, mime) => {
+    const data = noise(16)
+    const eml = build(
+      messageContent({
+        text: null,
+        html: '<img src="cid:pic">',
+        inlineImages: [{ cid: 'pic', mime, data: PNG.slice().buffer }],
+      }),
+      [attachment('a.bin', data, mime)],
+    )
+    expect(eml).not.toMatch(/^X-Injected/m)
+    const types = [...eml.matchAll(/^Content-Type: ([^;\r]+)/gm)].map((m) => m[1])
+    // A type with parameters keeps its type and loses the rest; an inline
+    // picture that is not a picture is not given a type that could be shown.
+    const attached = mime.startsWith('text/html;') ? 'text/html' : 'application/octet-stream'
+    expect(types).toEqual(['multipart/mixed', 'multipart/related', 'text/html', 'application/octet-stream', attached])
+    const email = await parse(eml)
+    expect(email.html).toBe('<img src="cid:pic">')
+    expect(email.attachments.map((a) => a.filename ?? null)).toEqual([null, 'a.bin'])
+    expect(bytesOf(email.attachments[1].content)).toEqual(data)
+  })
+
+  test('an ordinary file type is written as it is', () => {
+    const eml = build(messageContent(), [
+      attachment('a.docx', noise(4), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+      attachment('b.svg', noise(4), 'image/svg+xml'),
+      attachment('c.bin', noise(4), 'application/x-my_type.v2'),
+    ])
+    expect([...eml.matchAll(/^Content-Type: ([^;\r]+); name=/gm)].map((m) => m[1])).toEqual([
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/svg+xml',
+      'application/x-my_type.v2',
+    ])
   })
 
   // An attachment is encoded a piece at a time (57 * 32768 bytes each), and

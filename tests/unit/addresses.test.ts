@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { structuredAddresses } from '../../src/worker/eml'
+import { parseEml, structuredAddresses } from '../../src/worker/eml'
+import { simpleEml } from '../support/fixtures.mjs'
 
 describe('structuredAddresses', () => {
   test('reads ordinary addresses', () => {
@@ -85,19 +86,31 @@ describe('structuredAddresses', () => {
     ])
   })
 
-  test('text that merely looks like the internal placeholder is left alone', () => {
+  test('nothing the sender writes can pass for the token used while parsing', () => {
+    // Encoded words are swapped for a token while the structure is read. An
+    // earlier version used a fixed word, which a header could contain.
     expect(structuredAddresses('pstvencoded0x <alice@example.com>')).toEqual([
       { name: 'pstvencoded0x', address: 'alice@example.com' },
     ])
     expect(structuredAddresses('pstvencoded0x =?UTF-8?Q?Real?= <alice@example.com>')).toEqual([
       { name: 'pstvencoded0x Real', address: 'alice@example.com' },
     ])
+    // Not even escaped, which the parser undoes after the header was looked at.
     expect(
-      structuredAddresses('=?UTF-8?Q?Real?= <pstvencoded0x@example.com>, pstvencodedq0x <b@example.com>'),
+      structuredAddresses('"pstvenco\\ded0x" <victim@example.com>, =?utf-8?q?Boss?= <b@example.com>'),
     ).toEqual([
-      { name: 'Real', address: 'pstvencoded0x@example.com' },
-      { name: 'pstvencodedq0x', address: 'b@example.com' },
+      { name: 'pstvencoded0x', address: 'victim@example.com' },
+      { name: 'Boss', address: 'b@example.com' },
     ])
+  })
+
+  test('a very long header is read, and quickly', () => {
+    const long = `${'pstvencoded' + 'q'.repeat(200_000)} <bob@example.com>, =?UTF-8?Q?Ann?= <ann@example.com>`
+    const started = performance.now()
+    const list = structuredAddresses(long)
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(list.map((a) => a.address)).toEqual(['bob@example.com', 'ann@example.com'])
+    expect(list[1].name).toBe('Ann')
   })
 
   test('nonsense in, nothing dangerous out', () => {
@@ -107,3 +120,25 @@ describe('structuredAddresses', () => {
     }
   })
 })
+
+describe('parseEml', () => {
+  test('a message with an absurd address header still opens, with the people it names', async () => {
+    const eml = simpleEml({
+      subject: 'Still readable',
+      to: `${'pstvencoded' + 'q'.repeat(40_000)} <bob@example.com>, ${'x'.repeat(50_000)}`,
+    })
+    const message = await parseEml(eml.slice().buffer, 'id')
+    expect(message.subject).toBe('Still readable')
+    expect(message.senderEmailAddress).toBe('alice@example.com')
+    const recipients = (await message.getRecipients()) as unknown as { smtpAddress: string }[]
+    expect(recipients[0].smtpAddress).toBe('bob@example.com')
+  })
+
+  test('bytes that are not a message are refused', async () => {
+    await expect(parseEml(new TextEncoder().encode('just some text').buffer as ArrayBuffer, 'id')).rejects.toThrow(
+      'not an RFC822 message',
+    )
+    await expect(parseEml(new ArrayBuffer(0), 'id')).rejects.toThrow('not an RFC822 message')
+  })
+})
+

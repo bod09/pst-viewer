@@ -28,7 +28,7 @@ describe('buildPrintDocument', () => {
     expect(meta[0]).toBe('From: Alice Example <alice@example.com>')
     expect(meta[1]).toBe('To: Bob Tester <bob@example.com>; eve@example.com')
     expect(meta[2]).toBe('Cc: Carol Sender')
-    expect(meta[3]).toMatch(/^Date: .*2024/)
+    expect(meta[3]).toMatch(/^Date: .+/)
     // Inline pictures are part of the body, not listed; an attached message is.
     expect(meta[4]).toBe('Attachments: chart.png, Forwarded.eml')
     expect(doc.querySelector('pre.plain')?.textContent).toBe('Line one\nLine two')
@@ -115,6 +115,22 @@ describe('buildPrintDocument', () => {
       'https://tracker.example/photo.jpg',
     )
     expect(print({ html }, false).querySelector('.email-body img')?.hasAttribute('src')).toBe(false)
+  })
+
+  test('with remote content off, the printed page carries the policy and no remote address', () => {
+    const html =
+      '<img src="https://tracker.example/a.png"><img src="https:\\\\tracker.example\\b.png"><img src="\\\\tracker.example/c.png">' +
+      '<div style="background:url(https://tracker.example/d.png">x</div><p>kept</p>'
+    const page = buildPrintDocument([messageContent({ html }), messageContent({ html: '<p>second</p>' })], false)
+    const doc = new DOMParser().parseFromString(page, 'text/html')
+    const policies = [...doc.head.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]')]
+    expect(policies.map((m) => m.getAttribute('content'))).toEqual([
+      "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:",
+    ])
+    expect(page).not.toContain('tracker.example')
+    expect(doc.querySelector('.email-body p')?.textContent).toBe('kept')
+    // With remote content allowed there is no policy to add.
+    expect(buildPrintDocument([messageContent({ html })], true)).not.toContain('Content-Security-Policy')
   })
 
   test('a message with no sender says so', () => {

@@ -91,7 +91,8 @@ export function spoofSenderEml() {
 export function hostileHtmlEml({ remote = 'https://tracker.example' } = {}) {
   const html = [
     '<html><head>',
-    `<style>body { background: url(${remote}/style-bg.png) } @import url(${remote}/import.css);</style>`,
+    // (An @import only counts when it comes first in a stylesheet.)
+    `<style>@import url(${remote}/import.css); body { background: url(${remote}/style-bg.png) }</style>`,
     `<link rel="stylesheet" href="${remote}/sheet.css">`,
     '</head><body>',
     '<p id="visible">Visible paragraph: kumquat.</p>',
@@ -99,6 +100,7 @@ export function hostileHtmlEml({ remote = 'https://tracker.example' } = {}) {
     '<img src="x" onerror="window.parent.postMessage(\'pwned-onerror\', \'*\')">',
     '<a id="js-link" href="javascript:window.parent.postMessage(\'pwned-href\', \'*\')">javascript link</a>',
     '<a id="real-link" href="https://example.com/page">ordinary link</a>',
+    '<svg width="120" height="30"><a id="svg-link" href="https://example.com/svg"><text x="0" y="20">svg link</text></a></svg>',
     `<iframe src="${remote}/frame.html"></iframe>`,
     `<form action="${remote}/submit"><input name="password"><button>Send</button></form>`,
     '<svg><script>window.parent.postMessage("pwned-svg", "*")</script></svg>',

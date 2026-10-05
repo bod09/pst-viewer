@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "msgInMsgInMsg.msg",
  "full": true,
  "redacted": true,
@@ -27,8 +27,29 @@
      "date": 1599733301000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "f01922d4c12ea5d1",
-     "atts": "e7ba44e95522f89e"
+     "opened": true,
+     "kind": "email",
+     "html": "1080211cc9d0e0f1",
+     "text": "47e62e01d2c8eb85",
+     "people": "bc7e6c3b14eff264",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "ee82f2497cadfb08",
+     "files": [
+      [
+       0,
+       0,
+       1
+      ],
+      [
+       134,
+       0,
+       0
+      ]
+     ],
+     "types": "c7380b32a9a917ea",
+     "bytes": "666da0d623150ab9"
     }
    ]
   }

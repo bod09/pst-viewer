@@ -1,6 +1,6 @@
 import PostalMime from 'postal-mime'
-import { expect, test, type Page } from '@playwright/test'
-import { fixture, folderRow, messageRow, openFiles, openMessage, reader } from './support'
+import { type Page } from '@playwright/test'
+import { expect, fixture, folderRow, messageRow, openFiles, openMessage, reader, test } from './support'
 
 /**
  * Exporting writes to a folder the reader picks. A test cannot click through

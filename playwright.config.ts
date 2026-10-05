@@ -24,8 +24,16 @@ export default defineConfig({
   // One retry in CI, so a hiccup on a shared runner does not block a merge.
   // A test that needed it is reported as flaky, which is a bug to fix.
   retries: CI ? 1 : 0,
-  reporter: CI ? [['github'], ['list'], ['html', { open: 'never' }]] : [['list']],
+  // In CI: annotations on the pull request, the list in the log, a report to
+  // download when something fails, and a machine-readable one that
+  // scripts/check-test-reports.mjs reads to make sure nothing was skipped.
+  reporter: CI
+    ? [['github'], ['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/playwright.json' }]]
+    : [['list']],
   timeout: 30_000,
+  // The whole run, so that a hang ends with a report instead of the CI job
+  // being cut off with nothing to look at.
+  globalTimeout: CI ? 12 * 60_000 : undefined,
   expect: { timeout: 10_000 },
   use: {
     // What a failed test leaves behind to look at (test-results/, and the report in CI).

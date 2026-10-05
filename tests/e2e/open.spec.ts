@@ -1,21 +1,7 @@
-import { expect, test } from '@playwright/test'
-import {
-  emailFrame,
-  fixture,
-  folderRow,
-  messageList,
-  messageRow,
-  openFiles,
-  openMessage,
-  publicMailboxPath,
-  reader,
-  upload,
-  watchRequests,
-} from './support'
+import { emailFrame, expect, fixture, folderRow, messageList, messageRow, openFiles, openMessage, publicMailboxPath, reader, test, upload } from './support'
 
 test.describe('the start page', () => {
-  test('says what to do, and loads nothing from anywhere else', async ({ page }) => {
-    const requests = await watchRequests(page)
+  test('says what to do, and loads nothing from anywhere else', async ({ page, requests }) => {
     await page.goto('./')
     await expect(page.getByRole('heading', { name: 'Open your mailbox' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Browse files/ })).toBeVisible()

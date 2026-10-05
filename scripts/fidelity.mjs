@@ -24,6 +24,9 @@
  * A check always samples and redacts the way its baseline did, so --full and
  * --redact only mean anything while recording one.
  *
+ * Exit codes: 0 the mailbox reads as recorded, 1 it reads differently,
+ * 2 the check could not be run (bad arguments, no baseline, unreadable file).
+ *
  * Mailboxes and baselines stay on your machine: a baseline holds real subjects
  * and sender names, so .fidelity/ is git-ignored along with the files it
  * describes. The baselines that are in the repository (tests/baselines/) are
@@ -46,13 +49,16 @@ let baselineDir = join(ROOT, '.fidelity')
 const flags = new Set()
 for (let i = 0; i < args.length; i++) {
   const arg = args[i]
-  if (arg === '--baselines') {
+  if (arg === '--help' || arg === '-h') {
+    console.log(USAGE)
+    process.exit(0)
+  } else if (arg === '--baselines') {
     const dir = args[++i]
-    if (!dir) fail(`--baselines needs a directory\n${USAGE}`)
+    if (!dir || dir.startsWith('-')) fail(`--baselines needs a directory\n${USAGE}`)
     baselineDir = resolve(dir)
   } else if (['--update', '--full', '--redact'].includes(arg)) {
     flags.add(arg)
-  } else if (arg.startsWith('--')) {
+  } else if (arg.startsWith('-')) {
     fail(`unknown option ${arg}\n${USAGE}`)
   } else if (mailboxPath) {
     fail(`one mailbox at a time, got ${mailboxPath} and ${arg}\n${USAGE}`)
@@ -107,26 +113,29 @@ try {
   fail(`cannot read ${mailboxPath}: ${err instanceof Error ? err.message : err}`)
 }
 const file = new File([blob], name)
-const { api, scanZip } = await loadWorker()
 const secs = () => ((Date.now() - t0) / 1000).toFixed(1)
+// A mailbox that cannot be opened at all is a failure to run the check, not a
+// difference found by it.
+const running = (/** @type {unknown} */ err) => fail(`could not read ${name}: ${err instanceof Error ? err.message : err}`)
+const { api, scanZip } = await loadWorker()
 
 if (update) {
-  const plain = await snapshotFile(api, file, { full: flags.has('--full'), scanZip })
+  const plain = await snapshotFile(api, file, { full: flags.has('--full'), scanZip }).catch(running)
   const snapshot = flags.has('--redact') ? redact(plain) : plain
   await mkdir(baselineDir, { recursive: true })
   await writeFile(baselinePath, JSON.stringify(snapshot, null, 1) + '\n')
   console.log(
     `baseline written: ${snapshot.messages} messages in ${snapshot.folders.length} folders ` +
-      `(${snapshot.bodies} bodies hashed${snapshot.redacted ? ', text redacted' : ''}) in ${secs()}s\n  ${baselinePath}`,
+      `(${snapshot.bodies} opened and hashed${snapshot.redacted ? ', text redacted' : ''}) in ${secs()}s\n  ${baselinePath}`,
   )
   process.exit(0)
 }
 
-const { problems, current } = await check(api, file, baseline, scanZip)
+const { problems, current } = await check(api, file, baseline, scanZip).catch(running)
 if (problems.length === 0) {
   console.log(
     `FIDELITY OK: ${current.messages} messages in ${current.folders.length} folders ` +
-      `match the baseline exactly (${current.bodies} bodies hashed, ${secs()}s)`,
+      `match the baseline exactly (${current.bodies} opened and hashed, ${secs()}s)`,
   )
   process.exit(0)
 }

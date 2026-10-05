@@ -1,7 +1,46 @@
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { expect, test, type FrameLocator, type Page, type Request } from '@playwright/test'
+import { expect, test as base, type FrameLocator, type Page, type Request } from '@playwright/test'
 import { fixtureFiles } from '../support/fixtures.mjs'
+
+/** What `requests` gives a test: see the fixture below. */
+export interface Requests {
+  /** URLs requested from anywhere but the app itself. */
+  outside: string[]
+  /** Every request, for checking what the app loads of its own. */
+  all: Request[]
+}
+
+/**
+ * The `test` every spec uses, in place of Playwright's own.
+ *
+ * It adds one thing, for every test whether it asks or not: any request that
+ * leaves the app's own origin is recorded and answered here, never by the
+ * real internet. So a test can assert on what a message tried to fetch
+ * (`requests.outside`), and no test can touch the network by accident.
+ */
+export const test = base.extend<{ requests: Requests }>({
+  requests: [
+    async ({ context, page, baseURL }, use) => {
+      const own = new URL(baseURL!).origin
+      const requests: Requests = { outside: [], all: [] }
+      // A one pixel GIF, so a remote picture that is allowed does load.
+      const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+      await context.route(
+        (url) => !['data:', 'blob:', 'about:'].includes(url.protocol) && url.origin !== own,
+        async (route) => {
+          requests.outside.push(route.request().url())
+          if (route.request().resourceType() === 'image') await route.fulfill({ contentType: 'image/gif', body: pixel })
+          else await route.fulfill({ contentType: 'text/html', body: '<title>outside</title>' })
+        },
+      )
+      page.on('request', (r) => requests.all.push(r))
+      await use(requests)
+    },
+    { auto: true },
+  ],
+})
+export { expect }
 
 /** A file to hand to the app, as if it had been dropped on it. */
 export interface Upload {
@@ -24,14 +63,16 @@ export function fixture(name: string): Upload {
 }
 
 /**
- * The path of one of the public test mailboxes (see `npm run mailboxes`).
- * Without it the test is skipped, except in CI, where it must be there.
+ * The path of one of the public test files (see `npm run mailboxes`).
+ * Without it the test is skipped, except in CI or with REQUIRE_MAILBOXES=1,
+ * where it must be there.
  */
 export function publicMailboxPath(name: string): string {
   const path = fileURLToPath(new URL(`../../fixtures/public/${name}`, import.meta.url))
   const here = existsSync(path)
-  if (!here && process.env.CI) throw new Error(`${name} has not been downloaded. Run: npm run mailboxes`)
-  test.skip(!here, 'public mailboxes are not downloaded (npm run mailboxes)')
+  const required = Boolean(process.env.CI) || process.env.REQUIRE_MAILBOXES === '1'
+  if (!here && required) throw new Error(`${name} has not been downloaded. Run: npm run mailboxes`)
+  test.skip(!here, 'public test files are not downloaded (npm run mailboxes)')
   return path
 }
 
@@ -72,33 +113,4 @@ export async function setSetting(page: Page, label: string, on: boolean): Promis
   await expect(toggle).toHaveAttribute('aria-checked', String(on))
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toBeHidden()
-}
-
-/**
- * Watch every request the page makes and sort out the ones that leave the
- * app's own origin. Those are answered here (never by the real internet), so
- * a test both sees what was asked for and stays offline.
- */
-export async function watchRequests(page: Page) {
-  const outside: string[] = []
-  const own = new URL(test.info().project.use.baseURL!).origin
-  // A one pixel GIF, so a remote picture that is allowed does load.
-  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
-  await page.context().route(
-    (url) => !['data:', 'blob:', 'about:'].includes(url.protocol) && url.origin !== own,
-    async (route) => {
-      outside.push(route.request().url())
-      const type = route.request().resourceType()
-      if (type === 'image') await route.fulfill({ contentType: 'image/gif', body: pixel })
-      else await route.fulfill({ contentType: 'text/plain', body: '' })
-    },
-  )
-  const all: Request[] = []
-  page.on('request', (r) => all.push(r))
-  return {
-    /** URLs requested from anywhere but the app itself. */
-    outside,
-    /** Every request, for checking what the app loads of its own. */
-    all,
-  }
 }

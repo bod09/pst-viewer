@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "Attach sample eml received.msg",
  "full": true,
  "redacted": true,
@@ -27,8 +27,24 @@
      "date": 1764823096000,
      "att": true,
      "cls": "IPM.Note",
-     "body": "8d15d234f1800bf7",
-     "atts": "3d6b0d7e08b63706"
+     "opened": true,
+     "kind": "email",
+     "html": "aaf2838145caec69",
+     "text": "8d9f4edd69c097dd",
+     "people": "e8675d5b234a75f3",
+     "headers": "6b266130e7c56ecf",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "50da69de03862e6a",
+     "files": [
+      [
+       0,
+       0,
+       1
+      ]
+     ],
+     "types": "1906ca2d8f0a8169",
+     "bytes": "791aaf33c460654a"
     }
    ]
   }

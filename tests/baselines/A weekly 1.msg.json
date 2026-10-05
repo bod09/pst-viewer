@@ -1,5 +1,5 @@
 {
- "format": 2,
+ "format": 3,
  "file": "A weekly 1.msg",
  "full": true,
  "redacted": true,
@@ -27,8 +27,18 @@
      "date": 1670828138000,
      "att": false,
      "cls": "IPM.Appointment",
-     "body": "7eb70257593da06f",
-     "atts": "e3b0c44298fc1c14"
+     "opened": true,
+     "kind": "appointment",
+     "html": null,
+     "text": "7eb70257593da06f",
+     "people": "07a62ea90f174207",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": "f6e478d4209aff4f",
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
     }
    ]
   }

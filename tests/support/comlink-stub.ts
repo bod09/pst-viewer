@@ -3,8 +3,8 @@
  *
  * The worker ends with `Comlink.expose(api)`, which needs a real worker to
  * talk through. Here it just hands the API object over, so a test can call the
- * worker's functions directly. scripts/lib/worker-api.mjs does the same for
- * the fidelity check.
+ * worker's functions directly. loadWorker() in scripts/lib/fidelity.mjs does
+ * the same for the fidelity command.
  */
 export function expose(api: unknown): void {
   ;(globalThis as { __pstWorkerApi?: unknown }).__pstWorkerApi = api
