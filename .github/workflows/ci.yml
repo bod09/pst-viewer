@@ -35,6 +35,9 @@ jobs:
     name: What changed
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
       publish: ${{ steps.diff.outputs.publish }}
@@ -70,6 +73,37 @@ jobs:
           echo "code=$code publish=$publish"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
+      # A link to an AI chat or coding session must never be published here:
+      # the session holds the whole conversation behind the change. Tools add
+      # such links to commit messages and pull request text by themselves, so
+      # this fails the build if one is found (see AGENTS.md).
+      - name: No links to private sessions
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then range="HEAD^1..HEAD^2"; else range="$BEFORE..HEAD"; fi
+          messages=$(git log --format=%B "$range" 2>/dev/null || git log -1 --format=%B)
+          links='claude\.ai/|chatgpt\.com/|chat\.openai\.com/|gemini\.google\.com/app/'
+          found=0
+          if printf '%s\n' "$messages" | grep -qiE "$links"; then
+            echo "::error::A commit message links to an AI session. Rewrite the commit without it."
+            found=1
+          fi
+          # The title and description as they are now, not as they were when
+          # the run was first triggered, so that re-running this job after
+          # fixing the description passes.
+          text=""
+          if [ -n "$PR" ]; then
+            text=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.title + "\n" + (.body // "")')
+          fi
+          if printf '%s\n' "$text" | grep -qiE "$links"; then
+            echo "::error::The pull request title or description links to an AI session. Remove it, then delete the old revision from the description's edit history."
+            found=1
+          fi
+          exit $found
 
   checks:
     name: Type-check, lint, tests, build

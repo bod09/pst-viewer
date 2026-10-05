@@ -117,3 +117,11 @@ available, say that this check was not run.
 ## Pull requests
 
 State that the change was made with AI assistance and name the tool.
+
+**Never link to the session.** No link to a chat, a coding session or a
+transcript, in a commit message, a pull request, an issue or a comment: not
+as a trailer (`Claude-Session:` and the like), not in a footer, not anywhere.
+The session holds the whole conversation behind the change, and this
+repository is public. Tools add these links by themselves, so check the
+commit message and the pull request text before you push, and remove any
+`Co-Authored-By` line for the tool as well. CI fails if one gets through.

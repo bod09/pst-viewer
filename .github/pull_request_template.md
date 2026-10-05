@@ -23,4 +23,5 @@
 
 ## AI assistance
 
-<!-- If an AI tool helped write this, name it. -->
+<!-- If an AI tool helped write this, name it. Name only: never a link to the
+     chat or session, here or in a commit message. CI checks for that. -->
