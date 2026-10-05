@@ -1,17 +1,11 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
-    # Nothing in these ends up in what is published, so a change to them
-    # alone needs no new build. (Run it by hand from the Actions tab if ever
-    # needed: workflow_dispatch below is not filtered.)
-    paths-ignore:
-      - '**.md'
-      - 'tests/**'
-      - 'samples/**'
-      - 'screenshots/**'
-      - 'LICENSE'
+  # Called by CI (ci.yml) for a push to main, after every test has passed and
+  # only when something that is published changed. It does not run on a push
+  # by itself any more, so a commit that fails its tests is never published.
+  workflow_call:
+  # And by hand, from the Actions tab, whenever it is wanted.
   workflow_dispatch:
 
 permissions:
