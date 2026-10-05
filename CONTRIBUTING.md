@@ -52,7 +52,8 @@ Baselines are written to `.fidelity/`, which is git-ignored, because they record
 real subjects and addresses. Use the biggest and oddest mailboxes you have; a
 change can look fine on a small file and still go wrong on a large one.
 
-For changes to what is shown on screen, please include a screenshot.
+For changes to what is shown on screen, please include a screenshot, or a short
+recording if the change is about movement or a sequence of steps.
 
 ## Where things live
 

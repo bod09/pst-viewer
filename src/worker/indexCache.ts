@@ -33,8 +33,10 @@ export interface CachedSearchDoc {
 
 /** Bump when the entry shape changes; older entries are treated as misses.
  *  4: versions up to 3 could store an indexing pass that had silently lost
- *  folders, which then hid that mail from search on every later open. */
-const ENTRY_VERSION = 4
+ *  folders, which then hid that mail from search on every later open.
+ *  5: mail kept directly in the mailbox's top folder was never indexed, and
+ *  an entry stored before it was would keep it out of search. */
+const ENTRY_VERSION = 5
 
 interface Entry {
   docs: CachedSearchDoc[]

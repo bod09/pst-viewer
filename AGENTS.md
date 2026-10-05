@@ -53,7 +53,8 @@ a test framework unasked.
   `npm run fixtures` and on at least one real `.pst` or `.ost`. Report the
   result, including anything that did not match.
 - If the change is visible in the UI: run it and look, then include a
-  screenshot in the pull request.
+  screenshot in the pull request, or a short recording when the change is
+  about movement or a sequence of steps.
 
 Say which of these you ran. If something could not be checked, say that
 plainly rather than describing the change as verified.

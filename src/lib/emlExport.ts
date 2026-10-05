@@ -176,11 +176,11 @@ function buildHeaders(content: MessageContent): string {
 }
 
 /**
- * The same .eml text as buildEml, in pieces of a few megabytes at most beyond
- * the headers and body. A bulk export writes each piece as it comes, so a
- * message with large attachments never has to exist as one string (which
- * costs memory several times its size, and past about 500 MB is more than a
- * string can hold).
+ * A message as RFC822 .eml text (headers, MIME body and attachments), in
+ * pieces of a few megabytes at most beyond the headers and body. Each piece is
+ * written as it comes, so a message with large attachments never has to exist
+ * as one string (which costs memory several times its size, and past about
+ * 500 MB is more than a string can hold).
  */
 export function* emlParts(
   content: MessageContent,
@@ -201,15 +201,10 @@ export function* emlParts(
   yield `--${b}--\r\n`
 }
 
-/** Reconstruct a message as RFC822 .eml text (headers + MIME body + attachments). */
-export function buildEml(content: MessageContent, attachments: EmlAttachment[]): string {
-  return [...emlParts(content, attachments)].join('')
-}
-
-/** A filesystem-safe .eml filename derived from the subject. */
-export function emlFilename(content: MessageContent): string {
+/** A filesystem-safe .eml filename derived from a message's subject. */
+export function emlFilename(subject: string): string {
   const base =
-    (content.subject || 'message')
+    (subject || 'message')
       .replace(/[^\w.-]+/g, '_')
       .replace(/^_+|_+$/g, '')
       .slice(0, 80) || 'message'
