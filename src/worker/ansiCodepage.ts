@@ -146,11 +146,13 @@ const SAMPLE_BYTES = 256
 export function ansiStringDecoder(): AnsiStringDecoder {
   let codepage = DEFAULT_ANSI_CODEPAGE
   let decoder = new TextDecoder('windows-1252')
-  const samples: Uint8Array[] = []
+  // The start of each string, and whether there was more of it: a string
+  // that was cut may end inside a character, which is not the string's fault.
+  const samples: { bytes: Uint8Array; cut: boolean }[] = []
   return {
     convert(bytes) {
       if (samples.length < SAMPLE_STRINGS && bytes.some((b) => b >= 0x80)) {
-        samples.push(bytes.slice(0, SAMPLE_BYTES))
+        samples.push({ bytes: bytes.slice(0, SAMPLE_BYTES), cut: bytes.length > SAMPLE_BYTES })
       }
       return decoder.decode(bytes)
     },
@@ -167,18 +169,21 @@ export function ansiStringDecoder(): AnsiStringDecoder {
       return true
     },
     fits(cp) {
-      let strict: TextDecoder
+      const label = encodingLabel(String(cp))
       try {
-        strict = new TextDecoder(encodingLabel(String(cp)), { fatal: true })
+        new TextDecoder(label)
       } catch {
-        return false
+        return false // not a code page TextDecoder knows, whatever was seen
       }
-      return samples.every((bytes) => {
+      return samples.every(({ bytes, cut }) => {
         try {
-          strict.decode(bytes)
+          // A decoder to each sample, because one told that more is coming
+          // (`stream`, for a sample that was cut) holds on to a half-read
+          // character and would carry it into the next.
+          new TextDecoder(label, { fatal: true }).decode(bytes, { stream: cut })
           return true
         } catch {
-          return false
+          return false // not text in this code page
         }
       })
     },

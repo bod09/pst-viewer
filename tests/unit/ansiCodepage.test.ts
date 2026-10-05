@@ -92,4 +92,29 @@ describe('the decoder the parser is given', () => {
     expect(d.fits(932)).toBe(false)
     expect(d.fits(424242)).toBe(false)
   })
+
+  test('a code page that does not exist never fits, even before anything has been seen', () => {
+    expect(ansiStringDecoder().fits(424242)).toBe(false)
+    expect(ansiStringDecoder().fits(932)).toBe(true)
+  })
+
+  test('a long string is still evidence, wherever its remembered part happens to be cut', () => {
+    // Only the start of each string is kept. For two-byte text the cut falls
+    // inside a character about half the time, which must not count against
+    // the code page: a message body is exactly this kind of string.
+    for (const lead of [0, 1, 2, 3]) {
+      const d = ansiStringDecoder()
+      const body = new Uint8Array(lead + 2 * 400)
+      body.fill(0x41, 0, lead)
+      for (let i = lead; i < body.length; i += 2) body.set(kana.subarray(0, 2), i)
+      d.convert(body)
+      expect(d.fits(932), `${lead} ASCII characters in front`).toBe(true)
+      // And text that is wrong well before the cut is still caught.
+      const wrong = body.slice()
+      wrong[lead + 10] = 0x81
+      wrong[lead + 11] = 0x20
+      d.convert(wrong)
+      expect(d.fits(932), `${lead} in front, with a bad pair`).toBe(false)
+    }
+  })
 })
