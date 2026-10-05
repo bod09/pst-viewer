@@ -3,7 +3,7 @@ import * as Comlink from 'comlink'
 import { pst } from '../worker/client'
 import { scanZipForPsts } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
-import { buildEml, downloadBlob, emlFilename, type EmlAttachment } from '../lib/emlExport'
+import { downloadBlob, emlFilename } from '../lib/emlExport'
 import {
   canExportToFolder,
   createFreshDirectory,
@@ -495,46 +495,6 @@ export const useApp = create<AppState>((set, get) => {
   // never stay stuck, but the real work may still be running; this guard is
   // what actually prevents a second export starting on top of the first.
   let exportInFlight = false
-
-  /**
-   * Attachments to write into an exported .eml.
-   *
-   * Inline images are already written as related parts, so only those are
-   * skipped; anything else marked inline is a real attachment that would
-   * otherwise vanish from the export. A message attached to a message is
-   * rebuilt as its own .eml so a forwarded mail survives the round trip
-   * instead of being dropped.
-   */
-  const collectEmlAttachments = async (
-    sourceId: string,
-    messageId: string,
-    content: MessageContent,
-    depth = 0,
-  ): Promise<EmlAttachment[]> => {
-    const files: EmlAttachment[] = []
-    const written = new Set(content.inlineImages.map((i) => i.cid))
-    for (const a of content.attachments) {
-      if (a.isEmbeddedMessage) {
-        if (depth >= 3) continue // stop a chain of forwards going on forever
-        const emb = await pst
-          .getEmbeddedMessageContent(sourceId, messageId, a.index)
-          .catch(() => null)
-        if (!emb?.content) continue
-        const inner = await collectEmlAttachments(sourceId, emb.id, emb.content, depth + 1)
-        const bytes = new TextEncoder().encode(buildEml(emb.content, inner))
-        files.push({
-          name: /\.eml$/i.test(a.name) ? a.name : `${a.name || emb.content.subject || 'message'}.eml`,
-          mime: 'message/rfc822',
-          data: bytes.buffer as ArrayBuffer,
-        })
-        continue
-      }
-      if (a.isInline && a.cid && written.has(a.cid)) continue
-      const d = await pst.getAttachmentData(sourceId, messageId, a.index)
-      if (d) files.push({ name: a.name || d.name, mime: a.mime || d.mime, data: d.data })
-    }
-    return files
-  }
 
   // Export to a folder of .eml files (see runEmlExport). Set by Cancel, and
   // checked at every step the worker sends, so an export stops within the
@@ -1096,15 +1056,21 @@ export const useApp = create<AppState>((set, get) => {
       exportInFlight = true
       set({ exporting: true })
       const safety = setTimeout(() => set({ exporting: false }), 30000)
+      // The worker builds the file, the same way a bulk export does, and
+      // sends it a piece at a time; the pieces become the download.
+      let subject: string | null = null
+      const pieces: Uint8Array<ArrayBuffer>[] = []
+      const sink = async (step: EmlExportStep): Promise<boolean> => {
+        if (step.kind === 'start') subject = step.subject
+        else if (step.kind === 'data') pieces.push(step.data as Uint8Array<ArrayBuffer>)
+        else if (step.kind === 'skip') subject = null
+        return true
+      }
       pst
-        .getMessageContent(sourceId, messageId)
-        .then(async (content) => {
-          if (!content) return
-          const files = await collectEmlAttachments(sourceId, messageId, content)
-          downloadBlob(
-            new Blob([buildEml(content, files)], { type: 'message/rfc822' }),
-            emlFilename(content),
-          )
+        .exportMessageEml(sourceId, messageId, Comlink.proxy(sink))
+        .then(() => {
+          if (subject === null) return
+          downloadBlob(new Blob(pieces, { type: 'message/rfc822' }), emlFilename(subject))
         })
         .finally(() => {
           clearTimeout(safety)

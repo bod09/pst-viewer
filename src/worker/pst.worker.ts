@@ -1674,10 +1674,6 @@ function emlBytes(content: MessageContent, attachments: EmlAttachment[]): ArrayB
  * otherwise vanish from the export. A message attached to a message is rebuilt
  * as its own .eml, so a forwarded mail survives the round trip instead of
  * being dropped.
- *
- * This mirrors collectEmlAttachments in the store, which the single-message
- * .eml button uses. An export builds and streams its files here in the
- * worker, so it gathers attachments here too.
  */
 async function emlAttachments(
   entry: SourceEntry,
