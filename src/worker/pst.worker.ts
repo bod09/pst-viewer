@@ -20,7 +20,7 @@ import {
   type ChunkedReader,
 } from './chunkReader'
 import { fingerprintOf, getCachedIndex, putCachedIndex } from './indexCache'
-import { buildEml, emlParts, type EmlAttachment } from '../lib/emlExport'
+import { emlParts, type EmlAttachment } from '../lib/emlExport'
 import {
   Consts,
   openPst,
@@ -93,6 +93,10 @@ interface SourceEntry {
   tnef: Map<string, TnefAttachment[]>
   /** For .msg sources: files that failed to parse, counted per folder. */
   extraUnreadable?: Map<string, number>
+  /** Folders with mail that the tree does not show (see SourceIndex.unlistedFolders).
+   *  Kept apart from `folders`, so indexing and the list are unchanged; only
+   *  a whole-mailbox export reads them. */
+  unlistedFolders?: Map<string, IPSTFolder>
   /** File identity for the on-device search-index cache (PST/OST only). */
   fingerprint?: string
   /** The label shown in the sidebar, for the mailbox: search filter. */
@@ -229,13 +233,17 @@ function stripHtml(html: string): string {
     .trim()
 }
 
+/** A folder's handle, including the unlisted ones only an export reads. */
+const folderHandle = (entry: SourceEntry, folderId: string): IPSTFolder | undefined =>
+  entry.folders.get(folderId) ?? entry.unlistedFolders?.get(folderId)
+
 /** Enumerate a folder's messages once and reuse the list: the message list
  *  and the background indexer both ask for the same folders, and each
  *  enumeration re-reads the folder's tables from the file. */
 async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTMessage[]> {
   const cached = entry.emailLists.get(folderId)
   if (cached) return cached
-  const folder = entry.folders.get(folderId)
+  const folder = folderHandle(entry, folderId)
   if (!folder) return []
   const emails = await folder.getEmails()
   for (const m of emails) safe(() => entry.messages.set(String(m.primaryNodeId), m), undefined)
@@ -373,7 +381,7 @@ interface ProvidesMessages {
  * look the same to the caller.
  */
 async function folderSequence(entry: SourceEntry, folderId: string): Promise<MessageSequence> {
-  const folder = entry.folders.get(folderId)
+  const folder = folderHandle(entry, folderId)
   if (!folder) return { count: 0, get: () => Promise.reject(new Error('no folder')) }
   const provider = (folder as unknown as Partial<ProvidesMessages>).getEmailsProvider
   if (typeof provider === 'function') {
@@ -504,7 +512,7 @@ function scoreTree(root: FolderNode): Map<FolderNode, Scored> {
 export function selectMailboxTree(
   root: FolderNode,
   libraryTopId: string | null,
-): { tree: FolderNode; ownerHint: string } {
+): { tree: FolderNode; ownerHint: string; unlisted: FolderNode[] } {
   const scores = scoreTree(root)
   const candidates: Scored[] = []
   for (const s of scores.values()) {
@@ -520,7 +528,7 @@ export function selectMailboxTree(
   // showing the raw tree (store root, IPM_SUBTREE, Common Views, Finder, ...)
   // the moment a single message lived outside the chosen container.
   const best = candidates.find((c) => c.node !== root)
-  if (!best || best.messages === 0) return { tree: root, ownerHint: '' }
+  if (!best || best.messages === 0) return { tree: root, ownerHint: '', unlisted: [] }
 
   // Rescue sibling subtrees that hold mail (dropping the empty plumbing).
   const extras = (best.parent?.children ?? [])
@@ -531,13 +539,19 @@ export function selectMailboxTree(
   // tree is never worth hiding messages in a mailbox someone is reviewing.
   const covered =
     best.messages + extras.reduce((n, sib) => n + (scores.get(sib)?.messages ?? 0), 0)
-  if (covered < (scores.get(root)?.messages ?? 0)) return { tree: root, ownerHint: '' }
+  if (covered < (scores.get(root)?.messages ?? 0)) {
+    return { tree: root, ownerHint: '', unlisted: [] }
+  }
 
   return {
     tree: { ...root, children: [...best.node.children, ...extras] },
     // The chosen container (or its parent store root) sometimes carries the
     // mailbox owner's name; generic names are filtered by the caller.
     ownerHint: best.node.name || best.parent?.name || '',
+    // The chosen container's own mail: its subfolders are shown in its place,
+    // so the tree has no row for these messages. A whole-mailbox export
+    // still reads them.
+    unlisted: best.node.messageCount > 0 ? [best.node] : [],
   }
 }
 
@@ -1583,48 +1597,71 @@ async function runIndexPass(
 }
 
 /**
- * Run `fn` with a message's attachment handles and recovered files (winmail.dat,
- * S/MIME) registered only for as long as it takes.
+ * Run `fn` with a key under which building a message's content can leave its
+ * attachment handles and recovered files (winmail.dat, S/MIME), and remove
+ * them afterwards.
  *
- * Building a message's content leaves both behind in the source's maps, which
- * is right for the message being read and wrong for an export: kept for every
- * message written, they would hold the whole mailbox in memory. Whatever was
- * there before (the open message's own) is put back afterwards.
+ * Building content leaves both in the source's maps, which is right for the
+ * message being read and wrong for an export: kept for every message written,
+ * they would hold the whole mailbox in memory. The key is the export's own,
+ * so a message the user has open at the same time keeps its handles.
  */
-async function withScratch<T>(entry: SourceEntry, msgId: string, fn: () => Promise<T>): Promise<T> {
-  const attachments = entry.attachments.get(msgId)
-  const recovered = entry.tnef.get(msgId)
-  entry.attachments.delete(msgId)
-  entry.tnef.delete(msgId)
+async function withScratch<T>(
+  entry: SourceEntry,
+  msgId: string,
+  fn: (key: string) => Promise<T>,
+): Promise<T> {
+  const key = `export:${msgId}`
   try {
-    return await fn()
+    return await fn(key)
   } finally {
-    if (attachments) entry.attachments.set(msgId, attachments)
-    else entry.attachments.delete(msgId)
-    if (recovered) entry.tnef.set(msgId, recovered)
-    else entry.tnef.delete(msgId)
+    entry.attachments.delete(key)
+    entry.tnef.delete(key)
   }
 }
 
 const utf8 = new TextEncoder()
 
 /**
- * The attachments to write into a message's .eml.
+ * A message's .eml as bytes, built from emlParts a piece at a time, so a
+ * forwarded message with large attachments never has to be one string (which
+ * costs several times its size, and past about 500 MB cannot be made).
+ */
+function emlBytes(content: MessageContent, attachments: EmlAttachment[]): ArrayBuffer {
+  const pieces: Uint8Array[] = []
+  let size = 0
+  for (const part of emlParts(content, attachments)) {
+    const bytes = utf8.encode(part)
+    pieces.push(bytes)
+    size += bytes.length
+  }
+  const out = new Uint8Array(size)
+  let at = 0
+  for (const bytes of pieces.splice(0)) {
+    out.set(bytes, at)
+    at += bytes.length
+  }
+  return out.buffer
+}
+
+/**
+ * The attachments to write into a message's .eml, the message's content
+ * having been built under `key` (see withScratch).
  *
  * Inline images are already written as related parts, so only those are
  * skipped; anything else marked inline is a real attachment that would
  * otherwise vanish from the export. A message attached to a message is rebuilt
  * as its own .eml, so a forwarded mail survives the round trip instead of
- * being dropped. Call inside withScratch, which holds the handles this reads.
+ * being dropped.
  */
 async function emlAttachments(
   entry: SourceEntry,
-  msgId: string,
+  key: string,
   content: MessageContent,
   depth = 0,
 ): Promise<EmlAttachment[]> {
-  const handles = entry.attachments.get(msgId) ?? []
-  const recovered = entry.tnef.get(msgId) ?? []
+  const handles = entry.attachments.get(key) ?? []
+  const recovered = entry.tnef.get(key) ?? []
   const written = new Set(content.inlineImages.map((i) => i.cid))
   const files: EmlAttachment[] = []
   for (const a of content.attachments) {
@@ -1633,16 +1670,15 @@ async function emlAttachments(
       const handle = handles[a.index]
       const inner = handle ? await safeAsync(() => handle.getEmbeddedPSTMessage(), null) : null
       if (!inner) continue
-      const innerId = `${msgId}/emb${a.index}`
-      const eml = await withScratch(entry, innerId, async () => {
-        const c = await buildMessageContent(inner, innerId, entry)
-        const nested = await emlAttachments(entry, innerId, c, depth + 1)
-        return { subject: c.subject, text: buildEml(c, nested) }
+      const eml = await withScratch(entry, `${key}/emb${a.index}`, async (innerKey) => {
+        const c = await buildMessageContent(inner, innerKey, entry)
+        const nested = await emlAttachments(entry, innerKey, c, depth + 1)
+        return { subject: c.subject, data: emlBytes(c, nested) }
       })
       files.push({
         name: /\.eml$/i.test(a.name) ? a.name : `${a.name || eml.subject || 'message'}.eml`,
         mime: 'message/rfc822',
-        data: utf8.encode(eml.text).buffer as ArrayBuffer,
+        data: eml.data,
       })
       continue
     }
@@ -1680,9 +1716,9 @@ async function streamEml(
 ): Promise<boolean> {
   let parts: Generator<string, void, undefined>
   try {
-    const { content, attachments } = await withScratch(entry, msgId, async () => {
-      const content = await buildMessageContent(m, msgId, entry)
-      return { content, attachments: await emlAttachments(entry, msgId, content) }
+    const { content, attachments } = await withScratch(entry, msgId, async (key) => {
+      const content = await buildMessageContent(m, key, entry)
+      return { content, attachments: await emlAttachments(entry, key, content) }
     })
     parts = emlParts(content, attachments)
     const start = { kind: 'start', subject: content.subject, date: content.date, folderId } as const
@@ -1760,7 +1796,13 @@ const api = {
       libraryTopId = null
     }
     const fullTree = await buildFolderTree(await pstFile.getRootFolder(), entry)
-    const { tree: rootNode, ownerHint } = selectMailboxTree(fullTree, libraryTopId)
+    const { tree: rootNode, ownerHint, unlisted } = selectMailboxTree(fullTree, libraryTopId)
+    const unlistedFolders = new Map<string, IPSTFolder>()
+    for (const node of unlisted) {
+      const handle = entry.folders.get(node.id)
+      if (handle) unlistedFolders.set(node.id, handle)
+    }
+    if (unlistedFolders.size) entry.unlistedFolders = unlistedFolders
     pruneFolderHandles(entry, rootNode)
 
     // A previous session's finished search index for this exact file (same
@@ -1794,6 +1836,13 @@ const api = {
       totalMessages,
       suggestedLabel: ownerName || prettyFileName(file.name),
       recovered,
+      ...(unlistedFolders.size
+        ? {
+            unlistedFolders: unlisted
+              .filter((n) => unlistedFolders.has(n.id))
+              .map((n) => ({ id: n.id, messageCount: n.messageCount })),
+          }
+        : {}),
     }
   },
 
@@ -2067,7 +2116,7 @@ const api = {
   ): Promise<{ unlisted: number }> {
     const entry = sources.get(sourceId)
     if (!entry) throw new Error('This mailbox is no longer open.')
-    const folder = entry.folders.get(folderId)
+    const folder = folderHandle(entry, folderId)
     if (!folder) return { unlisted: 0 }
     const declared = safe(() => folder.contentCount, 0)
     const extra = entry.extraUnreadable?.get(folderId) ?? 0
@@ -2100,6 +2149,9 @@ const api = {
   /** Write a single message out as .eml (see streamEml). */
   async exportMessageEml(sourceId: string, messageId: string, write: EmlExportSink): Promise<void> {
     const entry = sources.get(sourceId)
+    // Whether the message was already held (it is open, or its folder is),
+    // so one read just for the export can be let go afterwards.
+    const held = entry?.messages.has(messageId) ?? false
     const m = entry
       ? await safeAsync(() => messageById(entry, sourceId, messageId), undefined)
       : undefined
@@ -2111,7 +2163,12 @@ const api = {
       entry.locationById.get(messageId)?.folderId ??
       metaDocs.get(`${sourceId}:${messageId}`)?.folderId ??
       ''
-    await streamEml(entry, m, messageId, folderId, write)
+    try {
+      await streamEml(entry, m, messageId, folderId, write)
+    } finally {
+      // Only what can be found again, as releaseColdFolders does.
+      if (!held && entry.locationById.has(messageId)) entry.messages.delete(messageId)
+    }
   },
 
   /**

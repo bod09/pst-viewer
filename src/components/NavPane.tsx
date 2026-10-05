@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useApp, type Source } from '../store/store'
-import type { FolderNode } from '../types'
+import type { FolderNode, SourceIndex } from '../types'
 import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
 import { BrandHeader } from './BrandHeader'
 import { SettingsButton } from './Settings'
@@ -101,6 +101,11 @@ function sortFolders(nodes: FolderNode[]): FolderNode[] {
 
 function subtreeMessages(node: FolderNode): number {
   return node.messageCount + node.children.reduce((n, c) => n + subtreeMessages(c), 0)
+}
+
+/** Messages a whole-mailbox export covers, the top folder's unlisted ones included. */
+function mailboxMessages(index: SourceIndex): number {
+  return index.totalMessages + (index.unlistedFolders ?? []).reduce((n, f) => n + f.messageCount, 0)
 }
 
 /** Sorted children, dropping folders whose whole subtree holds no messages
@@ -248,7 +253,7 @@ function SourceTree({ source }: { source: Source }) {
         {source.status === 'error' && <Alert className="h-4 w-4 shrink-0 text-rose-400" />}
         {!editing && (
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            {source.status === 'ready' && source.index && source.index.totalMessages > 0 && (
+            {source.status === 'ready' && source.index && mailboxMessages(source.index) > 0 && (
               <button
                 onClick={() => exportFolderEml(source.id)}
                 className="text-slate-400 transition hover:text-slate-200"
@@ -337,6 +342,7 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
   const showEmpty = useApp((s) => s.showEmptyFolders)
   const childNodes = visibleChildren(node.children, showEmpty)
   const hasChildren = childNodes.length > 0
+  const canExport = subtreeMessages(node) > 0
   const Icon = folderIcon(node)
 
   return (
@@ -350,10 +356,22 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
         aria-selected={selected}
         aria-expanded={hasChildren ? expanded : undefined}
         onClick={() => selectFolder(sourceId, node.id)}
+        aria-keyshortcuts={canExport ? 'E' : undefined}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             void selectFolder(sourceId, node.id)
+          } else if (
+            canExport &&
+            (e.key === 'e' || e.key === 'E') &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            // The export action is not a Tab stop of its own, so the tree
+            // stays one stop; E on the focused folder does the same.
+            e.preventDefault()
+            exportFolderEml(sourceId, node.id)
           } else if (e.key === 'ArrowRight' && hasChildren && !expanded) {
             e.preventDefault()
             toggleFolder(sourceId, node.id)
@@ -395,18 +413,18 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
         <span className="min-w-0 flex-1 truncate" data-tip={node.name}>
           {node.name}
         </span>
-        {subtreeMessages(node) > 0 && (
+        {canExport && (
           <button
             onClick={(e) => {
               e.stopPropagation()
               exportFolderEml(sourceId, node.id)
             }}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 opacity-0 transition hover:text-slate-200 focus-visible:opacity-100 group-hover/row:opacity-100"
+            tabIndex={-1}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 opacity-0 transition hover:text-slate-200 group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
             data-tip={
               hasChildren
-                ? 'Export this folder and its subfolders as .eml files'
-                : 'Export this folder as .eml files'
+                ? 'Export this folder and its subfolders as .eml files (E)'
+                : 'Export this folder as .eml files (E)'
             }
             aria-label={`Export ${node.name} as .eml files`}
           >

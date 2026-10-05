@@ -22,7 +22,7 @@ export function EmlExportDialog() {
 
   return (
     <Dialog title={title} onClose={close} size="sm" dismissible={!running}>
-      <div role="status" aria-live="polite" className="space-y-4 p-5 text-sm leading-relaxed">
+      <div className="space-y-4 p-5 text-sm leading-relaxed">
         {job.status === 'unsupported' ? (
           <Unsupported />
         ) : running ? (
@@ -64,7 +64,7 @@ function Unsupported() {
 }
 
 function Running({ job }: { job: EmlExportJob }) {
-  const done = job.exported + job.skipped
+  const done = job.exported + job.skipped + job.unsaved
   // Folders give their counts up front, but files that would not open at all
   // are only found on the way, so the total can grow.
   const total = Math.max(job.total, done)
@@ -77,7 +77,14 @@ function Running({ job }: { job: EmlExportJob }) {
           {done.toLocaleString()} of {plural(total, 'message')}
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+      <div
+        role="progressbar"
+        aria-label="Messages exported"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+        className="h-2 overflow-hidden rounded-full bg-slate-800"
+      >
         <div className="h-full rounded-full bg-sky-500 transition-[width]" style={{ width: `${pct}%` }} />
       </div>
       {job.folders > 0 && (
@@ -93,6 +100,7 @@ function Running({ job }: { job: EmlExportJob }) {
         </p>
       )}
       {job.skipped > 0 && <Skipped n={job.skipped} />}
+      {job.unsaved > 0 && <Unsaved job={job} />}
     </>
   )
 }
@@ -107,18 +115,19 @@ function Summary({ job }: { job: EmlExportJob }) {
   return (
     <>
       {job.status === 'done' && (
-        <p className="text-slate-200">
-          Saved {plural(job.exported, 'message')} as .eml files{where}, in the folder you chose.
+        <p role="status" className="text-slate-200">
+          Saved {plural(job.exported, 'message')} as .eml {job.exported === 1 ? 'file' : 'files'}
+          {where}, in the folder you chose.
         </p>
       )}
       {job.status === 'cancelled' && (
-        <p className="text-slate-200">
+        <p role="status" className="text-slate-200">
           Export cancelled. {plural(job.exported, 'message')}{' '}
           {job.exported === 1 ? 'was' : 'were'} saved{where} before it stopped, each one complete.
         </p>
       )}
       {job.status === 'failed' && (
-        <div className="flex gap-2 text-rose-300">
+        <div role="alert" className="flex gap-2 text-rose-300">
           <Alert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             The export stopped{job.error ? `: ${job.error.replace(/\.?$/, '')}` : ''}.{' '}
@@ -128,7 +137,27 @@ function Summary({ job }: { job: EmlExportJob }) {
         </div>
       )}
       {job.skipped > 0 && <Skipped n={job.skipped} />}
+      {job.unsaved > 0 && <Unsaved job={job} />}
     </>
+  )
+}
+
+/** Messages read but not saved, and why (the browser's own words). */
+function Unsaved({ job }: { job: EmlExportJob }) {
+  return (
+    <div className="text-amber-300">
+      <p>
+        {plural(job.unsaved, 'message')} could not be saved, so{' '}
+        {job.unsaved === 1 ? 'it was' : 'they were'} left out:
+      </p>
+      <ul className="mt-1 list-disc pl-5">
+        {job.reasons.slice(0, 5).map((r) => (
+          <li key={r.reason}>
+            {r.reason.replace(/\.$/, '')} ({r.count.toLocaleString()})
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

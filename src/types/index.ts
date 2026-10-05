@@ -30,6 +30,12 @@ export interface SourceIndex {
   suggestedLabel: string
   /** The file was damaged and opened via built-in recovery. */
   recovered?: boolean
+  /**
+   * Folders holding mail that the tree does not show: the file's top folder,
+   * when the tree shows its subfolders in its place. Not in `totalMessages`;
+   * exporting the whole mailbox includes them.
+   */
+  unlistedFolders?: { id: string; messageCount: number }[]
 }
 
 /** A folder's messages plus how many of its items could not be read (damage). */
