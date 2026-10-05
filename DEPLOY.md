@@ -38,7 +38,9 @@ Upload the **contents of `dist/`** to any static host. That's the whole app.
 ## Option A: GitHub Pages (zero-config, via the included workflow)
 
 This repo ships with `.github/workflows/deploy.yml`, which builds and publishes to
-Pages on every push to `main`.
+Pages for every push to `main` that passes its tests (it is run by the CI
+workflow, `.github/workflows/ci.yml`, once they have), and can be run by hand
+from the Actions tab.
 
 1. Fork or use this repo (it must be **public** for free GitHub Pages).
 2. In the repo: **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**.

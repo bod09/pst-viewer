@@ -9,6 +9,10 @@ name: CI
 # `changes` job). The workflow itself still has to run for those: branch
 # protection waits for `build`, and a workflow filtered out by path would
 # never report it, leaving the pull request stuck.
+#
+# On a push to main, once `build` has passed, the site and the Docker image
+# are published from here (the last two jobs), so nothing that fails its
+# tests is ever published.
 on:
   pull_request:
   push:
@@ -33,6 +37,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      publish: ${{ steps.diff.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,6 +52,7 @@ jobs:
           # the pull request. On a push it is everything since the last push.
           if [ "$EVENT" = "pull_request" ]; then from="HEAD^1"; else from="$BEFORE"; fi
           code=true
+          publish=true
           if files=$(git diff --name-only "$from" HEAD 2>/dev/null) && [ -n "$files" ]; then
             echo "$files"
             # Documentation: Markdown, the screenshots, and the license. Not
@@ -55,9 +61,15 @@ jobs:
             code_files=$(printf '%s\n' "$files" | grep -vE "$docs" || true)
             sample_files=$(printf '%s\n' "$files" | grep -E '^samples/' || true)
             if [ -z "$code_files" ] && [ -z "$sample_files" ]; then code=false; fi
+            # What is published is the built app. Documentation, tests,
+            # samples and screenshots are not part of it.
+            unpublished='\.md$|^tests/|^samples/|^screenshots/|^LICENSE$'
+            published_files=$(printf '%s\n' "$files" | grep -vE "$unpublished" || true)
+            if [ -z "$published_files" ]; then publish=false; fi
           fi
-          echo "code=$code"
+          echo "code=$code publish=$publish"
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
   checks:
     name: Type-check, lint, tests, build
@@ -187,3 +199,27 @@ jobs:
             echo "::error::Expected two job results, got: $TESTS"
             exit 1
           fi
+
+  # Publishing. Only for a push to main, only after `build` (and so every
+  # test) has passed, and only when something that is published changed.
+  # Each calls the workflow that does the work, which can also be run by hand.
+  # They are given the permissions they need here and nowhere else: nothing
+  # that runs for a pull request can publish.
+  deploy:
+    name: Publish site
+    needs: [changes, build]
+    if: github.event_name == 'push' && needs.build.result == 'success' && needs.changes.outputs.publish == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+
+  docker:
+    name: Publish image
+    needs: [changes, build]
+    if: github.event_name == 'push' && needs.build.result == 'success' && needs.changes.outputs.publish == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
