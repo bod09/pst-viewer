@@ -7,8 +7,8 @@ export interface EmlAttachment {
   data: ArrayBuffer
 }
 
-function base64(bytes: ArrayBuffer): string {
-  const arr = new Uint8Array(bytes)
+function base64(bytes: ArrayBuffer | Uint8Array): string {
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   const chunks: string[] = []
   const size = 0x8000
   for (let i = 0; i < arr.length; i += size) {
@@ -103,13 +103,28 @@ function bodyPart(content: MessageContent): string {
   return s + `--${b}--\r\n`
 }
 
-function attachmentPart(a: EmlAttachment): string {
+// Raw bytes per piece of an attachment's base64: a whole number of 57-byte
+// groups, each of which encodes to exactly one 76-character line, so pieces
+// can be folded on their own and still join into the same text. About 1.9 MB.
+const ATTACHMENT_PIECE = 57 * 32768
+
+/**
+ * One attachment as a MIME part, in pieces: its headers, then its base64 a
+ * piece at a time. A large file is never turned into one huge string, which
+ * would cost several times its size in memory while being built.
+ */
+function* attachmentPart(a: EmlAttachment): Generator<string, void, undefined> {
   const name = quotedParam(a.name || 'attachment')
-  return (
+  yield (
     `Content-Type: ${a.mime || 'application/octet-stream'}; name="${name}"\r\n` +
     `Content-Transfer-Encoding: base64\r\n` +
-    `Content-Disposition: attachment; filename="${name}"\r\n\r\n${fold(base64(a.data))}\r\n`
+    `Content-Disposition: attachment; filename="${name}"\r\n\r\n`
   )
+  const bytes = new Uint8Array(a.data)
+  for (let i = 0; i < bytes.length; i += ATTACHMENT_PIECE) {
+    yield fold(base64(bytes.subarray(i, i + ATTACHMENT_PIECE)))
+  }
+  yield '\r\n'
 }
 
 // Headers that describe the original MIME body, which we are rebuilding.
@@ -160,15 +175,35 @@ function buildHeaders(content: MessageContent): string {
   return lines.join('\r\n') + '\r\n'
 }
 
-/** Reconstruct a message as RFC822 .eml text (headers + MIME body + attachments). */
-export function buildEml(content: MessageContent, attachments: EmlAttachment[]): string {
+/**
+ * The same .eml text as buildEml, in pieces of a few megabytes at most beyond
+ * the headers and body. A bulk export writes each piece as it comes, so a
+ * message with large attachments never has to exist as one string (which
+ * costs memory several times its size, and past about 500 MB is more than a
+ * string can hold).
+ */
+export function* emlParts(
+  content: MessageContent,
+  attachments: EmlAttachment[],
+): Generator<string, void, undefined> {
   const headers = buildHeaders(content) + 'MIME-Version: 1.0\r\n'
   const body = bodyPart(content)
-  if (!attachments.length) return headers + body
+  if (!attachments.length) {
+    yield headers + body
+    return
+  }
   const b = boundary('mix')
-  let s = headers + `Content-Type: multipart/mixed; boundary="${b}"\r\n\r\n` + `--${b}\r\n${body}`
-  for (const a of attachments) s += `--${b}\r\n${attachmentPart(a)}`
-  return s + `--${b}--\r\n`
+  yield headers + `Content-Type: multipart/mixed; boundary="${b}"\r\n\r\n` + `--${b}\r\n${body}`
+  for (const a of attachments) {
+    yield `--${b}\r\n`
+    yield* attachmentPart(a)
+  }
+  yield `--${b}--\r\n`
+}
+
+/** Reconstruct a message as RFC822 .eml text (headers + MIME body + attachments). */
+export function buildEml(content: MessageContent, attachments: EmlAttachment[]): string {
+  return [...emlParts(content, attachments)].join('')
 }
 
 /** A filesystem-safe .eml filename derived from the subject. */

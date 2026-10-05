@@ -13,6 +13,7 @@ export function Dialog({
   size = 'md',
   headerExtra,
   fillHeight = false,
+  dismissible = true,
 }: {
   title: ReactNode
   onClose: () => void
@@ -23,6 +24,9 @@ export function Dialog({
   headerExtra?: ReactNode
   /** Stretch to the full available height (viewer-style dialogs). */
   fillHeight?: boolean
+  /** False while something is running that closing would cut short: no close
+   *  button, and Escape and clicks outside are ignored. */
+  dismissible?: boolean
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -32,12 +36,12 @@ export function Dialog({
         // Only the innermost dialog closes, so one press does not dismiss a
         // preview and the lightbox opened on top of it together.
         e.stopPropagation()
-        onClose()
+        if (dismissible) onClose()
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [onClose, dismissible])
 
   // Move focus into the dialog and put it back where it was on close, and keep
   // Tab inside while it is open.
@@ -72,7 +76,7 @@ export function Dialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
-      onClick={onClose}
+      onClick={dismissible ? onClose : undefined}
     >
       <div
         ref={panelRef}
@@ -87,13 +91,15 @@ export function Dialog({
           <span className="min-w-0 truncate text-sm font-medium text-slate-200">{title}</span>
           <div className="flex shrink-0 items-center gap-2">
             {headerExtra}
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-            >
-              <Close className="h-5 w-5" />
-            </button>
+            {dismissible && (
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
+              >
+                <Close className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
         <div className="scroll-clear min-h-0 flex-1 overflow-auto">{children}</div>

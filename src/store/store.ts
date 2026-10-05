@@ -4,10 +4,26 @@ import { pst } from '../worker/client'
 import { scanZipForPsts } from '../lib/zip'
 import { buildPrintDocument, printHtmlDocument } from '../lib/printExport'
 import { buildEml, downloadBlob, emlFilename, type EmlAttachment } from '../lib/emlExport'
+import {
+  canExportToFolder,
+  createFreshDirectory,
+  describeError,
+  EmlTreeWriter,
+  ExportDirectory,
+  pickExportFolder,
+} from '../lib/bulkExport'
 import { getCachedOcr, putCachedOcr, hashImageBytes } from '../lib/ocrCache'
 import { clearCachedImages } from '../lib/imageCache'
 import type { Worker as OcrWorker } from 'tesseract.js'
-import type { FolderNode, MessageContent, MessageMeta, OcrTarget, SearchHit, SourceIndex } from '../types'
+import type {
+  EmlExportStep,
+  FolderNode,
+  MessageContent,
+  MessageMeta,
+  OcrTarget,
+  SearchHit,
+  SourceIndex,
+} from '../types'
 
 export type SourceStatus = 'parsing' | 'ready' | 'error'
 
@@ -27,6 +43,34 @@ export interface Source {
   indexFailed?: boolean
   ocrProgress?: { done: number; total: number }
   ocrDone?: boolean
+}
+
+/**
+ * An export of many messages to .eml files in a folder on disk: what it is
+ * doing now, and once it ends, what it did.
+ */
+export interface EmlExportJob {
+  /** What is being exported, for the dialog title. */
+  title: string
+  /** `unsupported`: this browser cannot write to a folder, so nothing started. */
+  status: 'running' | 'done' | 'cancelled' | 'failed' | 'unsupported'
+  /** The directory created for this export inside the one the user picked. */
+  directory: string
+  /** Messages to go, as the folders declare them. */
+  total: number
+  exported: number
+  /** Messages that could not be read and were left out. */
+  skipped: number
+  /** Messages that were read but could not be saved (a name or path refused), and were left out. */
+  unsaved: number
+  /** Why messages could not be saved, with how many each. */
+  reasons: { reason: string; count: number }[]
+  folders: number
+  foldersDone: number
+  /** The folder being read now. */
+  current: string
+  /** Why a failed export stopped. */
+  error?: string
 }
 
 interface Selection {
@@ -53,9 +97,11 @@ interface AppState {
   searchResults: SearchHit[]
   searching: boolean
 
-  /** Messages picked for PDF export, keyed `${sourceId}:${messageId}`. */
+  /** Messages picked for export (PDF or .eml), keyed `${sourceId}:${messageId}`. */
   exportSel: Record<string, { sourceId: string; messageId: string }>
   exporting: boolean
+  /** The current or last export to a folder of .eml files, while its dialog is open. */
+  emlExport: EmlExportJob | null
 
   /** Persisted panel widths (px). */
   navWidth: number
@@ -91,6 +137,12 @@ interface AppState {
   exportSelected: (direction?: 'asc' | 'desc') => void
   exportSingle: (sourceId: string, messageId: string) => void
   exportEml: (sourceId: string, messageId: string) => void
+  /** Export a folder and its subfolders, or with no folder the whole mailbox, as .eml files. */
+  exportFolderEml: (sourceId: string, folderId?: string) => void
+  /** Export the messages picked in the selection bar as .eml files. */
+  exportSelectedEml: () => void
+  cancelEmlExport: () => void
+  closeEmlExport: () => void
 }
 
 /**
@@ -191,6 +243,34 @@ function firstFolderWithMessages(node: FolderNode): string | null {
   return null
 }
 
+/** The folder with this id in a tree, or null. */
+function findFolder(node: FolderNode, id: string): FolderNode | null {
+  if (node.id === id) return node
+  for (const child of node.children) {
+    const hit = findFolder(child, id)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** How many levels of subfolders a folder has (0 for none). */
+function levelsBelow(node: FolderNode): number {
+  return node.children.reduce((n, c) => Math.max(n, levelsBelow(c) + 1), 0)
+}
+
+/** The folders from just below the root down to `id`; empty if it is not found. */
+function folderPath(root: FolderNode | undefined, id: string): FolderNode[] {
+  const walk = (node: FolderNode): FolderNode[] | null => {
+    if (node.id === id) return [node]
+    for (const child of node.children) {
+      const rest = walk(child)
+      if (rest) return [node, ...rest]
+    }
+    return null
+  }
+  return root ? (walk(root)?.slice(1) ?? []) : []
+}
+
 function dedupeLabel(label: string, fileName: string, sources: Source[], selfId: string): string {
   const taken = new Set(sources.filter((s) => s.id !== selfId).map((s) => s.label))
   if (!taken.has(label)) return label
@@ -219,6 +299,7 @@ function freshState(): Partial<AppState> {
     searching: false,
     exportSel: {},
     exporting: false,
+    emlExport: null,
   }
 }
 
@@ -455,6 +536,128 @@ export const useApp = create<AppState>((set, get) => {
     return files
   }
 
+  // Export to a folder of .eml files (see runEmlExport). Set by Cancel, and
+  // checked at every step the worker sends, so an export stops within the
+  // message it is on rather than at the end of a folder.
+  let emlCancel = false
+  // True while the folder picker is open, before an export has started.
+  let emlPicking = false
+
+  const patchEmlExport = (patch: Partial<EmlExportJob>) =>
+    set((s) => (s.emlExport ? { emlExport: { ...s.emlExport, ...patch } } : {}))
+
+  /**
+   * Run one export of messages to .eml files.
+   *
+   * Asks where to save, makes a new directory there (never writing into or
+   * over anything already on disk), then lets `read` drive the worker, which
+   * produces one message at a time. Each message is written straight to its
+   * file as it arrives, so memory stays flat however big the export is. A
+   * message the worker cannot read, or one that cannot be saved (a name or
+   * path the disk refuses), is counted and left out; only a failure every
+   * later write would hit too stops the export (see EmlTreeWriter).
+   *
+   * Must be called straight from a click: the folder picker needs it.
+   */
+  const runEmlExport = (
+    job: Pick<EmlExportJob, 'title' | 'total' | 'folders'>,
+    directoryName: string,
+    read: (ctx: {
+      root: ExportDirectory
+      /** A sink for the worker, writing each message into the directory `dirOf` names. */
+      sink: (
+        dirOf: (folderId: string) => ExportDirectory,
+      ) => (step: EmlExportStep) => Promise<boolean>
+      /** True once the export should end (cancelled, or it cannot go on). */
+      stopped: () => boolean
+      /** Report the folder now being read, a folder finished, or messages lost unread. */
+      progress: (p: { current?: string; folderDone?: boolean; skipped?: number }) => void
+    }) => Promise<void>,
+  ): void => {
+    // The picker is open, or an export is running: a second click does nothing.
+    if (emlPicking || get().emlExport?.status === 'running') return
+    const start: EmlExportJob = {
+      ...job,
+      status: 'running',
+      directory: '',
+      exported: 0,
+      skipped: 0,
+      unsaved: 0,
+      reasons: [],
+      foldersDone: 0,
+      current: '',
+    }
+    if (!canExportToFolder()) {
+      set({ emlExport: { ...start, status: 'unsupported' } })
+      return
+    }
+
+    void (async () => {
+      let picked: FileSystemDirectoryHandle | null
+      emlPicking = true
+      try {
+        picked = await pickExportFolder()
+      } catch (err) {
+        set({ emlExport: { ...start, status: 'failed', error: describeError(err) } })
+        return
+      } finally {
+        emlPicking = false
+      }
+      if (!picked) return // the user closed the picker
+      emlCancel = false
+      set({ emlExport: start })
+
+      const writer = new EmlTreeWriter(() => emlCancel)
+      let foldersDone = 0
+      let current = ''
+      let failure: string | null = null
+      // The dialog is redrawn a few times a second, not once per message.
+      let shown = 0
+      const show = (now = false) => {
+        const t = performance.now()
+        if (!now && t - shown < 150) return
+        shown = t
+        patchEmlExport({
+          exported: writer.exported,
+          skipped: writer.unreadable,
+          unsaved: writer.unsaved,
+          reasons: [...writer.reasons].map(([reason, count]) => ({ reason, count })),
+          foldersDone,
+          current,
+        })
+      }
+
+      try {
+        const root = await createFreshDirectory(picked, directoryName, 'Mail export')
+        patchEmlExport({ directory: root.nameOnDisk })
+        await read({
+          root,
+          sink: (dirOf) => async (step) => {
+            const go = await writer.step(step, dirOf)
+            show()
+            return go
+          },
+          stopped: () => emlCancel || writer.fatal !== null,
+          progress: (p) => {
+            if (p.current !== undefined) current = p.current
+            if (p.folderDone) foldersDone++
+            if (p.skipped) writer.unreadable += p.skipped
+            show(true)
+          },
+        })
+      } catch (err) {
+        failure = describeError(err)
+      }
+      await writer.discard()
+      failure ??= writer.fatal
+      show(true)
+      patchEmlExport({
+        status: failure ? 'failed' : emlCancel ? 'cancelled' : 'done',
+        error: failure ?? undefined,
+      })
+    })()
+  }
+
   /**
    * Fetch a message into the reader.
    *
@@ -603,6 +806,7 @@ export const useApp = create<AppState>((set, get) => {
     searching: false,
     exportSel: {},
     exporting: false,
+    emlExport: null,
     navWidth: readNum(NAV_W_KEY, 272),
     listWidth: readNum(LIST_W_KEY, 380),
     ocrEnabled: readBool(OCR_KEY, true),
@@ -907,6 +1111,109 @@ export const useApp = create<AppState>((set, get) => {
           exportInFlight = false
           set({ exporting: false })
         })
+    },
+
+    exportFolderEml: (sourceId, folderId) => {
+      const source = get().sources.find((s) => s.id === sourceId)
+      const root = source?.index?.rootFolder
+      const top = root && (folderId ? findFolder(root, folderId) : root)
+      if (!source || !top) return
+      let total = 0
+      let folders = 0
+      // Progress counts the folders that hold mail; empty ones pass unnoticed.
+      const count = (n: FolderNode) => {
+        total += n.messageCount
+        if (n.messageCount > 0) folders++
+        n.children.forEach(count)
+      }
+      count(top)
+      // The whole mailbox also takes the mail kept in the top folder of the
+      // file, which the folder list does not show (see unlistedFolders).
+      const hidden = folderId ? [] : (source.index?.unlistedFolders ?? [])
+      for (const h of hidden) {
+        total += h.messageCount
+        if (h.messageCount > 0) folders++
+      }
+      const name = folderId ? top.name : source.label
+      runEmlExport({ title: name, total, folders }, name, async (ctx) => {
+        const exportOne = async (id: string, dir: ExportDirectory, holdsMail: boolean) => {
+          const { notListed } = await pst.exportFolderEml(
+            sourceId,
+            id,
+            Comlink.proxy(ctx.sink(() => dir)),
+          )
+          if (!ctx.stopped()) ctx.progress({ folderDone: holdsMail, skipped: notListed })
+        }
+        // Depth first, one folder at a time, each into its own directory.
+        const visit = async (node: FolderNode, dir: ExportDirectory): Promise<void> => {
+          ctx.progress({ current: node === root ? source.label : node.name })
+          await exportOne(node.id, dir, node.messageCount > 0)
+          if (ctx.stopped()) return
+          for (const child of node.children) {
+            await visit(child, dir.child(child.name, levelsBelow(child)))
+            if (ctx.stopped()) return
+          }
+        }
+        // That top folder is what the list shows as the mailbox itself, so
+        // its mail goes into the export's own directory.
+        for (const h of hidden) {
+          ctx.progress({ current: source.label })
+          await exportOne(h.id, ctx.root, h.messageCount > 0)
+          if (ctx.stopped()) return
+        }
+        await visit(top, ctx.root)
+      })
+    },
+
+    exportSelectedEml: () => {
+      const picks = Object.values(get().exportSel)
+      if (!picks.length) return
+      const sources = get().sources
+      // Picks from more than one mailbox get a directory per mailbox on top.
+      const several = new Set(picks.map((p) => p.sourceId)).size > 1
+      const title = `${picks.length} selected message${picks.length === 1 ? '' : 's'}`
+      runEmlExport({ title, total: picks.length, folders: 0 }, 'Selected messages', async (ctx) => {
+        // Each message goes where its folder sits in its mailbox, so the
+        // export has the same shape as the mailbox, holding just the picks.
+        const dirs = new Map<string, ExportDirectory>()
+        const below = (
+          parent: ExportDirectory,
+          key: string,
+          node: FolderNode,
+          name = node.name,
+        ) => {
+          let dir = dirs.get(key)
+          if (!dir) {
+            dir = parent.child(name, levelsBelow(node))
+            dirs.set(key, dir)
+          }
+          return dir
+        }
+        for (const pick of picks) {
+          const source = sources.find((s) => s.id === pick.sourceId)
+          const tree = source?.index?.rootFolder
+          const dirOf = (folderId: string) => {
+            let dir =
+              several && tree
+                ? below(ctx.root, pick.sourceId, tree, source?.label ?? 'Mailbox')
+                : ctx.root
+            for (const node of folderPath(tree, folderId)) {
+              dir = below(dir, `${pick.sourceId}:${node.id}`, node)
+            }
+            return dir
+          }
+          await pst.exportMessageEml(pick.sourceId, pick.messageId, Comlink.proxy(ctx.sink(dirOf)))
+          if (ctx.stopped()) return
+        }
+      })
+    },
+
+    cancelEmlExport: () => {
+      if (get().emlExport?.status === 'running') emlCancel = true
+    },
+
+    closeEmlExport: () => {
+      if (get().emlExport?.status !== 'running') set({ emlExport: null })
     },
   }
 })
