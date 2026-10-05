@@ -1127,13 +1127,6 @@ export const useApp = create<AppState>((set, get) => {
         n.children.forEach(count)
       }
       count(top)
-      // The whole mailbox also takes the mail kept in the top folder of the
-      // file, which the folder list does not show (see unlistedFolders).
-      const hidden = folderId ? [] : (source.index?.unlistedFolders ?? [])
-      for (const h of hidden) {
-        total += h.messageCount
-        if (h.messageCount > 0) folders++
-      }
       const name = folderId ? top.name : source.label
       runEmlExport({ title: name, total, folders }, name, async (ctx) => {
         const exportOne = async (id: string, dir: ExportDirectory, holdsMail: boolean) => {
@@ -1153,13 +1146,6 @@ export const useApp = create<AppState>((set, get) => {
             await visit(child, dir.child(child.name, levelsBelow(child)))
             if (ctx.stopped()) return
           }
-        }
-        // That top folder is what the list shows as the mailbox itself, so
-        // its mail goes into the export's own directory.
-        for (const h of hidden) {
-          ctx.progress({ current: source.label })
-          await exportOne(h.id, ctx.root, h.messageCount > 0)
-          if (ctx.stopped()) return
         }
         await visit(top, ctx.root)
       })

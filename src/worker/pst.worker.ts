@@ -93,10 +93,6 @@ interface SourceEntry {
   tnef: Map<string, TnefAttachment[]>
   /** For .msg sources: files that failed to parse, counted per folder. */
   extraUnreadable?: Map<string, number>
-  /** Folders with mail that the tree does not show (see SourceIndex.unlistedFolders).
-   *  Kept apart from `folders`, so indexing and the list are unchanged; only
-   *  a whole-mailbox export reads them. */
-  unlistedFolders?: Map<string, IPSTFolder>
   /** File identity for the on-device search-index cache (PST/OST only). */
   fingerprint?: string
   /** The label shown in the sidebar, for the mailbox: search filter. */
@@ -233,17 +229,13 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-/** A folder's handle, including the unlisted ones only an export reads. */
-const folderHandle = (entry: SourceEntry, folderId: string): IPSTFolder | undefined =>
-  entry.folders.get(folderId) ?? entry.unlistedFolders?.get(folderId)
-
 /** Enumerate a folder's messages once and reuse the list: the message list
  *  and the background indexer both ask for the same folders, and each
  *  enumeration re-reads the folder's tables from the file. */
 async function folderEmails(entry: SourceEntry, folderId: string): Promise<IPSTMessage[]> {
   const cached = entry.emailLists.get(folderId)
   if (cached) return cached
-  const folder = folderHandle(entry, folderId)
+  const folder = entry.folders.get(folderId)
   if (!folder) return []
   const emails = await folder.getEmails()
   for (const m of emails) safe(() => entry.messages.set(String(m.primaryNodeId), m), undefined)
@@ -381,7 +373,7 @@ interface ProvidesMessages {
  * look the same to the caller.
  */
 async function folderSequence(entry: SourceEntry, folderId: string): Promise<MessageSequence> {
-  const folder = folderHandle(entry, folderId)
+  const folder = entry.folders.get(folderId)
   if (!folder) return { count: 0, get: () => Promise.reject(new Error('no folder')) }
   const provider = (folder as unknown as Partial<ProvidesMessages>).getEmailsProvider
   if (typeof provider === 'function') {
@@ -509,10 +501,41 @@ function scoreTree(root: FolderNode): Map<FolderNode, Scored> {
   return scores
 }
 
+/** Names that say nothing to a reader, given to a container's own-mail row. */
+const PLUMBING_NAMES = new Set(['', '(unnamed folder)', 'ipm_subtree'])
+
+/**
+ * The sidebar lists a container's subfolders in its place and never the
+ * container itself, so mail kept directly in it (a .pst's "Top of Outlook data
+ * file" can hold messages) would have no row, no count and no search entry.
+ * Such a container gets a row of its own, without children: its subfolders are
+ * already listed beside it. Returns null when it holds no mail of its own.
+ */
+function ownMailRow(container: FolderNode): FolderNode | null {
+  if (container.messageCount <= 0) return null
+  const name = PLUMBING_NAMES.has(container.name.trim().toLowerCase())
+    ? 'Top of mailbox'
+    : container.name
+  return { ...container, name, children: [] }
+}
+
+/** The whole tree, unpruned, with the root's own mail (if any) given a row. */
+function wholeTree(root: FolderNode): { tree: FolderNode; ownerHint: string; ownMail: FolderNode | null } {
+  const ownMail = ownMailRow(root)
+  if (!ownMail) return { tree: root, ownerHint: '', ownMail }
+  // The row carries the root's real id, which is what reads the messages, so
+  // the root, never shown itself, takes a different one to keep ids unique.
+  return {
+    tree: { ...root, id: `${root.id}:mailbox`, messageCount: 0, children: [ownMail, ...root.children] },
+    ownerHint: '',
+    ownMail,
+  }
+}
+
 export function selectMailboxTree(
   root: FolderNode,
   libraryTopId: string | null,
-): { tree: FolderNode; ownerHint: string; unlisted: FolderNode[] } {
+): { tree: FolderNode; ownerHint: string; ownMail: FolderNode | null } {
   const scores = scoreTree(root)
   const candidates: Scored[] = []
   for (const s of scores.values()) {
@@ -528,7 +551,7 @@ export function selectMailboxTree(
   // showing the raw tree (store root, IPM_SUBTREE, Common Views, Finder, ...)
   // the moment a single message lived outside the chosen container.
   const best = candidates.find((c) => c.node !== root)
-  if (!best || best.messages === 0) return { tree: root, ownerHint: '', unlisted: [] }
+  if (!best || best.messages === 0) return wholeTree(root)
 
   // Rescue sibling subtrees that hold mail (dropping the empty plumbing).
   const extras = (best.parent?.children ?? [])
@@ -539,19 +562,17 @@ export function selectMailboxTree(
   // tree is never worth hiding messages in a mailbox someone is reviewing.
   const covered =
     best.messages + extras.reduce((n, sib) => n + (scores.get(sib)?.messages ?? 0), 0)
-  if (covered < (scores.get(root)?.messages ?? 0)) {
-    return { tree: root, ownerHint: '', unlisted: [] }
-  }
+  if (covered < (scores.get(root)?.messages ?? 0)) return wholeTree(root)
 
+  // The root holds no mail of its own here: `covered` would fall short of the
+  // root's total if it did. So its id cannot clash with the own-mail row.
+  const ownMail = ownMailRow(best.node)
   return {
-    tree: { ...root, children: [...best.node.children, ...extras] },
+    tree: { ...root, children: [...(ownMail ? [ownMail] : []), ...best.node.children, ...extras] },
     // The chosen container (or its parent store root) sometimes carries the
     // mailbox owner's name; generic names are filtered by the caller.
     ownerHint: best.node.name || best.parent?.name || '',
-    // The chosen container's own mail: its subfolders are shown in its place,
-    // so the tree has no row for these messages. A whole-mailbox export
-    // still reads them.
-    unlisted: best.node.messageCount > 0 ? [best.node] : [],
+    ownMail,
   }
 }
 
@@ -1800,14 +1821,11 @@ const api = {
       libraryTopId = null
     }
     const fullTree = await buildFolderTree(await pstFile.getRootFolder(), entry)
-    const { tree: rootNode, ownerHint, unlisted } = selectMailboxTree(fullTree, libraryTopId)
-    const unlistedFolders = new Map<string, IPSTFolder>()
-    for (const node of unlisted) {
-      const handle = entry.folders.get(node.id)
-      if (handle) unlistedFolders.set(node.id, handle)
-    }
-    if (unlistedFolders.size) entry.unlistedFolders = unlistedFolders
+    const { tree: rootNode, ownerHint, ownMail } = selectMailboxTree(fullTree, libraryTopId)
     pruneFolderHandles(entry, rootNode)
+    // `folder:` matches what the sidebar calls the row, which may be a
+    // friendlier name than the container's own.
+    if (ownMail) entry.folderNames.set(ownMail.id, ownMail.name)
 
     // A previous session's finished search index for this exact file (same
     // name/size/mtime) lets indexSource skip re-reading every message.
@@ -1840,13 +1858,6 @@ const api = {
       totalMessages,
       suggestedLabel: ownerName || prettyFileName(file.name),
       recovered,
-      ...(unlistedFolders.size
-        ? {
-            unlistedFolders: unlisted
-              .filter((n) => unlistedFolders.has(n.id))
-              .map((n) => ({ id: n.id, messageCount: n.messageCount })),
-          }
-        : {}),
     }
   },
 
@@ -2120,7 +2131,7 @@ const api = {
   ): Promise<{ notListed: number }> {
     const entry = sources.get(sourceId)
     if (!entry) throw new Error('This mailbox is no longer open.')
-    const folder = folderHandle(entry, folderId)
+    const folder = entry.folders.get(folderId)
     if (!folder) return { notListed: 0 }
     const declared = safe(() => folder.contentCount, 0)
     const extra = entry.extraUnreadable?.get(folderId) ?? 0

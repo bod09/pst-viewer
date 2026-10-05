@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useApp, type Source } from '../store/store'
-import type { FolderNode, SourceIndex } from '../types'
+import type { FolderNode } from '../types'
 import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
 import { BrandHeader } from './BrandHeader'
 import { SettingsButton } from './Settings'
@@ -101,11 +101,6 @@ function sortFolders(nodes: FolderNode[]): FolderNode[] {
 
 function subtreeMessages(node: FolderNode): number {
   return node.messageCount + node.children.reduce((n, c) => n + subtreeMessages(c), 0)
-}
-
-/** Messages a whole-mailbox export covers, the top folder's unlisted ones included. */
-function mailboxMessages(index: SourceIndex): number {
-  return index.totalMessages + (index.unlistedFolders ?? []).reduce((n, f) => n + f.messageCount, 0)
 }
 
 /** Sorted children, dropping folders whose whole subtree holds no messages
@@ -253,7 +248,7 @@ function SourceTree({ source }: { source: Source }) {
         {source.status === 'error' && <Alert className="h-4 w-4 shrink-0 text-rose-400" />}
         {!editing && (
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            {source.status === 'ready' && source.index && mailboxMessages(source.index) > 0 && (
+            {source.status === 'ready' && source.index && source.index.totalMessages > 0 && (
               <button
                 onClick={() => exportFolderEml(source.id)}
                 className="text-slate-400 transition hover:text-slate-200"
