@@ -18,7 +18,7 @@ function base64(bytes: ArrayBuffer | Uint8Array): string {
 }
 
 function base64Text(s: string): string {
-  return base64(new TextEncoder().encode(s).buffer as ArrayBuffer)
+  return base64(new TextEncoder().encode(s))
 }
 
 /** Wrap base64 to 76-char lines, as MIME requires. */
@@ -26,9 +26,50 @@ function fold(b64: string): string {
   return b64.replace(/.{1,76}/g, '$&\r\n')
 }
 
-/** RFC 2047 encode a header value when it contains non-ASCII characters. */
+const utf8 = new TextEncoder()
+
+/** Short printable ASCII that no reader would take for an encoded word. */
+const isPlain = (s: string): boolean => /^[\x20-\x7e]*$/.test(s) && !s.includes('=?') && s.length <= 800
+
+/**
+ * A header value as it may be written: plain when it is short printable
+ * ASCII, otherwise as RFC 2047 encoded words.
+ *
+ * Text that contains "=?" is encoded even when it is plain ASCII, because a
+ * reader would take it for an encoded word and show something other than what
+ * was there. An encoded word may be at most 75 characters, so long text
+ * becomes several, one to a line, split between characters and never inside
+ * one; that also keeps every line well inside the 998 a header line may be.
+ */
 function encodeWord(s: string): string {
-  return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${base64Text(s)}?=`
+  if (isPlain(s)) return s
+  const words: string[] = []
+  let chunk = ''
+  let bytes = 0
+  for (const ch of s) {
+    const n = utf8.encode(ch).length
+    // 39 bytes are 52 base64 characters, 64 with the "=?UTF-8?B?" and "?=",
+    // which leaves room on the first line for the header's own name.
+    if (bytes + n > 39) {
+      words.push(chunk)
+      chunk = ''
+      bytes = 0
+    }
+    chunk += ch
+    bytes += n
+  }
+  words.push(chunk)
+  return words.map((w) => `=?UTF-8?B?${base64Text(w)}?=`).join('\r\n ')
+}
+
+/**
+ * A MIME type as it may stand in a header. The type comes from the mail file,
+ * so anything that is not plainly "type/subtype" is treated as unknown rather
+ * than written out, where a line break in it would start headers of its own.
+ */
+function mimeType(s: string): string {
+  const type = (s || '').split(';')[0].trim()
+  return /^[\w.+-]+\/[\w.+-]+$/.test(type) ? type : 'application/octet-stream'
 }
 
 /**
@@ -39,7 +80,7 @@ function encodeWord(s: string): string {
  */
 function quotedParam(s: string): string {
   const plain = s.replace(/[\r\n]+/g, ' ')
-  if (!/^[\x20-\x7e]*$/.test(plain)) return `=?UTF-8?B?${base64Text(plain)}?=`
+  if (!/^[\x20-\x7e]*$/.test(plain) || plain.includes('=?')) return `=?UTF-8?B?${base64Text(plain)}?=`
   return plain.replace(/["\\]/g, '_')
 }
 
@@ -49,23 +90,27 @@ const headerSafe = (s: string): string => s.replace(/[\u0000-\u001f\u007f<>]+/g,
 
 /**
  * A display name as it may stand before an address. Plain words go as they
- * are. Anything else is quoted (or, when not ASCII, written as an encoded
- * word), so punctuation in a name stays part of the name: unquoted,
+ * are. Anything else is quoted (or written as encoded words, when it is not
+ * short plain ASCII), so punctuation in a name stays part of the name: unquoted,
  * "Smith, John" reads as two recipients, and a name that itself looks like an
  * address, such as "Support <help@company.example>", could be taken for the
  * sender when the file is read back.
  */
 function displayName(name: string): string {
-  if (!/^[\x20-\x7e]*$/.test(name)) return encodeWord(name)
+  if (!isPlain(name)) return encodeWord(name)
   if (/^[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~ ]*$/.test(name)) return name
   return `"${name.replace(/[\\"]/g, '\\$&')}"`
 }
 
 function formatAddress(r: RecipientInfo): string {
-  const email = headerSafe(r.email || '')
-  if (!email) return displayName(r.name || '')
-  return r.name ? `${displayName(r.name)} <${email}>` : `<${email}>`
+  const name = (r.name || '').trim()
+  const email = headerSafe(r.email || '').trim()
+  if (!email) return displayName(name)
+  return name ? `${displayName(name)} <${email}>` : `<${email}>`
 }
+
+/** A list of people for To or Cc, leaving out any with neither name nor address. */
+const formatAddresses = (list: RecipientInfo[]): string => list.map(formatAddress).filter(Boolean).join(', ')
 
 function boundary(tag: string): string {
   const rand = () => Math.random().toString(36).slice(2)
@@ -111,7 +156,9 @@ function bodyPart(content: MessageContent): string {
   for (const img of content.inlineImages) {
     s +=
       `--${b}\r\n` +
-      `Content-Type: ${img.mime || 'application/octet-stream'}\r\n` +
+      // Only ever a picture: the body refers to it as one, and a part
+      // claiming to be text here would be taken for a body of its own.
+      `Content-Type: ${mimeType(img.mime).replace(/^(?!image\/).*$/, 'application/octet-stream')}\r\n` +
       `Content-Transfer-Encoding: base64\r\n` +
       `Content-ID: <${headerSafe(img.cid)}>\r\n` +
       `Content-Disposition: inline\r\n\r\n${fold(base64(img.data))}\r\n`
@@ -132,7 +179,7 @@ const ATTACHMENT_PIECE = 57 * 32768
 function* attachmentPart(a: EmlAttachment): Generator<string, void, undefined> {
   const name = quotedParam(a.name || 'attachment')
   yield (
-    `Content-Type: ${a.mime || 'application/octet-stream'}; name="${name}"\r\n` +
+    `Content-Type: ${mimeType(a.mime)}; name="${name}"\r\n` +
     `Content-Transfer-Encoding: base64\r\n` +
     `Content-Disposition: attachment; filename="${name}"\r\n\r\n`
   )
@@ -156,7 +203,8 @@ function buildHeaders(content: MessageContent): string {
   if (raw) {
     const out: string[] = []
     let skipping = false
-    for (const line of content.headers.split(/\r?\n/)) {
+    // A lone carriage return ends a line for some readers, so it does here too.
+    for (const line of content.headers.split(/\r\n|\r|\n/)) {
       if (/^[ \t]/.test(line)) {
         if (!skipping && out.length) out.push(line) // folded continuation of a kept header
         continue
@@ -180,8 +228,10 @@ function buildHeaders(content: MessageContent): string {
   const lines: string[] = []
   const from = formatAddress({ name: content.fromName, email: content.fromEmail })
   if (from) lines.push(`From: ${from}`)
-  if (content.to.length) lines.push(`To: ${content.to.map(formatAddress).join(', ')}`)
-  if (content.cc.length) lines.push(`Cc: ${content.cc.map(formatAddress).join(', ')}`)
+  const to = formatAddresses(content.to)
+  const cc = formatAddresses(content.cc)
+  if (to) lines.push(`To: ${to}`)
+  if (cc) lines.push(`Cc: ${cc}`)
   lines.push(`Subject: ${encodeWord(content.subject)}`)
   if (content.date != null) {
     lines.push(`Date: ${new Date(content.date).toUTCString().replace(/GMT$/, '+0000')}`)

@@ -166,10 +166,20 @@ export function EmailFrame({
 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement | null
-      const anchor = target?.closest?.('a') as HTMLAnchorElement | null
-      if (anchor?.href) {
+      // Links of every kind: HTML, inside an SVG, or an area of an image map.
+      // The address is read from the attribute, because an SVG link's `.href`
+      // is an object rather than text.
+      const link = target?.closest?.('a, area') as Element | null
+      const address = link?.getAttribute('href') ?? link?.getAttribute('xlink:href')
+      if (link && address) {
         e.preventDefault()
-        window.open(anchor.href, '_blank', 'noopener,noreferrer')
+        let href: string
+        try {
+          href = new URL(address, link.ownerDocument.baseURI).href
+        } catch {
+          return // not an address at all: do nothing rather than open a broken tab
+        }
+        window.open(href, '_blank', 'noopener,noreferrer')
         return
       }
       const img = target?.closest?.('img') as HTMLImageElement | null

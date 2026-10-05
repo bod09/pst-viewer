@@ -35,12 +35,19 @@ const ENCODED_RUN = /=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=(?:\s+=\?[^?\s]+\?[bBqQ]\?[^?
  * reads "Name <boss@company.example>" beside the true address, so the attempt
  * is visible rather than believed.
  */
+/** "pstv" and sixteen random hex digits: letters and digits only, so the
+ *  address parser reads it as one ordinary word. */
+function placeholderTag(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return 'pstv' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function structuredAddresses(raw: string): Address[] {
-  // The token stands in for a run while the structure is read. It must not
-  // already occur in the header, or text the sender wrote would be taken for
-  // one and replaced.
-  let tag = 'pstvencoded'
-  while (raw.includes(tag)) tag += 'q'
+  // The token stands in for a run while the structure is read. It is random,
+  // so nothing the sender wrote can be taken for one and replaced, however it
+  // is spelled or escaped in the header.
+  let tag = placeholderTag()
+  while (raw.includes(tag)) tag = placeholderTag()
   const placeholder = new RegExp(`${tag}(\\d+)x`, 'g')
 
   const runs: string[] = []
@@ -259,10 +266,29 @@ class EmlMessageAdapter {
 function rereadAddresses(email: Email): void {
   const raw = (key: string) => email.headers.filter((h) => h.key === key).map((h) => h.value)
   const from = raw('from')
-  if (from.length) email.from = structuredAddresses(from[0])[0]
+  if (from.length) email.from = safeAddresses(from[0])[0]
   for (const key of ['to', 'cc', 'bcc'] as const) {
     const values = raw(key)
-    if (values.length) email[key] = structuredAddresses(values.join(', '))
+    if (values.length) email[key] = safeAddresses(values.join(', '))
+  }
+}
+
+/**
+ * structuredAddresses, for a header that may be anything at all. If it cannot
+ * be read, the message still opens: the header is read without decoding its
+ * encoded words (so nothing in them can pose as an address), and failing that
+ * the people are left out. postal-mime's own reading is never fallen back on,
+ * since being steered by encoded words is the fault this exists to avoid.
+ */
+function safeAddresses(raw: string): Address[] {
+  try {
+    return structuredAddresses(raw)
+  } catch {
+    try {
+      return addressParser(raw)
+    } catch {
+      return []
+    }
   }
 }
 

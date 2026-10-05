@@ -277,6 +277,10 @@ function SpreadsheetView({ bytes }: { bytes: Uint8Array }) {
       <div
         key={active}
         className="scroll-clear-light sheet-view min-h-0 flex-1 bg-white"
+        // The one place HTML is injected into the page. Each table has been
+        // through DOMPurify with a narrow allow-list before it was stored
+        // (see where `tables` is built above).
+        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: state.tables[active] }}
       />
     </div>
@@ -417,6 +421,6 @@ function Centered({ children }: { children: ReactNode }) {
 
 function downloadName(name: string, ext: string): string {
   if (!ext) return name || 'attachment'
-  if (new RegExp(`\\.${ext}$`, 'i').test(name)) return name
+  if (name.toLowerCase().endsWith(`.${ext.toLowerCase()}`)) return name
   return `${name || 'attachment'}.${ext}`
 }

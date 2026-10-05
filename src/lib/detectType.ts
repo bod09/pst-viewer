@@ -198,7 +198,8 @@ export function detectType(
   if (declaredMime) {
     const fromMime = extFromMime(declaredMime)
     if (fromMime) {
-      return { ext: fromMime, mime: declaredMime, category: categoryForExt(fromMime) }
+      const byExt = categoryForExt(fromMime)
+      return { ext: fromMime, mime: declaredMime, category: byExt === 'other' ? familyOf(declaredMime) : byExt }
     }
   }
 
@@ -211,7 +212,19 @@ export function detectType(
     }
   }
 
-  return { ext: '', mime: declaredMime || 'application/octet-stream', category: 'other' }
+  return { ext: '', mime: declaredMime || 'application/octet-stream', category: familyOf(declaredMime) }
+}
+
+/** What kind of thing a MIME type is, going by its family alone. */
+function familyOf(mime: string): PreviewCategory {
+  const base = mime.split(';')[0].trim().toLowerCase()
+  if (base.startsWith('image/')) return 'image'
+  if (base.startsWith('audio/')) return 'audio'
+  if (base.startsWith('video/')) return 'video'
+  if (base.startsWith('text/')) return 'text'
+  if (base === 'application/pdf') return 'pdf'
+  if (base === 'message/rfc822') return 'email'
+  return 'other'
 }
 
 /** Lightweight category guess from name + MIME only (no bytes). */
@@ -221,14 +234,7 @@ export function categoryFromNameMime(name: string, mime: string): PreviewCategor
   const fromMime = extFromMime(mime)
   // An unfamiliar subtype (image/pjpeg, say) still belongs to its family.
   const byMime = fromMime ? categoryForExt(fromMime) : 'other'
-  if (byMime !== 'other') return byMime
-  if (mime.startsWith('image/')) return 'image'
-  if (mime.startsWith('audio/')) return 'audio'
-  if (mime.startsWith('video/')) return 'video'
-  if (mime.startsWith('text/')) return 'text'
-  if (mime === 'application/pdf') return 'pdf'
-  if (mime === 'message/rfc822') return 'email'
-  return 'other'
+  return byMime === 'other' ? familyOf(mime) : byMime
 }
 
 function extFromMime(mime: string): string {
@@ -236,7 +242,9 @@ function extFromMime(mime: string): string {
   for (const [ext, m] of Object.entries(EXT_MIME)) {
     if (m === base) return ext
   }
-  if (base.startsWith('image/')) return base.slice(6)
+  // The type comes from the mail file, and the result ends up in a file
+  // name, so an unfamiliar image subtype is used only when it is a plain word.
+  if (base.startsWith('image/')) return /^[a-z0-9]{1,8}$/.test(base.slice(6)) ? base.slice(6) : ''
   if (base === 'text/plain') return 'txt'
   return ''
 }
