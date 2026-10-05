@@ -57,20 +57,26 @@ export function structuredAddresses(raw: string): Address[] {
   // kept as written rather than decoded into an address it never was.
   const verbatim = (s: string) => s.replace(placeholder, (_, i) => runs[Number(i)])
 
+  const parsed = addressParser(inert)
+  // Whether the header names any address outside its encoded words.
+  const anyReal = parsed.some((a) => (a.group ? a.group.some((m) => m.address) : Boolean(a.address)))
+
   const mailbox = (m: Mailbox): Mailbox[] => {
     const name = decoded(m.name)
     const address = verbatim(m.address)
-    if (address) return [{ name, address }]
-    // Nothing outside the encoded words: some mailers encode a whole
-    // "Name <address>" in one go. With no real address to contradict it,
-    // reading one out of the text cannot misattribute anything.
+    if (address || anyReal) return [{ name, address }]
+    // Nothing outside the encoded words anywhere in the header: some mailers
+    // encode a whole "Name <address>" in one go. With no real address to
+    // contradict it, reading one out of the text cannot misattribute
+    // anything. Where the header does carry a real address, text that only
+    // looks like one stays a name.
     const inner = addressParser(name, { flatten: true }).filter(
       (a): a is Mailbox => !a.group && Boolean(a.address),
     )
     return inner.length ? inner : [{ name, address: '' }]
   }
 
-  return addressParser(inert).flatMap((a): Address[] =>
+  return parsed.flatMap((a): Address[] =>
     a.group ? [{ name: decoded(a.name), group: a.group.flatMap(mailbox) }] : mailbox(a),
   )
 }
@@ -266,7 +272,12 @@ class EmlMessageAdapter {
 function rereadAddresses(email: Email): void {
   const raw = (key: string) => email.headers.filter((h) => h.key === key).map((h) => h.value)
   const from = raw('from')
-  if (from.length) email.from = safeAddresses(from[0])[0]
+  if (from.length) {
+    // The sender is the first entry that has an address: a name on its own in
+    // front of it (which an encoded word can be made to look like) is not one.
+    const senders = safeAddresses(from[0])
+    email.from = senders.find((a) => !a.group && a.address) ?? senders[0]
+  }
   for (const key of ['to', 'cc', 'bcc'] as const) {
     const values = raw(key)
     if (values.length) email[key] = safeAddresses(values.join(', '))
@@ -275,20 +286,15 @@ function rereadAddresses(email: Email): void {
 
 /**
  * structuredAddresses, for a header that may be anything at all. If it cannot
- * be read, the message still opens: the header is read without decoding its
- * encoded words (so nothing in them can pose as an address), and failing that
- * the people are left out. postal-mime's own reading is never fallen back on,
- * since being steered by encoded words is the fault this exists to avoid.
+ * be read, the message still opens, with those people left out. Nothing else
+ * is fallen back on: any other reading of the header decodes encoded words
+ * first, which is the fault this exists to avoid.
  */
 function safeAddresses(raw: string): Address[] {
   try {
     return structuredAddresses(raw)
   } catch {
-    try {
-      return addressParser(raw)
-    } catch {
-      return []
-    }
+    return []
   }
 }
 

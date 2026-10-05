@@ -198,8 +198,7 @@ export function detectType(
   if (declaredMime) {
     const fromMime = extFromMime(declaredMime)
     if (fromMime) {
-      const byExt = categoryForExt(fromMime)
-      return { ext: fromMime, mime: declaredMime, category: byExt === 'other' ? familyOf(declaredMime) : byExt }
+      return { ext: fromMime, mime: declaredMime, category: categoryForExt(fromMime) }
     }
   }
 
@@ -212,19 +211,7 @@ export function detectType(
     }
   }
 
-  return { ext: '', mime: declaredMime || 'application/octet-stream', category: familyOf(declaredMime) }
-}
-
-/** What kind of thing a MIME type is, going by its family alone. */
-function familyOf(mime: string): PreviewCategory {
-  const base = mime.split(';')[0].trim().toLowerCase()
-  if (base.startsWith('image/')) return 'image'
-  if (base.startsWith('audio/')) return 'audio'
-  if (base.startsWith('video/')) return 'video'
-  if (base.startsWith('text/')) return 'text'
-  if (base === 'application/pdf') return 'pdf'
-  if (base === 'message/rfc822') return 'email'
-  return 'other'
+  return { ext: '', mime: declaredMime || 'application/octet-stream', category: 'other' }
 }
 
 /** Lightweight category guess from name + MIME only (no bytes). */
@@ -232,9 +219,14 @@ export function categoryFromNameMime(name: string, mime: string): PreviewCategor
   const ext = extFromName(name)
   if (ext) return categoryForExt(ext)
   const fromMime = extFromMime(mime)
-  // An unfamiliar subtype (image/pjpeg, say) still belongs to its family.
-  const byMime = fromMime ? categoryForExt(fromMime) : 'other'
-  return byMime === 'other' ? familyOf(mime) : byMime
+  if (fromMime) return categoryForExt(fromMime)
+  // An image of a type this app does not know (image/x-emf, say) is not
+  // called an image: the browser may well not be able to show it, and "other"
+  // offers it as a download instead of a broken picture.
+  if (mime.startsWith('audio/')) return 'audio'
+  if (mime.startsWith('video/')) return 'video'
+  if (mime.startsWith('text/')) return 'text'
+  return 'other'
 }
 
 function extFromMime(mime: string): string {

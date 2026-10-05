@@ -173,13 +173,21 @@ export function EmailFrame({
       const address = link?.getAttribute('href') ?? link?.getAttribute('xlink:href')
       if (link && address) {
         e.preventDefault()
-        let href: string
+        let url: URL
         try {
-          href = new URL(address, link.ownerDocument.baseURI).href
+          url = new URL(address, link.ownerDocument.baseURI)
         } catch {
           return // not an address at all: do nothing rather than open a broken tab
         }
-        window.open(href, '_blank', 'noopener,noreferrer')
+        // Only what a link in mail is for. The sanitiser has already removed
+        // script and data addresses; this also leaves out anything that
+        // resolves to the app itself (a "#section" or "/path" in the message
+        // would otherwise open a second copy of the app).
+        const web = url.protocol === 'http:' || url.protocol === 'https:'
+        const other = url.protocol === 'mailto:' || url.protocol === 'tel:'
+        if ((web && url.origin !== window.location.origin) || other) {
+          window.open(url.href, '_blank', 'noopener,noreferrer')
+        }
         return
       }
       const img = target?.closest?.('img') as HTMLImageElement | null

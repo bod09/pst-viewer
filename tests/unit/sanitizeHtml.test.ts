@@ -183,14 +183,17 @@ describe('with remote content switched off', () => {
    */
   function fetches(doc: Document): string[] {
     const found: string[] = []
-    const elsewhere = (value: string) => {
-      try {
-        const url = new URL(value, 'https://test-page.invalid/dir/')
-        return url.host !== 'test-page.invalid' && /^(https?|wss?|ftp|file):$/.test(url.protocol)
-      } catch {
-        return false
-      }
-    }
+    // Asked as a page on https and as one on http: the app is served both
+    // ways, and `https:host/x` means different things on each.
+    const elsewhere = (value: string) =>
+      ['https://test-page.invalid/dir/', 'http://test-page.invalid/dir/'].some((page) => {
+        try {
+          const url = new URL(value, page)
+          return url.host !== 'test-page.invalid' && /^(https?|wss?|ftp|file):$/.test(url.protocol)
+        } catch {
+          return false
+        }
+      })
     const cssFetches = (css: string) => /url|image|@import|\\/i.test(css.replace(/url\(\s*#[\w-]+\s*\)/g, ''))
     for (const el of doc.querySelectorAll('*')) {
       const link = el.localName === 'a' || el.localName === 'area'
@@ -245,6 +248,9 @@ describe('with remote content switched off', () => {
     ['an image with one slash after the scheme', '<img src="https:/tracker.example/a.png">'],
     ['an image with no slash after the scheme', '<img src="https:tracker.example/a.png">'],
     ['an image over another scheme', '<img src="ftp://tracker.example/a.png">'],
+    ['an image with the scheme in upper case and one slash', '<img src="HTTPS:/tracker.example/a.png">'],
+    ['an image with a name and @ in front of the host', '<img src="https:here.invalid@tracker.example/a.png">'],
+    ['an inline background using src()', `<div style="background-image:src('${REMOTE}/a.png')">x</div>`],
     ['a srcset candidate with backslashes', '<img srcset="\\\\tracker.example/a.png 2x">'],
     ['a poster with backslashes', '<video poster="https:\\\\tracker.example\\p.png"></video>'],
     ['an svg image with backslashes', '<svg><image href="\\\\tracker.example/i.png"></image></svg>'],
@@ -268,6 +274,26 @@ describe('with remote content switched off', () => {
     ).querySelector('div')
     expect(div?.getAttribute('style')).toBe('color: red; font-weight: bold')
     expect(blocked(`<div style="background: url(${REMOTE}/a.png)">x</div>`).querySelector('div')?.hasAttribute('style')).toBe(false)
+  })
+
+  test('with remote content on, a pixel is caught however its address is spelled', () => {
+    for (const src of ['https:tracker.example/p.gif', 'HTTPS:/tracker.example/p.gif']) {
+      expect(dom(`<img src="${src}" width="1" height="1">`).querySelectorAll('img'), src).toHaveLength(0)
+    }
+  })
+
+  test('a link inside an svg keeps its address even when it looks like CSS', () => {
+    const doc = blocked(
+      '<svg><a id="a" href="https://example.com/url(x)/page"><text>x</text></a>' +
+        '<a id="b" href="https://example.com/a\\b"><text>y</text></a></svg>',
+    )
+    expect(doc.querySelector('#a')?.getAttribute('href')).toBe('https://example.com/url(x)/page')
+    expect(doc.querySelector('#b')?.getAttribute('href')).toBe('https://example.com/a\\b')
+  })
+
+  test('a style that points at something in the same document is kept', () => {
+    const rect = blocked('<svg><rect style="fill:url(#g);stroke:red" width="5"></rect></svg>').querySelector('rect')
+    expect(rect?.getAttribute('style')).toBe('fill:url(#g);stroke:red')
   })
 
   test('a reference to something inside the same svg is kept', () => {

@@ -80,21 +80,19 @@ describe('detectType', () => {
     expect(detectType(null, 'noext', '')).toEqual({ ext: '', mime: 'application/octet-stream', category: 'other' })
   })
 
-  test('an unfamiliar subtype still belongs to its family', () => {
-    expect(detectType(null, 'photo', 'image/pjpeg')).toEqual({ ext: 'pjpeg', mime: 'image/pjpeg', category: 'image' })
-    expect(detectType(null, 'clip', 'video/x-unknown').category).toBe('video')
-    expect(detectType(null, 'sound', 'audio/x-unknown; rate=8000').category).toBe('audio')
-    expect(detectType(null, 'notes', 'text/x-unknown').category).toBe('text')
+  test('an image type this app does not know is offered as a download, not shown as a broken picture', () => {
+    expect(detectType(null, 'drawing', 'image/x-emf')).toEqual({ ext: '', mime: 'image/x-emf', category: 'other' })
+    expect(detectType(null, 'photo', 'image/heic').category).toBe('other')
+    expect(categoryFromNameMime('drawing', 'image/x-emf')).toBe('other')
+    // The file name, when it has an extension, is still believed.
+    expect(detectType(null, 'drawing.png', 'image/x-emf')).toMatchObject({ ext: 'png', category: 'image' })
   })
 
   test.each(['image/(', 'image/../../evil.exe', 'image/a b', 'image/<script>', 'image/.*', 'image/', `image/${'x'.repeat(50)}`])(
     'a declared type of %j does not put anything odd in the file extension',
     (mime) => {
-      const got = detectType(null, 'picture', mime)
-      expect(got.ext).toMatch(/^[a-z0-9]*$/)
-      expect(got.category).toBe('image')
-      const withBytes = detectType(new Uint8Array([0, 1, 2, 3, 0, 255]), 'picture', mime)
-      expect(withBytes.ext).toMatch(/^[a-z0-9]*$/)
+      expect(detectType(null, 'picture', mime).ext).toMatch(/^[a-z0-9]*$/)
+      expect(detectType(new Uint8Array([0, 1, 2, 3, 0, 255]), 'picture', mime).ext).toMatch(/^[a-z0-9]*$/)
     },
   )
 
@@ -113,7 +111,8 @@ describe('categories', () => {
 
   test('by name first, then by declared type', () => {
     expect(categoryFromNameMime('photo.JPG', 'application/octet-stream')).toBe('image')
-    expect(categoryFromNameMime('noext', 'image/x-unknown')).toBe('image')
+    expect(categoryFromNameMime('noext', 'image/png')).toBe('image')
+    expect(categoryFromNameMime('noext', 'image/x-unknown')).toBe('other')
     expect(categoryFromNameMime('noext', 'audio/x-thing')).toBe('audio')
     expect(categoryFromNameMime('noext', 'video/x-thing')).toBe('video')
     expect(categoryFromNameMime('noext', 'text/x-thing')).toBe('text')

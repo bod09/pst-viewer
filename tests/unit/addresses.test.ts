@@ -52,6 +52,18 @@ describe('structuredAddresses', () => {
     expect(structuredAddresses(header)).toEqual([expected])
   })
 
+  // Shapes found in review: the fake address sits in an entry of its own, in
+  // front of the real one, so there is no address beside it to contradict it.
+  test.each([
+    ['a name holding an address, then a comma', '=?UTF-8?Q?Boss_<boss@company.example>?=, <attacker@evil.example>'],
+    ['a bare address in an encoded word, then a comma', '=?UTF-8?Q?boss@company.example?=, attacker@evil.example'],
+    ['the same in base64', `=?UTF-8?B?${Buffer.from('boss@company.example').toString('base64')}?=, attacker@evil.example`],
+    ['inside a group', 'People: =?UTF-8?Q?Boss_<boss@company.example>?=, attacker@evil.example;'],
+  ])('text in an encoded word is never an address when the header has a real one: %s', (_what, header) => {
+    const flat = structuredAddresses(header).flatMap((a) => a.group ?? [a])
+    expect(flat.map((m) => m.address).filter(Boolean)).toEqual(['attacker@evil.example'])
+  })
+
   test('an encoded word cannot add a recipient', () => {
     const list = structuredAddresses(
       '=?UTF-8?Q?Bob_<bob@example.com>,_Eve_<eve@evil.example>?= <intern@example.com>',
@@ -132,6 +144,24 @@ describe('parseEml', () => {
     expect(message.senderEmailAddress).toBe('alice@example.com')
     const recipients = (await message.getRecipients()) as unknown as { smtpAddress: string }[]
     expect(recipients[0].smtpAddress).toBe('bob@example.com')
+  })
+
+  test.each([
+    '=?UTF-8?Q?Boss_<boss@company.example>?=, <attacker@evil.example>',
+    '=?UTF-8?Q?boss@company.example?=, attacker@evil.example',
+    '=?UTF-8?Q?IT_Support_<helpdesk@company.example>?= <attacker@evil.example>',
+  ])('the sender of a message with From: %s is the real address', async (from) => {
+    const message = await parseEml(simpleEml({ subject: 'x', from }).slice().buffer, 'id')
+    expect(message.senderEmailAddress).toBe('attacker@evil.example')
+  })
+
+  test('a sender written entirely as one encoded word is still read', async () => {
+    const message = await parseEml(
+      simpleEml({ subject: 'x', from: '=?UTF-8?Q?Alice_Example_<alice@example.com>?=' }).slice().buffer,
+      'id',
+    )
+    expect(message.senderEmailAddress).toBe('alice@example.com')
+    expect(message.senderName).toBe('Alice Example')
   })
 
   test('bytes that are not a message are refused', async () => {

@@ -52,7 +52,8 @@ describe('headers', () => {
     const head = eml.slice(0, eml.indexOf('\r\n\r\n'))
     expect(head.split('\r\n')).toEqual([
       'From: Alice Example <alice@example.com>',
-      'To: Bob Tester <bob@example.com>, <eve@example.com>',
+      'To: Bob Tester <bob@example.com>,',
+      ' <eve@example.com>',
       'Cc: Carol Sender <carol@example.com>',
       'Subject: Zebra report',
       'Date: Tue, 12 Mar 2024 10:15:00 +0000',
@@ -88,7 +89,11 @@ describe('headers', () => {
       }),
     )
     const head = eml.slice(0, eml.indexOf('\r\n\r\n'))
-    const names = head.split('\r\n').map((line) => line.slice(0, line.indexOf(':')))
+    // The name of each header; a line starting with a space continues the one before.
+    const names = head
+      .split('\r\n')
+      .filter((line) => !/^[ \t]/.test(line))
+      .map((line) => line.slice(0, line.indexOf(':')))
     expect(names).toEqual([
       'From',
       'To',
@@ -157,6 +162,33 @@ describe('headers', () => {
     const email = await parse(eml)
     expect(email.subject).toBe(text)
     expect(email.from).toEqual({ name: text, address: 'alice@example.com' })
+  })
+
+  test('no header line is longer than a line may be, whatever the fields hold', async () => {
+    const many = Array.from({ length: 300 }, (_, i) => ({ name: `Person Number ${i} Éa`, email: `person${i}@example.com` }))
+    const content = messageContent({
+      subject: 'x',
+      fromName: '"'.repeat(400), // every character needs escaping when quoted
+      fromEmail: `${'a'.repeat(2000)}@example.com`,
+      to: many,
+      cc: many.map((p) => ({ name: p.name.replace(' Éa', ''), email: p.email })),
+    })
+    const eml = build(content, [
+      attachment(`${'long name '.repeat(120)}.pdf`, noise(4)),
+      attachment(`${'語'.repeat(240)}.pdf`, noise(4)),
+    ])
+    const longest = Math.max(...eml.split('\r\n').map((line) => line.length))
+    expect(longest).toBeLessThanOrEqual(998)
+    // And it all still reads back.
+    const email = await parse(eml)
+    expect(email.to).toHaveLength(300)
+    expect(email.to?.[299]).toEqual({ name: 'Person Number 299 Éa', address: 'person299@example.com' })
+    expect(email.cc?.[150]).toEqual({ name: 'Person Number 150', address: 'person150@example.com' })
+    expect(email.from?.name).toBe('"'.repeat(400))
+    expect(email.attachments.map((a) => a.filename)).toEqual([
+      `${'long name '.repeat(120)}.pdf`,
+      `${'語'.repeat(240)}.pdf`,
+    ])
   })
 
   test('people with nothing but spaces for a name or address are left out, not written as blanks', () => {
@@ -388,6 +420,29 @@ describe('attachments', () => {
     expect(email.html).toBe('<img src="cid:pic">')
     expect(email.attachments.map((a) => a.filename ?? null)).toEqual([null, 'a.bin'])
     expect(bytesOf(email.attachments[1].content)).toEqual(data)
+  })
+
+  test('a part the body refers to keeps its type, unless that type could pass for a body', () => {
+    const typesFor = (mimes: string[]) => {
+      const eml = build(
+        messageContent({
+          text: null,
+          html: '<p>x</p>',
+          inlineImages: mimes.map((mime, i) => ({ cid: `part${i}`, mime, data: PNG.slice().buffer })),
+        }),
+      )
+      return [...eml.matchAll(/^Content-Type: ([^;\r]+)\r\nContent-Transfer-Encoding: base64\r\nContent-ID/gm)].map((m) => m[1])
+    }
+    // Mailers give a content id to ordinary attachments too, and write types in any case.
+    expect(typesFor(['image/png', 'IMAGE/PNG', 'Image/Jpeg', 'application/pdf', 'text/calendar'])).toEqual([
+      'image/png',
+      'IMAGE/PNG',
+      'Image/Jpeg',
+      'application/pdf',
+      'application/octet-stream',
+    ])
+    const data = 'application/octet-stream'
+    expect(typesFor(['text/html', 'TEXT/PLAIN', 'message/rfc822', 'multipart/mixed'])).toEqual([data, data, data, data])
   })
 
   test('an ordinary file type is written as it is', () => {

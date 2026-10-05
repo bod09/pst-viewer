@@ -10,23 +10,31 @@ const TINY = /^0*[01](?:\.0+)?(?:px)?$/
  * and it accepts spellings a pattern misses (`https:\\host`, `\\host`, `/\host`,
  * a tab inside the scheme, control characters in front). Anything that does
  * not resolve to this page, or to data kept in the page, is remote.
+ *
+ * It is asked twice, as a page served over https and as one served over
+ * http, because the answer can differ: `https:host/x` is a path on an https
+ * page and another server on an http one. Remote on either counts.
  */
-const HERE = 'https://here.invalid'
 const LOCAL_SCHEMES = new Set(['data:', 'blob:', 'cid:', 'about:', 'mailto:', 'tel:'])
 function isRemote(value: string | null): boolean {
   if (!value) return false
-  try {
-    const url = new URL(value, `${HERE}/`)
-    return url.origin !== HERE && !LOCAL_SCHEMES.has(url.protocol)
-  } catch {
-    // Not a URL the browser could fetch.
-    return false
-  }
+  return ['https://here.invalid', 'http://here.invalid'].some((here) => {
+    try {
+      const url = new URL(value, `${here}/`)
+      return url.origin !== here && !LOCAL_SCHEMES.has(url.protocol)
+    } catch {
+      // Not a URL the browser could fetch.
+      return false
+    }
+  })
 }
 
 /** The CSS that can make a browser fetch something: url(), image-set() and
  *  their relatives, or any escape, which could be spelling one of those. */
-const CSS_FETCH = /\\|(?:url|image-set|image|cross-fade|element)\(/i
+const CSS_FETCH = /\\|(?:url|src|image-set|image|cross-fade|element)\(/i
+/** A reference to something in the same document, url(#id), which fetches nothing. */
+const LOCAL_CSS_REF = /url\(\s*['"]?#[^)\\]*\)/gi
+const fetchesCss = (css: string): boolean => CSS_FETCH.test(css.replace(LOCAL_CSS_REF, ''))
 
 /** The page-wide policy for a message shown with remote content off. */
 export const NO_REMOTE_POLICY =
@@ -100,17 +108,18 @@ export function sanitizeEmailHtml(
       // to something in the same picture, url(#id), is not a fetch.
       if (el.namespaceURI !== 'http://www.w3.org/1999/xhtml') {
         for (const attr of Array.from(el.attributes)) {
-          if (attr.name === 'style') continue
-          const elsewhere = attr.value.replace(/url\(\s*['"]?#[^)\\]*\)/gi, '')
-          if (CSS_FETCH.test(elsewhere)) el.removeAttribute(attr.name)
+          // Addresses were dealt with above, and are not CSS: one may well
+          // contain a bracket or a backslash.
+          if (attr.name === 'style' || URL_ATTRS.includes(attr.name)) continue
+          if (fetchesCss(attr.value)) el.removeAttribute(attr.name)
         }
       }
       // Inline styles can fetch too. Each declaration that could is dropped
       // whole, rather than trying to cut the address out of it: the address
       // may be escaped, quoted, or never closed.
       const style = el.getAttribute('style')
-      if (style && CSS_FETCH.test(style)) {
-        const kept = style.split(';').filter((declaration) => !CSS_FETCH.test(declaration))
+      if (style && fetchesCss(style)) {
+        const kept = style.split(';').filter((declaration) => !fetchesCss(declaration))
         if (kept.join('').trim()) el.setAttribute('style', kept.join(';'))
         else el.removeAttribute('style')
       }

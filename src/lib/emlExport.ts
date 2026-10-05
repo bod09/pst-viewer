@@ -29,7 +29,7 @@ function fold(b64: string): string {
 const utf8 = new TextEncoder()
 
 /** Short printable ASCII that no reader would take for an encoded word. */
-const isPlain = (s: string): boolean => /^[\x20-\x7e]*$/.test(s) && !s.includes('=?') && s.length <= 800
+const isPlain = (s: string): boolean => /^[\x20-\x7e]*$/.test(s) && !s.includes('=?') && s.length <= 400
 
 /**
  * A header value as it may be written: plain when it is short printable
@@ -80,7 +80,9 @@ function mimeType(s: string): string {
  */
 function quotedParam(s: string): string {
   const plain = s.replace(/[\r\n]+/g, ' ')
-  if (!/^[\x20-\x7e]*$/.test(plain) || plain.includes('=?')) return `=?UTF-8?B?${base64Text(plain)}?=`
+  // Encoded words, folded when there are several, keep a long or non-ASCII
+  // name inside the length a line may be.
+  if (!isPlain(plain)) return encodeWord(plain)
   return plain.replace(/["\\]/g, '_')
 }
 
@@ -104,13 +106,19 @@ function displayName(name: string): string {
 
 function formatAddress(r: RecipientInfo): string {
   const name = (r.name || '').trim()
-  const email = headerSafe(r.email || '').trim()
+  // Nothing longer than this is an address (the limit is 254), and one that
+  // long would make a line longer than a header line may be.
+  const email = headerSafe(r.email || '').trim().slice(0, 320)
   if (!email) return displayName(name)
-  return name ? `${displayName(name)} <${email}>` : `<${email}>`
+  if (!name) return `<${email}>`
+  // A long name and a long address each fit on a line; together they may not.
+  const shown = displayName(name)
+  return `${shown}${shown.length + email.length > 70 ? '\r\n ' : ' '}<${email}>`
 }
 
 /** A list of people for To or Cc, leaving out any with neither name nor address. */
-const formatAddresses = (list: RecipientInfo[]): string => list.map(formatAddress).filter(Boolean).join(', ')
+/** One to a line, so that a long list never makes a long line. */
+const formatAddresses = (list: RecipientInfo[]): string => list.map(formatAddress).filter(Boolean).join(',\r\n ')
 
 function boundary(tag: string): string {
   const rand = () => Math.random().toString(36).slice(2)
@@ -156,9 +164,10 @@ function bodyPart(content: MessageContent): string {
   for (const img of content.inlineImages) {
     s +=
       `--${b}\r\n` +
-      // Only ever a picture: the body refers to it as one, and a part
-      // claiming to be text here would be taken for a body of its own.
-      `Content-Type: ${mimeType(img.mime).replace(/^(?!image\/).*$/, 'application/octet-stream')}\r\n` +
+      // A part here that claimed to be text, or a message, would be taken for
+      // a body of its own, so those are written as plain data. Any other type
+      // is kept: mailers give a content id to ordinary attachments too.
+      `Content-Type: ${mimeType(img.mime).replace(/^(?:text|multipart|message)\/.*$/i, 'application/octet-stream')}\r\n` +
       `Content-Transfer-Encoding: base64\r\n` +
       `Content-ID: <${headerSafe(img.cid)}>\r\n` +
       `Content-Disposition: inline\r\n\r\n${fold(base64(img.data))}\r\n`
