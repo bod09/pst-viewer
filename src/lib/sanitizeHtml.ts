@@ -32,8 +32,12 @@ export function sanitizeEmailHtml(
 ): string {
   const hook = (node: Element) => {
     const el = node as HTMLElement
+    // By local name, which is the same for HTML and SVG links (an SVG <a> has
+    // a lower-case tagName).
+    const isAnchor = el.localName === 'a'
+    const isLink = isAnchor || el.localName === 'area'
 
-    if (el.tagName === 'A') {
+    if (isAnchor) {
       el.setAttribute('target', '_blank')
       el.setAttribute('rel', 'noopener noreferrer nofollow')
     }
@@ -42,13 +46,18 @@ export function sanitizeEmailHtml(
       // A <style> element's contents are never inspected by the hook, and CSS
       // has many ways to fetch (url(), @import, @font-face, image-set), so the
       // whole element goes rather than trying to rewrite the stylesheet.
-      if (el.tagName === 'STYLE') {
+      // By local name: a <style> inside inline SVG is in the SVG namespace
+      // (lower-case tagName) and styles the whole page just the same.
+      if (el.localName === 'style') {
         el.remove()
         return
       }
       // Any attribute that could name a remote resource, not a fixed list:
       // SVG uses href/xlink:href where HTML uses src.
       for (const attr of URL_ATTRS) {
+        // Where a link leads is not fetched by showing the message, only when
+        // the reader chooses to follow it, so links keep their address.
+        if (isLink && (attr === 'href' || attr === 'xlink:href')) continue
         if (isRemote(el.getAttribute(attr))) {
           el.removeAttribute(attr)
           if (el.tagName === 'IMG') el.setAttribute('data-pstv-blocked', '1')

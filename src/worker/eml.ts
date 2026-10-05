@@ -17,7 +17,6 @@ import { Consts, type IPSTMessage } from '@hiraokahypertools/pst-extractor'
 /** A run of RFC 2047 encoded words. The whitespace between adjacent words is
  *  not part of the text, so a run is decoded as one. */
 const ENCODED_RUN = /=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=(?:\s+=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=)*/g
-const PLACEHOLDER = /pstvencoded(\d+)x/g
 
 /**
  * Read an address header the way RFC 2047 intends: structure first, encoded
@@ -37,12 +36,19 @@ const PLACEHOLDER = /pstvencoded(\d+)x/g
  * is visible rather than believed.
  */
 export function structuredAddresses(raw: string): Address[] {
+  // The token stands in for a run while the structure is read. It must not
+  // already occur in the header, or text the sender wrote would be taken for
+  // one and replaced.
+  let tag = 'pstvencoded'
+  while (raw.includes(tag)) tag += 'q'
+  const placeholder = new RegExp(`${tag}(\\d+)x`, 'g')
+
   const runs: string[] = []
-  const inert = raw.replace(ENCODED_RUN, (run) => `pstvencoded${runs.push(run) - 1}x`)
-  const decoded = (s: string) => s.replace(PLACEHOLDER, (_, i) => decodeWords(runs[Number(i)]))
+  const inert = raw.replace(ENCODED_RUN, (run) => `${tag}${runs.push(run) - 1}x`)
+  const decoded = (s: string) => s.replace(placeholder, (_, i) => decodeWords(runs[Number(i)]))
   // An encoded word is not allowed inside an address, so one found there is
   // kept as written rather than decoded into an address it never was.
-  const verbatim = (s: string) => s.replace(PLACEHOLDER, (_, i) => runs[Number(i)])
+  const verbatim = (s: string) => s.replace(placeholder, (_, i) => runs[Number(i)])
 
   const mailbox = (m: Mailbox): Mailbox[] => {
     const name = decoded(m.name)

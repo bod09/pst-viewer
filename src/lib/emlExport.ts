@@ -43,12 +43,28 @@ function quotedParam(s: string): string {
   return plain.replace(/["\\]/g, '_')
 }
 
-/** Strip anything that could break out of a header line. */
-const headerSafe = (s: string): string => s.replace(/[\r\n<>]+/g, '')
+/** Strip anything that could break out of a header line, or out of the angle
+ *  brackets around an address or a content id. */
+const headerSafe = (s: string): string => s.replace(/[\u0000-\u001f\u007f<>]+/g, '')
+
+/**
+ * A display name as it may stand before an address. Plain words go as they
+ * are. Anything else is quoted (or, when not ASCII, written as an encoded
+ * word), so punctuation in a name stays part of the name: unquoted,
+ * "Smith, John" reads as two recipients, and a name that itself looks like an
+ * address, such as "Support <help@company.example>", could be taken for the
+ * sender when the file is read back.
+ */
+function displayName(name: string): string {
+  if (!/^[\x20-\x7e]*$/.test(name)) return encodeWord(name)
+  if (/^[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~ ]*$/.test(name)) return name
+  return `"${name.replace(/[\\"]/g, '\\$&')}"`
+}
 
 function formatAddress(r: RecipientInfo): string {
-  if (!r.email) return encodeWord(r.name || '')
-  return r.name ? `${encodeWord(r.name)} <${r.email}>` : `<${r.email}>`
+  const email = headerSafe(r.email || '')
+  if (!email) return displayName(r.name || '')
+  return r.name ? `${displayName(r.name)} <${email}>` : `<${email}>`
 }
 
 function boundary(tag: string): string {
@@ -162,9 +178,7 @@ function buildHeaders(content: MessageContent): string {
     return out.join('\r\n') + '\r\n'
   }
   const lines: string[] = []
-  const from = content.fromEmail
-    ? `${content.fromName ? encodeWord(content.fromName) + ' ' : ''}<${content.fromEmail}>`
-    : encodeWord(content.fromName || '')
+  const from = formatAddress({ name: content.fromName, email: content.fromEmail })
   if (from) lines.push(`From: ${from}`)
   if (content.to.length) lines.push(`To: ${content.to.map(formatAddress).join(', ')}`)
   if (content.cc.length) lines.push(`Cc: ${content.cc.map(formatAddress).join(', ')}`)

@@ -141,7 +141,9 @@ function SuggestInput({
   const shown = options.slice(0, 50)
   const isOpen = open && shown.length > 0
 
-  // Reset the highlight whenever the list changes underneath it.
+  // Reset the highlight whenever the list changes underneath it. Keyed on the
+  // list's contents: the array itself is a new one on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setActive(-1), [options.join('\u0000')])
 
   // Keep the highlighted entry in view when walking a long list.
@@ -381,6 +383,12 @@ export function SearchBar() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={openPanel}
+        onKeyDown={(e) => {
+          // Escape closes the panel (see the effect above). Left to itself the
+          // browser also empties a search box on Escape, which would throw
+          // away the query along with the panel.
+          if (e.key === 'Escape' && panelOpen) e.preventDefault()
+        }}
         placeholder="Search all mail…"
         className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2 pl-9 pr-9 text-sm text-slate-100 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none"
       />

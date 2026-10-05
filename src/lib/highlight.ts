@@ -1,11 +1,15 @@
+/** The `key:value` filters search understands. One list, used by the search
+ *  itself and by highlighting, so the two cannot drift apart. */
+export const FILTER_KEYS: ReadonlySet<string> = new Set([
+  'from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after', 'mailbox', 'folder',
+])
+
 /**
  * The terms to highlight for a query, using the same grammar as search:
  * key:value filter tokens are not highlighted (they constrain fields, they are
  * not text being looked for), a quoted phrase highlights as one whole phrase,
  * and a free token highlights exactly as typed.
  */
-const FILTER_KEYS = new Set(['from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after'])
-
 export function queryTerms(query: string): string[] {
   const out = new Set<string>()
   const TOKEN = /(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]*)"|(\S+)/g

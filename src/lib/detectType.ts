@@ -185,7 +185,7 @@ export function detectType(
       return { ext: 'msg', mime: EXT_MIME.msg, category: 'email' }
     }
     if (sig) {
-      return { ext: sig, mime: EXT_MIME[sig] ?? declaredMime ?? '', category: categoryForExt(sig) }
+      return { ext: sig, mime: EXT_MIME[sig] ?? declaredMime, category: categoryForExt(sig) }
     }
     // Looks like printable text?
     if (looksTextual(bytes)) {
@@ -206,7 +206,7 @@ export function detectType(
   if (nameExt) {
     return {
       ext: nameExt,
-      mime: EXT_MIME[nameExt] ?? declaredMime ?? 'application/octet-stream',
+      mime: EXT_MIME[nameExt] ?? (declaredMime || 'application/octet-stream'),
       category: categoryForExt(nameExt),
     }
   }
@@ -219,7 +219,9 @@ export function categoryFromNameMime(name: string, mime: string): PreviewCategor
   const ext = extFromName(name)
   if (ext) return categoryForExt(ext)
   const fromMime = extFromMime(mime)
-  if (fromMime) return categoryForExt(fromMime)
+  // An unfamiliar subtype (image/pjpeg, say) still belongs to its family.
+  const byMime = fromMime ? categoryForExt(fromMime) : 'other'
+  if (byMime !== 'other') return byMime
   if (mime.startsWith('image/')) return 'image'
   if (mime.startsWith('audio/')) return 'audio'
   if (mime.startsWith('video/')) return 'video'
