@@ -14,7 +14,8 @@ Found a security problem? Please don't open an issue; see
   remote images in an email being read, which users can switch off in
   Settings.
 - **Real mail never goes in the repository.** `.pst`, `.ost`, `.msg` and `.eml`
-  files are git-ignored for that reason. Test with your own mailboxes locally,
+  files are git-ignored for that reason. (The files in `samples/` are made up
+  or synthetic, and are the one exception.) Test with your own mailboxes locally,
   or with the made-up files from `npm run fixtures`. The same goes for pull
   request text, screenshots and recordings: show made-up mail only.
 
@@ -35,7 +36,7 @@ offline, installable version, at http://localhost:4173.
 
 ```bash
 npx playwright install chromium   # once, for the browser tests
-npm run mailboxes                 # once, downloads the public test files (47 MB)
+npm run mailboxes                 # once, downloads the larger test mailboxes (46 MB)
 
 npm run check        # type-check, lint, tests, production build
 npm run test:e2e     # the built app, driven in a real browser
@@ -43,7 +44,9 @@ npm run test:e2e     # the built app, driven in a real browser
 
 CI runs the same two commands on every pull request, and a pull request can
 only be merged once they pass. Run them before pushing; together they take
-about a minute.
+about a minute. (A pull request that changes only documentation skips them
+in CI and passes in a few seconds, and a push to main that changes only
+documentation or tests does not republish the site or the Docker image.)
 
 | Command | What it checks | When it fails |
 | --- | --- | --- |
@@ -71,12 +74,14 @@ Tests use two kinds of mail, and neither is anyone's private mail:
   files, for trying things by hand, run `npm run fixtures` (they go to
   `fixtures/`, which is git-ignored).
 - **Public test files**: real `.pst`, `.ost` and `.msg` files from the test data
-  of the libraries that read them. `npm run mailboxes` downloads them once
-  (about 47 MB) into `fixtures/public/`, each pinned to an exact commit and
-  checked by hash. Until you do, the tests that need them are skipped (`npm
-  test` says so at the top of its output). CI always runs them. They are
-  public, but still other people's mail: do not quote them in a test, a pull
-  request or a screenshot.
+  of the libraries that read them, each pinned to an exact commit and checked
+  by hash. The synthetic ones, with nothing personal in them, are in
+  [`samples/`](samples/README.md), free for anyone to use. Three larger
+  mailboxes and one message hold real people's mail, so they are not in the
+  repository: `npm run mailboxes` downloads them once (about 46 MB) into
+  `fixtures/public/`. Until you do, the few tests that need them are skipped
+  (`npm test` says so at the top of its output). CI always runs them. Do not
+  quote those in a test, a pull request or a screenshot.
 
 ### If your change alters what is read from a mailbox
 
@@ -138,6 +143,7 @@ made-up mail (`npm run fixtures`).
 | `src/lib/sanitizeHtml.ts` | Email HTML sanitising; rendered only inside the sandboxed frame in `src/components/EmailFrame.tsx` |
 | `patches/` | Local fixes to `@hiraokahypertools/pst-extractor`, applied on install |
 | `tests/` | Unit tests, worker tests on real files, browser tests ([tests/README.md](tests/README.md)) |
+| `samples/` | Mail files with nothing personal in them, for trying the app and for the tests ([samples/README.md](samples/README.md)) |
 
 ## Working with large mailboxes
 

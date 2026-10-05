@@ -4,6 +4,11 @@ name: CI
 # type-checked, linted, tested and built here, and driven in a real browser.
 # The `build` job at the end is the one branch protection requires, so a pull
 # request can only be merged, or auto-merged, once all of it has passed.
+#
+# A change that touches nothing but documentation skips the tests (see the
+# `changes` job). The workflow itself still has to run for those: branch
+# protection waits for `build`, and a workflow filtered out by path would
+# never report it, leaving the pull request stuck.
 on:
   pull_request:
   push:
@@ -20,8 +25,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether the tests need to run. They do unless every changed file
+  # is documentation, and they do whenever that cannot be worked out.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # On a pull request the checkout is a merge of the branch into its
+          # target, so its first parent is the target and the difference is
+          # the pull request. On a push it is everything since the last push.
+          if [ "$EVENT" = "pull_request" ]; then from="HEAD^1"; else from="$BEFORE"; fi
+          code=true
+          if files=$(git diff --name-only "$from" HEAD 2>/dev/null) && [ -n "$files" ]; then
+            echo "$files"
+            # Documentation: Markdown, the screenshots, and the license. Not
+            # samples/, even its README: a test pins down what that holds.
+            docs='\.md$|^screenshots/|^LICENSE$'
+            code_files=$(printf '%s\n' "$files" | grep -vE "$docs" || true)
+            sample_files=$(printf '%s\n' "$files" | grep -E '^samples/' || true)
+            if [ -z "$code_files" ] && [ -z "$sample_files" ]; then code=false; fi
+          fi
+          echo "code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   checks:
     name: Type-check, lint, tests, build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -54,6 +95,8 @@ jobs:
 
   e2e:
     name: Browser tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -116,22 +159,31 @@ jobs:
   build:
     name: build
     if: always()
-    needs: [checks, e2e]
+    needs: [changes, checks, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every job passed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          TESTS: ${{ needs.checks.result }} ${{ needs.e2e.result }}
         run: |
-          echo "results: $RESULTS"
-          if [ -z "$RESULTS" ]; then
-            echo "::error::No job results to check."
+          echo "changes: $CHANGES (code changed: $CODE), tests: $TESTS"
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error::Could not work out what changed ($CHANGES)."
             exit 1
           fi
-          for result in $RESULTS; do
-            if [ "$result" != "success" ]; then
-              echo "::error::A CI job did not pass ($result). See the jobs above."
+          # Only documentation changed: the tests were skipped on purpose,
+          # and skipped is the only thing they are allowed to be.
+          if [ "$CODE" = "false" ]; then want=skipped; else want=success; fi
+          for result in $TESTS; do
+            if [ "$result" != "$want" ]; then
+              echo "::error::A CI job did not pass ($result, expected $want). See the jobs above."
               exit 1
             fi
           done
+          if [ "$(echo $TESTS | wc -w)" -ne 2 ]; then
+            echo "::error::Expected two job results, got: $TESTS"
+            exit 1
+          fi

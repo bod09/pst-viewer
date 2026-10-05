@@ -5,6 +5,15 @@ name: Docker image
 on:
   push:
     branches: [main]
+    # Nothing in these ends up in what is published, so a change to them
+    # alone needs no new build. (Run it by hand from the Actions tab if ever
+    # needed: workflow_dispatch below is not filtered.)
+    paths-ignore:
+      - '**.md'
+      - 'tests/**'
+      - 'samples/**'
+      - 'screenshots/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
