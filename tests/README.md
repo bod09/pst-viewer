@@ -39,15 +39,18 @@ needs a baseline: run `npm run baselines` and commit the new file in
 **Public test files** are real `.pst`, `.ost` and `.msg` files from the test
 data of the pst-extractor and msgreader projects. They are listed in
 [`public-mailboxes.json`](public-mailboxes.json), each pinned to an exact commit
-and a SHA-256, and downloaded by `npm run mailboxes` into `fixtures/public/`
-(git-ignored). Until you run that, every test that needs one is skipped:
-`npm test` says so at the top of its output, and the browser tests mark
-theirs as skipped. In CI, or with `REQUIRE_MAILBOXES=1` set, a missing file is
+and a SHA-256. The synthetic ones are kept in the repository, in
+[`samples/`](../samples/README.md), so the tests on them always run. Three
+larger mailboxes and one message hold real people's mail and are downloaded
+instead, by `npm run mailboxes`, into `fixtures/public/` (git-ignored). Until
+you run that, the tests that need one of those are skipped: `npm test` names
+the missing files at the top of its output, and the browser tests mark theirs
+as skipped. In CI, or with `REQUIRE_MAILBOXES=1` set, a missing file is
 a failure instead, and CI also fails if any test at all was skipped
 (`scripts/check-test-reports.mjs`).
 
-Those files are public, but they are still other people's mail, so nothing from
-inside them is written into a test. A test on them compares what the worker
+The downloaded files are public, but they are still other people's mail, so
+nothing from inside any public file is written into a test. A test on them compares what the worker
 says in one place with what it says in another: that every message in the list
 opens with the same subject, that a search for a word of a subject finds that
 message, that a damaged copy recovers the same messages as the healthy file.
@@ -130,9 +133,15 @@ For real files, guard the tests so a fresh clone still passes:
 
 ```ts
 import { describe, test } from 'vitest'
-import { havePublicMailboxes, publicMailbox } from '../support/mailboxes'
+import { publicMailbox, usable } from '../support/mailboxes'
 
-describe.skipIf(!havePublicMailboxes)('...', () => {
+// A file in samples/ is always there:
+test('...', async () => {
+  await api.openSource('contacts', publicMailbox('contacts.pst'))
+})
+
+// One that has to be downloaded may not be:
+describe.skipIf(!usable('enron.pst'))('...', () => {
   test('...', async () => {
     await api.openSource('enron', publicMailbox('enron.pst'))
   })

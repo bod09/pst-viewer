@@ -6,12 +6,7 @@ import { scanZipForPsts } from '../../src/lib/zip'
 import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import { fixtureFiles } from '../support/fixtures.mjs'
 import { fileOf } from '../support/files'
-import {
-  havePublicMailboxes,
-  publicFileNames,
-  publicMailbox,
-  requirePublicMailboxes,
-} from '../support/mailboxes'
+import { missingPublicFiles, publicFileNames, publicMailbox, requirePublicMailboxes, usable } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
 
 /**
@@ -90,10 +85,11 @@ describe('public test files read as recorded', () => {
   test('the files are here, or this is a machine where they are allowed not to be', () => {
     // On a fresh clone they are skipped, with a note at the start of the run
     // (tests/support/global-setup.ts). In CI their absence is a failure.
-    expect(havePublicMailboxes || !requirePublicMailboxes, 'public test files are missing. Run: npm run mailboxes').toBe(true)
+    expect(missingPublicFiles === 0 || !requirePublicMailboxes, 'public test files are missing. Run: npm run mailboxes').toBe(true)
   })
 
-  test.skipIf(!havePublicMailboxes).each(baselines.filter((b) => !isFixture(b.name)))(
+  // The files kept in samples/ are always here; the downloaded ones when they have been.
+  test.each(baselines.filter((b) => !isFixture(b.name) && usable(b.name)))(
     '$name',
     async ({ name, baseline }) => {
       // Not revealing the text: this output can end up in a public test log.

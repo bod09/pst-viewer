@@ -3,7 +3,7 @@ import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import type { FolderNode, SourceIndex } from '../../src/types'
 import { sha } from '../../scripts/lib/fidelity.mjs'
 import { fileOf } from '../support/files'
-import { havePublicMailboxes, publicMailbox } from '../support/mailboxes'
+import { publicMailbox, usable } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
 
 /**
@@ -52,7 +52,10 @@ beforeAll(async () => {
   api = await loadWorker()
 })
 
-describe.skipIf(!havePublicMailboxes)('a mailbox whose header is destroyed', () => {
+// These need the larger mailboxes, which hold real mail and are downloaded, not kept in samples/.
+const haveLarge = usable('enron.pst') && usable('pstextractortest@outlook.com.ost')
+
+describe.skipIf(!haveLarge)('a mailbox whose header is destroyed', () => {
   test.each([
     ['a .pst', 'enron.pst'],
     ['an .ost', 'pstextractortest@outlook.com.ost'],
@@ -76,7 +79,7 @@ describe.skipIf(!havePublicMailboxes)('a mailbox whose header is destroyed', () 
   })
 })
 
-describe.skipIf(!havePublicMailboxes)('a mailbox with part of it missing', () => {
+describe.skipIf(!haveLarge)('a mailbox with part of it missing', () => {
   test('shows what survives, and every message it lists can be opened', async () => {
     const before = await healthy('enron.pst')
     // The last fifth of the file is gone, as after an interrupted copy.
@@ -100,7 +103,7 @@ describe.skipIf(!havePublicMailboxes)('a mailbox with part of it missing', () =>
   })
 })
 
-describe.skipIf(!havePublicMailboxes)('a file that cannot be recovered', () => {
+describe('a file that cannot be recovered', () => {
   test('an old-format .pst with no header is refused with the reason, not opened empty', async () => {
     // Recovery covers the current formats; the 1997-2002 one is read only when intact.
     const bytes = new Uint8Array(await publicMailbox('contacts97-2002.pst').arrayBuffer())

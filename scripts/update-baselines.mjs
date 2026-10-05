@@ -39,9 +39,9 @@ for (const [name, bytes] of Object.entries(fixtureFiles())) await record(new Fil
 for (const entry of manifest.files) {
   let bytes
   try {
-    bytes = await readFile(join(ROOT, 'fixtures/public', entry.name))
+    bytes = await readFile(join(ROOT, entry.sample ?? 'fixtures/public', entry.name))
   } catch {
-    console.error(`\n${entry.name} is not here. Fetch the public mailboxes first: npm run mailboxes`)
+    console.error(`\n${entry.name} is not here. Fetch the public test files first: npm run mailboxes`)
     process.exit(1)
   }
   await record(new File([bytes], entry.name), true)

@@ -1,0 +1,39 @@
+From: Mallory Example <mallory@example.com>
+To: Bob Tester <bob@example.com>
+Subject: Hostile markup test
+Date: Wed, 13 Mar 2024 09:30:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="REL1"
+
+--REL1
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<style>@import url(https://tracker.example/import.css); body { background: url(https://tracker.example/style-bg.png) }</style>
+<link rel="stylesheet" href="https://tracker.example/sheet.css">
+</head><body>
+<p id="visible">Visible paragraph: kumquat.</p>
+<script>window.parent.postMessage("pwned-script", "*"); document.title = "pwned-script"</script>
+<img src="x" onerror="window.parent.postMessage('pwned-onerror', '*')">
+<a id="js-link" href="javascript:window.parent.postMessage('pwned-href', '*')">javascript link</a>
+<a id="real-link" href="https://example.com/page">ordinary link</a>
+<svg width="120" height="30"><a id="svg-link" href="https://example.com/svg"><text x="0" y="20">svg link</text></a></svg>
+<iframe src="https://tracker.example/frame.html"></iframe>
+<form action="https://tracker.example/submit"><input name="password"><button>Send</button></form>
+<svg><script>window.parent.postMessage("pwned-svg", "*")</script></svg>
+<img id="remote-image" src="https://tracker.example/picture.png" width="120" height="80" alt="remote">
+<img id="tracking-pixel" src="https://tracker.example/pixel.gif" width="1" height="1">
+<div id="bg" style="background-image: url('https://tracker.example/inline-bg.png')">styled</div>
+<table background="https://tracker.example/table-bg.png"><tr><td>cell</td></tr></table>
+<img id="inline-image" src="cid:inline-chart" alt="inline">
+</body></html>
+
+--REL1
+Content-Type: image/png
+Content-ID: <inline-chart>
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP8//8/AzbAhFVkuIsDAK2eBP+3XiBjAAAAAElFTkSuQmCC
+
+--REL1--

@@ -1,5 +1,5 @@
 {
-  "about": "Public test files from the pst-extractor and msgreader projects' own test data: real .pst and .ost mailboxes and .msg messages, pinned to exact commits and checked by hash. They are downloaded by `npm run mailboxes` into fixtures/public/ (git-ignored) and are not part of this repository.",
+  "about": "Public test files from the pst-extractor and msgreader projects' own test data: real .pst and .ost mailboxes and .msg messages, each pinned to an exact commit and checked by hash. The ones with a \"sample\" folder are synthetic (test addresses only) and are kept in this repository, in samples/. The rest hold real people's mail, so they are not: `npm run mailboxes` downloads them into fixtures/public/ (git-ignored).",
   "files": [
     {
       "name": "alpha-beta-gamma-delta.pst",
@@ -7,7 +7,8 @@
       "sha256": "5feddaa3c98875b9d128995071b3b299c2861b316543bb45e35c6a6385f8e15f",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/pst-extractor/238a905cdf194b225a6052962c3536ae0d726978/src/__tests__/testdata/alpha-beta-gamma-delta.pst"
-      ]
+      ],
+      "sample": "samples/pst-extractor"
     },
     {
       "name": "contacts.pst",
@@ -15,7 +16,8 @@
       "sha256": "25f2d4c0b5b229487f9db5753b414ccbdd2481ff0d3b693a1192216f8be3b484",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/pst-extractor/238a905cdf194b225a6052962c3536ae0d726978/src/__tests__/testdata/contacts.pst"
-      ]
+      ],
+      "sample": "samples/pst-extractor"
     },
     {
       "name": "contacts97-2002.pst",
@@ -23,7 +25,8 @@
       "sha256": "153df7e350d128e7fd03711a6f09865b058ccc56d8295ff4d8eeda6c459e2a94",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/pst-extractor/238a905cdf194b225a6052962c3536ae0d726978/src/__tests__/testdata/contacts97-2002.pst"
-      ]
+      ],
+      "sample": "samples/pst-extractor"
     },
     {
       "name": "enron.pst",
@@ -58,7 +61,8 @@
       "sha256": "78e7b635ed7429f303f468b66b78394d8ed1d28362ea609883ef191051b64d18",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/Simple.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "sent.msg",
@@ -66,7 +70,8 @@
       "sha256": "da96eb946584d3d428f4318013a809760ba18af907ee1a93c788ef024dfeee27",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/sent.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "attachAndInline.msg",
@@ -74,7 +79,8 @@
       "sha256": "8f55de34fa4a100305872e83caf80ead633abb2310aea41b9cc6aa854a2e4959",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/attachAndInline.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "attachmentFiles.msg",
@@ -82,7 +88,8 @@
       "sha256": "8643045fd94c3f06df7bf147d1b95db07ff016cd0d52eacceaa15c74a2c9c3c7",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/attachmentFiles.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "msgInMsg.msg",
@@ -90,7 +97,8 @@
       "sha256": "239e199b7c617d97608ccd6fd4f44f86647695aebfe3c81596ea5b641eab2602",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/msgInMsg.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "msgInMsgInMsg.msg",
@@ -98,7 +106,8 @@
       "sha256": "9c77fc1ff1b9132c546959a0ed6c98e3678cd369bf6b0b6abb777abc9e6720d6",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/msgInMsgInMsg.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "Attach sample eml received.msg",
@@ -106,7 +115,8 @@
       "sha256": "60870cc391d422c3e58371657d0e9ee6758edc23833ff2efa2d0aef8052f9a45",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/Attach%20sample%20eml%20received.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "contactUnicode.msg",
@@ -114,7 +124,8 @@
       "sha256": "99f586cc7c1e666b232e0ec15a430e2d04317c19ae8b271d5dadfeb42f5a13d5",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/contactUnicode.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "contactAnsi.msg",
@@ -122,7 +133,8 @@
       "sha256": "79b82e21d032cca26d25cacb2092b36f25e0f463d3c78b7067cc2a10cca9dc9d",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/contactAnsi.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "nonUnicodeCP932.msg",
@@ -130,7 +142,8 @@
       "sha256": "4ed496f2d6af082662b8af96c55b3338763d39206d34c46753bc720063096f06",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/nonUnicodeCP932.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "Hello +CJK.msg",
@@ -138,7 +151,8 @@
       "sha256": "ce343ae41eb0281fe6bd87d868da83ae19ca2eddbf312fd13bf4de607b1c3523",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/Hello%20%2BCJK.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "A schedule.msg",
@@ -154,7 +168,8 @@
       "sha256": "629f9cc10bbc39655fd0af9e996f013eab04837ee50db01bf0b21ef0b637ecda",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/A%20weekly%201.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     },
     {
       "name": "htmlLink.msg",
@@ -162,7 +177,8 @@
       "sha256": "0e6f5382eafe31ccf67e7c3a22877d9421a23b896d2d7dd2e353206aa9a2f9d7",
       "urls": [
         "https://raw.githubusercontent.com/HiraokaHyperTools/msgreader/3a5a9359a0fca87d2ece0d3e44317c876bfdf327/test/htmlLink.msg"
-      ]
+      ],
+      "sample": "samples/msgreader"
     }
   ]
 }

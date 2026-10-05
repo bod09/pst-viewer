@@ -1,12 +1,13 @@
 /**
- * Download the public test files the tests read real mail from: .pst and .ost
- * mailboxes and .msg messages (see tests/public-mailboxes.json).
+ * Download the public test files that are not kept in the repository, and
+ * check the ones that are (see tests/public-mailboxes.json).
  *
- * They come from the test data of the pst-extractor and msgreader projects.
- * Each is pinned to an exact commit and checked against a SHA-256, so what the
- * tests read is exactly what was reviewed, whatever happens to those
- * repositories later. They go to fixtures/public/, which is git-ignored:
- * nothing here ends up in a commit.
+ * All of them come from the test data of the pst-extractor and msgreader
+ * projects, each pinned to an exact commit and checked against a SHA-256, so
+ * what the tests read is exactly what was reviewed, whatever happens to those
+ * repositories later. The synthetic ones live in samples/. The ones holding
+ * real people's mail are downloaded to fixtures/public/, which is git-ignored:
+ * nothing fetched here ends up in a commit.
  *
  *   node scripts/fetch-mailboxes.mjs           # download what is missing
  *   node scripts/fetch-mailboxes.mjs --check   # only verify; never touch the network
@@ -33,7 +34,7 @@ if (unknown.length) {
 }
 const checkOnly = args.includes('--check')
 
-/** @typedef {{ name: string, bytes: number, sha256: string, urls: string[] }} Entry */
+/** @typedef {{ name: string, bytes: number, sha256: string, urls: string[], sample?: string }} Entry */
 /** @type {{ files: Entry[] }} */
 const manifest = JSON.parse(await readFile(join(ROOT, 'tests/public-mailboxes.json'), 'utf8'))
 
@@ -48,7 +49,14 @@ for (const entry of manifest.files) {
     console.error(`refusing the manifest: "${entry.name}" needs a sha256 and https sources`)
     process.exit(2)
   }
+  if (entry.sample !== undefined && !/^samples\/[\w-]+$/.test(entry.sample)) {
+    console.error(`refusing the manifest: "${entry.name}" has a sample folder that is not under samples/`)
+    process.exit(2)
+  }
 }
+
+/** Where a file is kept: in the repository if it is a sample, otherwise in the download folder. */
+const pathOf = (/** @type {Entry} */ entry) => join(entry.sample ? join(ROOT, entry.sample) : DIR, entry.name)
 
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
@@ -62,7 +70,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 async function state(entry) {
   let bytes
   try {
-    bytes = await readFile(join(DIR, entry.name))
+    bytes = await readFile(pathOf(entry))
   } catch {
     return 'missing'
   }
@@ -142,7 +150,8 @@ async function fetchEntry(entry) {
   return false
 }
 
-await mkdir(DIR, { recursive: true })
+// Checking changes nothing on disk, not even to make the folder.
+if (!checkOnly) await mkdir(DIR, { recursive: true })
 let failed = 0
 for (const entry of manifest.files) {
   const found = await state(entry)
@@ -150,8 +159,11 @@ for (const entry of manifest.files) {
     console.log(`ok       ${entry.name}`)
     continue
   }
-  if (checkOnly) {
-    console.error(`${found.padEnd(8)} ${entry.name}`)
+  // A sample is part of the repository. If it is missing or altered that is a
+  // mistake in the working tree to put right with git, not something to
+  // paper over with a download.
+  if (checkOnly || entry.sample) {
+    console.error(`${found.padEnd(8)} ${entry.sample ? `${entry.sample}/` : ''}${entry.name}`)
     failed++
     continue
   }
@@ -174,4 +186,4 @@ if (failed) {
   )
   process.exit(1)
 }
-console.log(`\nall ${manifest.files.length} public test files are in ${DIR}`)
+console.log(`\nall ${manifest.files.length} public test files are in place (samples/ and ${DIR})`)

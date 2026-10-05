@@ -8,7 +8,7 @@ Installable as an offline app (PWA): load the site once and it keeps working wit
 
 **Live app: https://bod09.github.io/pst-viewer/**
 
-No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, `.eml`, or `.zip`, and start reading. Nothing is uploaded; everything runs in your browser (see [Privacy](#privacy)). If you would rather run or host it yourself, see [Run it](#run-it) and [Deploy](#deploy).
+No setup needed. Open the link, drop in a `.pst`, `.ost`, `.msg`, `.eml`, or `.zip`, and start reading. Nothing to hand? The [`samples/`](samples/README.md) folder has made-up and openly licensed test files to try it with. Nothing is uploaded; everything runs in your browser (see [Privacy](#privacy)). If you would rather run or host it yourself, see [Run it](#run-it) and [Deploy](#deploy).
 
 ## Screenshots
 

@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'vitest'
 import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import type { EmlExportStep, FolderNode, MessageMeta, SourceIndex } from '../../src/types'
 import { sha } from '../../scripts/lib/fidelity.mjs'
-import { havePublicMailboxes, publicMailbox, publicMailboxNames } from '../support/mailboxes'
+import { publicMailbox, publicMailboxNames } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
 
 /**
@@ -30,7 +30,6 @@ interface Opened {
 const opened = new Map<string, Opened>()
 
 beforeAll(async () => {
-  if (!havePublicMailboxes) return
   api = await loadWorker()
   for (const name of publicMailboxNames) {
     const index = await api.openSource(name, publicMailbox(name))
@@ -47,7 +46,9 @@ beforeAll(async () => {
   }
 }, 60_000)
 
-describe.skipIf(!havePublicMailboxes)('every public mailbox', () => {
+// The small synthetic mailboxes in samples/ are always here; the larger ones
+// with real mail in them only once downloaded (`npm run mailboxes`).
+describe('every public mailbox', () => {
   test.each(publicMailboxNames)('%s: the counts shown add up', (name) => {
     const { index, messages, unreadable } = opened.get(name)!
     const rows = all(index.rootFolder).slice(1)
@@ -139,7 +140,7 @@ describe.skipIf(!havePublicMailboxes)('every public mailbox', () => {
   })
 })
 
-describe.skipIf(!havePublicMailboxes)('mail kept directly in the top folder of a .pst', () => {
+describe('mail kept directly in the top folder of a .pst', () => {
   // alpha-beta-gamma-delta.pst keeps its one message in "Top of Outlook data
   // file" itself, which the sidebar used to have no row for.
   const name = 'alpha-beta-gamma-delta.pst'
@@ -165,7 +166,7 @@ describe.skipIf(!havePublicMailboxes)('mail kept directly in the top folder of a
   })
 })
 
-describe.skipIf(!havePublicMailboxes)('items that are not email', () => {
+describe('items that are not email', () => {
   test.each(['contacts.pst', 'contacts97-2002.pst'])('%s: a contact opens as a contact card', async (name) => {
     const { messages } = opened.get(name)!
     const contents = await Promise.all(messages.map((m) => api.getMessageContent(name, m.id)))

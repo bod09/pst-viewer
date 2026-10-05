@@ -1,6 +1,5 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import manifest from '../public-mailboxes.json' with { type: 'json' }
 
 /**
  * Runs once before any test.
@@ -15,13 +14,16 @@ export function setup(): void {
   process.env.TZ = 'Asia/Tokyo'
 
   // Said here, once and up front, because a line in the summary reading
-  // "78 skipped" does not say why, or what to do about it.
-  const dir = fileURLToPath(new URL('../../fixtures/public/', import.meta.url))
-  const missing = manifest.files.filter((f) => !existsSync(dir + f.name)).length
-  if (missing > 0 && !process.env.CI) {
+  // "40 skipped" does not say why, or what to do about it.
+  const root = fileURLToPath(new URL('../../', import.meta.url))
+  const manifest: { files: { name: string; sample?: string }[] } = JSON.parse(
+    readFileSync(`${root}tests/public-mailboxes.json`, 'utf8'),
+  )
+  const missing = manifest.files.filter((f) => !existsSync(`${root}${f.sample ?? 'fixtures/public'}/${f.name}`))
+  if (missing.length > 0 && !process.env.CI) {
     console.warn(
-      `\n  Note: ${missing} of ${manifest.files.length} public test files are not downloaded, so the tests\n` +
-        '  that read real .pst, .ost and .msg files will be skipped. To run them too:\n\n' +
+      `\n  Note: ${missing.length} public test files are not downloaded (${missing.map((f) => f.name).join(', ')}),\n` +
+        '  so the tests that read them will be skipped. To run them too:\n\n' +
         '      npm run mailboxes\n',
     )
   }

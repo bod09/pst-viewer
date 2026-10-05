@@ -2,7 +2,7 @@ import PostalMime from 'postal-mime'
 import { beforeAll, describe, expect, test } from 'vitest'
 import type { PstWorkerApi } from '../../src/worker/pst.worker'
 import type { EmlExportStep, MessageContent, SourceIndex } from '../../src/types'
-import { havePublicMailboxes, publicMailbox, publicMessageNames } from '../support/mailboxes'
+import { publicMailbox, publicMessageNames, usable } from '../support/mailboxes'
 import { loadWorker } from '../support/worker'
 
 /**
@@ -16,7 +16,6 @@ let index: SourceIndex
 const byFile = new Map<string, { id: string; content: MessageContent }>()
 
 beforeAll(async () => {
-  if (!havePublicMailboxes) return
   api = await loadWorker()
   index = await api.openMsgSource('msgs', publicMessageNames.map(publicMailbox))
   await api.indexSource('msgs')
@@ -29,7 +28,7 @@ beforeAll(async () => {
   }
 })
 
-describe.skipIf(!havePublicMailboxes)('real .msg files', () => {
+describe('real .msg files', () => {
   test('every one opens, and each lands in the folder for its kind', () => {
     expect(byFile.size).toBe(publicMessageNames.length)
     expect(index.totalMessages).toBe(publicMessageNames.length)
@@ -39,7 +38,7 @@ describe.skipIf(!havePublicMailboxes)('real .msg files', () => {
     expect(count('Contacts')).toBe(kinds.filter((k) => k === 'contact').length)
     expect(count('Calendar')).toBe(kinds.filter((k) => k === 'appointment').length)
     expect(count('Contacts')).toBe(2)
-    expect(count('Calendar')).toBe(2)
+    expect(count('Calendar')).toBeGreaterThan(0)
   })
 
   test.each(publicMessageNames)('%s: has something to read', (name) => {
@@ -66,7 +65,8 @@ describe.skipIf(!havePublicMailboxes)('real .msg files', () => {
     expect(card('contactAnsi.msg').phones).toEqual(card('contactUnicode.msg').phones)
   })
 
-  test.each(['A schedule.msg', 'A weekly 1.msg'])('%s: is an appointment, with a start and an end', (name) => {
+  // "A schedule.msg" names its author, so it is not kept in samples/ and is here only once downloaded.
+  test.each(['A schedule.msg', 'A weekly 1.msg'].filter(usable))('%s: is an appointment, with a start and an end', (name) => {
     const { content } = byFile.get(name)!
     expect(content.itemKind).toBe('appointment')
     expect(content.appointment?.start).toBeGreaterThan(Date.UTC(2020, 0, 1))

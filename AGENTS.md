@@ -17,7 +17,7 @@ npm run test:e2e     # the built app in Chromium (once: npx playwright install c
 npm test             # tests only; npm test -- tests/unit/mime.test.ts for one file
 npm run typecheck    # types only
 npm run lint         # oxlint
-npm run mailboxes    # download the public .pst/.ost/.msg test files (once, 47 MB)
+npm run mailboxes    # download the test mailboxes that are not in samples/ (once, 46 MB)
 npm run baselines    # re-record tests/baselines/ (only for an intended change, see below)
 npm run fidelity -- <mailbox> [--update] [--full]   # the same check on a private mailbox
 ```
@@ -25,8 +25,9 @@ npm run fidelity -- <mailbox> [--update] [--full]   # the same check on a privat
 `npm run check` and `npm run test:e2e` are exactly what CI runs. Tests are in
 `tests/` and described in [tests/README.md](tests/README.md).
 
-Tests that read real `.pst`, `.ost` and `.msg` files need `npm run mailboxes`
-first. Without it they are skipped, unless `CI` or `REQUIRE_MAILBOXES=1` is
+Most sample mail is in the repository (`samples/`). A few tests read larger
+mailboxes that hold real mail and need `npm run mailboxes` first. Without it
+those are skipped, unless `CI` or `REQUIRE_MAILBOXES=1` is
 set in the environment, in which case they fail instead. Many agent sandboxes
 set `CI`; if a fresh clone fails saying the public test files are missing, run
 `npm run mailboxes`.
@@ -36,7 +37,9 @@ set `CI`; if a fresh clone fails saying the public test files are missing, run
 1. **Nothing leaves the device.** No new network requests, analytics,
    telemetry, or scripts loaded from a CDN. The app must keep working offline.
 2. **Never commit mail.** No `.pst`, `.ost`, `.msg` or `.eml` files and nothing
-   from `.fidelity/` or `fixtures/`. Do not copy real message content into
+   from `.fidelity/` or `fixtures/`. The one exception is `samples/`, which
+   holds made-up mail and openly licensed synthetic test files; do not add to
+   it unless asked (see `samples/README.md`). Do not copy real message content into
    code, comments, tests, commit messages, pull request text, screenshots or
    recordings. The public test files count as real mail: a test on them
    compares what the worker says in one place with what it says in another,

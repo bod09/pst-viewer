@@ -18,3 +18,7 @@ deploy
 test-results
 playwright-report
 coverage
+
+# Sample files that ARE meant to be committed: made-up, or openly licensed
+# synthetic test data with nothing personal in it (see samples/README.md).
+!/samples/**

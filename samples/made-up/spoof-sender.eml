@@ -1,0 +1,8 @@
+From: =?UTF-8?Q?IT_Support_<helpdesk@company.example>?= <attacker@evil.example>
+To: =?UTF-8?B?w4lsb8Ovc2U=?= <eloise@example.com>, =?UTF-8?Q?Boss_<ceo@company.example>?= <intern@example.com>
+Subject: Spoofed sender test
+Date: Tue, 12 Mar 2024 11:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+The sender and second recipient carry a different address inside their names.

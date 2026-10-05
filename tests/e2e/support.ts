@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { expect, test as base, type FrameLocator, type Page, type Request } from '@playwright/test'
 import { fixtureFiles } from '../support/fixtures.mjs'
+import { publicFilePath, requirePublicMailboxes } from '../support/mailboxes'
 
 /** What `requests` gives a test: see the fixture below. */
 export interface Requests {
@@ -63,15 +63,15 @@ export function fixture(name: string): Upload {
 }
 
 /**
- * The path of one of the public test files (see `npm run mailboxes`).
- * Without it the test is skipped, except in CI or with REQUIRE_MAILBOXES=1,
- * where it must be there.
+ * The path of one of the public test files: in samples/ if it is kept in the
+ * repository, otherwise where `npm run mailboxes` downloads it. If it has
+ * not been downloaded the test is skipped, except in CI or with
+ * REQUIRE_MAILBOXES=1, where it must be there.
  */
 export function publicMailboxPath(name: string): string {
-  const path = fileURLToPath(new URL(`../../fixtures/public/${name}`, import.meta.url))
+  const path = publicFilePath(name)
   const here = existsSync(path)
-  const required = Boolean(process.env.CI) || process.env.REQUIRE_MAILBOXES === '1'
-  if (!here && required) throw new Error(`${name} has not been downloaded. Run: npm run mailboxes`)
+  if (!here && requirePublicMailboxes) throw new Error(`${name} has not been downloaded. Run: npm run mailboxes`)
   test.skip(!here, 'public test files are not downloaded (npm run mailboxes)')
   return path
 }
