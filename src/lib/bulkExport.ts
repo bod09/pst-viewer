@@ -491,7 +491,10 @@ export class EmlFileWriter {
  * saved (its name or path refused, its file failing to open, write or close)
  * is `unsaved`, with the reason kept, and the export goes on. It stops only on
  * a failure every later file would hit too (see stopsExport), or when
- * MAX_IN_A_ROW files in a row have failed, which means the same thing.
+ * MAX_IN_A_ROW files in a row have failed, which means the same thing. Only
+ * failures in a directory that has already taken a file count towards that:
+ * a refused name, or a directory that takes no file at all (its path too
+ * long, say), is about those files, not the disk.
  */
 export class EmlTreeWriter {
   static readonly MAX_IN_A_ROW = 20
@@ -508,6 +511,9 @@ export class EmlTreeWriter {
   // The current message failed and is already counted; drop the rest of it.
   private dropping = false
   private inARow = 0
+  // The directory of the current message, and the directories a file was saved in.
+  private dir: ExportDirectory | null = null
+  private readonly savedIn = new Set<ExportDirectory>()
 
   constructor(private cancelled: () => boolean) {}
 
@@ -521,7 +527,8 @@ export class EmlTreeWriter {
       if (step.kind === 'start') {
         await this.discard()
         this.dropping = false
-        this.file = await EmlFileWriter.open(dirOf(step.folderId), step.subject, step.date)
+        this.dir = dirOf(step.folderId)
+        this.file = await EmlFileWriter.open(this.dir, step.subject, step.date)
       } else if (step.kind === 'data') {
         await this.file?.write(step.data)
       } else if (step.kind === 'end') {
@@ -536,6 +543,7 @@ export class EmlTreeWriter {
           }
           this.exported++
           this.inARow = 0
+          if (this.dir) this.savedIn.add(this.dir)
         }
         this.dropping = false
       } else {
@@ -570,8 +578,10 @@ export class EmlTreeWriter {
       this.reasons.set(reason, (this.reasons.get(reason) ?? 0) + 1)
     }
     this.dropping = true
-    // A folder that cannot be created is about that folder, not the disk.
-    if (err instanceof DirectoryError) return true
+    // A folder that cannot be created, a refused name, or a folder none of
+    // whose files can be saved is about that folder, not the disk.
+    if (err instanceof DirectoryError || err instanceof TypeError) return true
+    if (!this.dir || !this.savedIn.has(this.dir)) return true
     if (++this.inARow >= EmlTreeWriter.MAX_IN_A_ROW) {
       const why = reason.replace(/\.$/, '')
       this.fatal = `${EmlTreeWriter.MAX_IN_A_ROW} files in a row could not be saved (${why})`
