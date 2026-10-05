@@ -1,0 +1,40 @@
+From: Alice Example <alice@example.com>
+To: Bob Tester <bob@example.com>
+Cc: Carol Sender <carol@example.com>
+Subject: Fwd: Original walrus memo
+Date: Tue, 12 Mar 2024 12:00:00 +0000
+Importance: high
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="OUTER1"
+
+--OUTER1
+Content-Type: text/plain; charset=utf-8
+
+Forwarding the memo. Distinctive keyword: quince.
+
+--OUTER1
+Content-Type: message/rfc822; name="Original walrus memo.eml"
+Content-Disposition: attachment; filename="Original walrus memo.eml"
+
+From: Dave Inner <dave@example.com>
+To: Alice Example <alice@example.com>
+Subject: Original walrus memo
+Date: Mon, 11 Mar 2024 08:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="INNER1"
+
+--INNER1
+Content-Type: text/plain; charset=utf-8
+
+Inner body. Distinctive keyword: persimmon.
+
+--INNER1
+Content-Type: text/csv; name="figures.csv"
+Content-Disposition: attachment; filename="figures.csv"
+
+walrus,count
+atlantic,12
+
+--INNER1--
+
+--OUTER1--

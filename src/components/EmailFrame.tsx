@@ -166,10 +166,28 @@ export function EmailFrame({
 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement | null
-      const anchor = target?.closest?.('a') as HTMLAnchorElement | null
-      if (anchor?.href) {
+      // Links of every kind: HTML, inside an SVG, or an area of an image map.
+      // The address is read from the attribute, because an SVG link's `.href`
+      // is an object rather than text.
+      const link = target?.closest?.('a, area') as Element | null
+      const address = link?.getAttribute('href') ?? link?.getAttribute('xlink:href')
+      if (link && address) {
         e.preventDefault()
-        window.open(anchor.href, '_blank', 'noopener,noreferrer')
+        let url: URL
+        try {
+          url = new URL(address, link.ownerDocument.baseURI)
+        } catch {
+          return // not an address at all: do nothing rather than open a broken tab
+        }
+        // Only what a link in mail is for. The sanitiser has already removed
+        // script and data addresses; this also leaves out anything that
+        // resolves to the app itself (a "#section" or "/path" in the message
+        // would otherwise open a second copy of the app).
+        const web = url.protocol === 'http:' || url.protocol === 'https:'
+        const other = url.protocol === 'mailto:' || url.protocol === 'tel:'
+        if ((web && url.origin !== window.location.origin) || other) {
+          window.open(url.href, '_blank', 'noopener,noreferrer')
+        }
         return
       }
       const img = target?.closest?.('img') as HTMLImageElement | null

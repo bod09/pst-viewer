@@ -3,12 +3,43 @@ import DOMPurify from 'dompurify'
 // Width/height of 0 or 1 (with optional px) marks an invisible tracking pixel.
 const TINY = /^0*[01](?:\.0+)?(?:px)?$/
 
-/** True for a reference the browser would fetch from another server. The
- *  value is stripped of tabs and newlines first, because the URL parser
- *  ignores those and would still fetch "ht\ttp://host". */
-const REMOTE_URL = /^(?:https?:)?\/\//i
-const isRemote = (value: string | null): boolean =>
-  !!value && REMOTE_URL.test(value.replace(/[\t\n\r]/g, '').trim())
+/**
+ * True for a reference the browser would fetch from another server.
+ *
+ * Decided by the URL parser, not by pattern: it is what the browser will use,
+ * and it accepts spellings a pattern misses (`https:\\host`, `\\host`, `/\host`,
+ * a tab inside the scheme, control characters in front). Anything that does
+ * not resolve to this page, or to data kept in the page, is remote.
+ *
+ * It is asked twice, as a page served over https and as one served over
+ * http, because the answer can differ: `https:host/x` is a path on an https
+ * page and another server on an http one. Remote on either counts.
+ */
+const LOCAL_SCHEMES = new Set(['data:', 'blob:', 'cid:', 'about:', 'mailto:', 'tel:'])
+function isRemote(value: string | null): boolean {
+  if (!value) return false
+  return ['https://here.invalid', 'http://here.invalid'].some((here) => {
+    try {
+      const url = new URL(value, `${here}/`)
+      return url.origin !== here && !LOCAL_SCHEMES.has(url.protocol)
+    } catch {
+      // Not a URL the browser could fetch.
+      return false
+    }
+  })
+}
+
+/** The CSS that can make a browser fetch something: url(), image-set() and
+ *  their relatives, or any escape, which could be spelling one of those. */
+const CSS_FETCH = /\\|(?:url|src|image-set|image|cross-fade|element)\(/i
+/** A reference to something in the same document, url(#id), which fetches nothing. */
+const LOCAL_CSS_REF = /url\(\s*['"]?#[^)\\]*\)/gi
+const fetchesCss = (css: string): boolean => CSS_FETCH.test(css.replace(LOCAL_CSS_REF, ''))
+
+/** The page-wide policy for a message shown with remote content off. */
+export const NO_REMOTE_POLICY =
+  '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
+  'img-src data: blob:; style-src \'unsafe-inline\'; font-src data:">'
 
 /** Attributes that can name a remote resource, across HTML and SVG. */
 const URL_ATTRS = ['src', 'href', 'xlink:href', 'background', 'poster', 'action', 'data', 'formaction']
@@ -32,8 +63,11 @@ export function sanitizeEmailHtml(
 ): string {
   const hook = (node: Element) => {
     const el = node as HTMLElement
+    // By local name, which is the same for HTML and SVG links (an SVG <a> has
+    // a lower-case tagName).
+    const isLink = el.localName === 'a' || el.localName === 'area'
 
-    if (el.tagName === 'A') {
+    if (isLink) {
       el.setAttribute('target', '_blank')
       el.setAttribute('rel', 'noopener noreferrer nofollow')
     }
@@ -42,13 +76,18 @@ export function sanitizeEmailHtml(
       // A <style> element's contents are never inspected by the hook, and CSS
       // has many ways to fetch (url(), @import, @font-face, image-set), so the
       // whole element goes rather than trying to rewrite the stylesheet.
-      if (el.tagName === 'STYLE') {
+      // By local name: a <style> inside inline SVG is in the SVG namespace
+      // (lower-case tagName) and styles the whole page just the same.
+      if (el.localName === 'style') {
         el.remove()
         return
       }
       // Any attribute that could name a remote resource, not a fixed list:
       // SVG uses href/xlink:href where HTML uses src.
       for (const attr of URL_ATTRS) {
+        // Where a link leads is not fetched by showing the message, only when
+        // the reader chooses to follow it, so links keep their address.
+        if (isLink && (attr === 'href' || attr === 'xlink:href')) continue
         if (isRemote(el.getAttribute(attr))) {
           el.removeAttribute(attr)
           if (el.tagName === 'IMG') el.setAttribute('data-pstv-blocked', '1')
@@ -64,15 +103,25 @@ export function sanitizeEmailHtml(
         if (kept.trim()) el.setAttribute('srcset', kept)
         else el.removeAttribute('srcset')
       }
-      // Inline styles can fetch through url() and image-set(), and the URL may
-      // be CSS-escaped, so drop the whole declaration rather than pattern-match
-      // the address.
+      // SVG takes CSS values in ordinary attributes (fill, filter, mask and
+      // so on), where url() fetches just as it does in a style. A reference
+      // to something in the same picture, url(#id), is not a fetch.
+      if (el.namespaceURI !== 'http://www.w3.org/1999/xhtml') {
+        for (const attr of Array.from(el.attributes)) {
+          // Addresses were dealt with above, and are not CSS: one may well
+          // contain a bracket or a backslash.
+          if (attr.name === 'style' || URL_ATTRS.includes(attr.name)) continue
+          if (fetchesCss(attr.value)) el.removeAttribute(attr.name)
+        }
+      }
+      // Inline styles can fetch too. Each declaration that could is dropped
+      // whole, rather than trying to cut the address out of it: the address
+      // may be escaped, quoted, or never closed.
       const style = el.getAttribute('style')
-      if (style && /url\(|image-set\(/i.test(style)) {
-        el.setAttribute(
-          'style',
-          style.replace(/(?:url|image-set)\([^)]*\)/gi, 'none'),
-        )
+      if (style && fetchesCss(style)) {
+        const kept = style.split(';').filter((declaration) => !fetchesCss(declaration))
+        if (kept.join('').trim()) el.setAttribute('style', kept.join(';'))
+        else el.removeAttribute('style')
       }
     }
 
@@ -92,8 +141,7 @@ export function sanitizeEmailHtml(
       // carried inside the message cannot report anything, and removing it
       // would renumber the pictures the reader points at when a search
       // matches text inside one.
-      const finalSrc = el.getAttribute('src') ?? ''
-      if (REMOTE_URL.test(finalSrc.replace(/[\t\n\r]/g, '').trim())) {
+      if (isRemote(el.getAttribute('src'))) {
         const tiny = (v: string | null) => v != null && TINY.test(v.trim())
         const style = (el.getAttribute('style') ?? '').toLowerCase()
         const hidden =
@@ -122,15 +170,11 @@ export function sanitizeEmailHtml(
 
   // Belt and braces: even if something slips past the hook, this policy stops
   // the frame reaching another server at all. Inline styles and data/blob
-  // images (the message's own pictures) still work.
-  if (!allowRemote) {
-    const csp =
-      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
-      'img-src data: blob:; style-src \'unsafe-inline\'; font-src data:">'
-    html = /<head[^>]*>/i.test(html)
-      ? html.replace(/<head[^>]*>/i, (m) => m + csp)
-      : csp + html
-  }
+  // images (the message's own pictures) still work. It goes in front of
+  // everything, where the parser puts it in the head whatever follows; looking
+  // for the message's own <head> to put it in could be fooled by an attribute
+  // containing one.
+  if (!allowRemote) html = NO_REMOTE_POLICY + html
 
   return html
 }

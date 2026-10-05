@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -13,15 +14,17 @@ declare const self: { location: { origin: string } }
 // sites are served from a subpath, so the CI build sets BASE_PATH=/pst-viewer/.
 const base = process.env.BASE_PATH || '/'
 
+// Shared with vitest.config.ts. (fileURLToPath, not .pathname: a path with a
+// space in it, or a Windows drive letter, does not survive the latter.)
+export const alias = {
+  // msgreader pulls in iconv-lite, which needs Node's Buffer; swap in a
+  // small TextDecoder-based shim (see src/lib/iconv-lite-shim.ts).
+  'iconv-lite': fileURLToPath(new URL('./src/lib/iconv-lite-shim.ts', import.meta.url)),
+}
+
 export default defineConfig({
   base,
-  resolve: {
-    alias: {
-      // msgreader pulls in iconv-lite, which needs Node's Buffer; swap in a
-      // small TextDecoder-based shim (see src/lib/iconv-lite-shim.ts).
-      'iconv-lite': new URL('./src/lib/iconv-lite-shim.ts', import.meta.url).pathname,
-    },
-  },
+  resolve: { alias },
   plugins: [
     react(),
     tailwindcss(),

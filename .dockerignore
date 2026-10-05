@@ -5,3 +5,13 @@ deploy
 .github
 screenshots
 *.md
+
+# Tests and their data are not part of the image
+tests
+fixtures
+.fidelity
+.e2e
+test-results
+playwright-report
+coverage
+samples

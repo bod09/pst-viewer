@@ -185,7 +185,7 @@ export function detectType(
       return { ext: 'msg', mime: EXT_MIME.msg, category: 'email' }
     }
     if (sig) {
-      return { ext: sig, mime: EXT_MIME[sig] ?? declaredMime ?? '', category: categoryForExt(sig) }
+      return { ext: sig, mime: EXT_MIME[sig] ?? declaredMime, category: categoryForExt(sig) }
     }
     // Looks like printable text?
     if (looksTextual(bytes)) {
@@ -206,7 +206,7 @@ export function detectType(
   if (nameExt) {
     return {
       ext: nameExt,
-      mime: EXT_MIME[nameExt] ?? declaredMime ?? 'application/octet-stream',
+      mime: EXT_MIME[nameExt] ?? (declaredMime || 'application/octet-stream'),
       category: categoryForExt(nameExt),
     }
   }
@@ -220,12 +220,12 @@ export function categoryFromNameMime(name: string, mime: string): PreviewCategor
   if (ext) return categoryForExt(ext)
   const fromMime = extFromMime(mime)
   if (fromMime) return categoryForExt(fromMime)
-  if (mime.startsWith('image/')) return 'image'
+  // An image of a type this app does not know (image/x-emf, say) is not
+  // called an image: the browser may well not be able to show it, and "other"
+  // offers it as a download instead of a broken picture.
   if (mime.startsWith('audio/')) return 'audio'
   if (mime.startsWith('video/')) return 'video'
   if (mime.startsWith('text/')) return 'text'
-  if (mime === 'application/pdf') return 'pdf'
-  if (mime === 'message/rfc822') return 'email'
   return 'other'
 }
 
@@ -234,7 +234,9 @@ function extFromMime(mime: string): string {
   for (const [ext, m] of Object.entries(EXT_MIME)) {
     if (m === base) return ext
   }
-  if (base.startsWith('image/')) return base.slice(6)
+  // The type comes from the mail file, and the result ends up in a file
+  // name, so an unfamiliar image subtype is used only when it is a plain word.
+  if (base.startsWith('image/')) return /^[a-z0-9]{1,8}$/.test(base.slice(6)) ? base.slice(6) : ''
   if (base === 'text/plain') return 'txt'
   return ''
 }

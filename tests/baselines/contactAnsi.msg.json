@@ -1,0 +1,46 @@
+{
+ "format": 3,
+ "file": "contactAnsi.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "b450645debe2cf0a"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "7d2dc5d6d65b0c29",
+     "from": "b41c463b8ec253b9",
+     "to": "e3b0c44298fc1c14",
+     "date": 1658338598000,
+     "att": false,
+     "cls": "IPM.Contact",
+     "opened": true,
+     "kind": "contact",
+     "html": null,
+     "text": "7eb70257593da06f",
+     "people": "615e48960dff4d83",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": "519181083eec5640",
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
+    }
+   ]
+  }
+ ]
+}

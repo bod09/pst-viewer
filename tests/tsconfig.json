@@ -1,0 +1,21 @@
+{
+  // Tests and tool configs run in Node, so they get Node's types; the app in
+  // src/ does not (see ../tsconfig.json), which keeps Node-only APIs out of it.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"],
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    ".",
+    "../scripts/lib",
+    "../scripts/fidelity.mjs",
+    "../scripts/fetch-mailboxes.mjs",
+    "../scripts/update-baselines.mjs",
+    "../scripts/make-fixtures.mjs",
+    "../scripts/check-test-reports.mjs",
+    "../vitest.config.ts",
+    "../playwright.config.ts"
+  ]
+}

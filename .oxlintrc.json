@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "oxc", "unicorn", "import", "vitest"],
+  // Everything in "correctness" is code that is wrong or does nothing. The
+  // style and "suspicious" groups are left off on purpose: a linter that
+  // objects to working code gets ignored.
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // The JSX transform in use needs no React import.
+    "react/react-in-jsx-scope": "off",
+    // Written for the React Compiler, which this app does not use. They flag
+    // patterns used here deliberately: a ref kept current during render, an
+    // effect that resets state, an icon component chosen by a lookup.
+    "react/refs": "off",
+    "react/static-components": "off",
+    "react/set-state-in-effect": "off",
+    // Vite resolves `?url` imports; the type-check covers the rest.
+    "import/default": "off",
+    // Code that cleans hostile text matches control characters on purpose.
+    "no-control-regex": "off",
+    // A second argument to expect() is the message shown when it fails.
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    // A mock given an implementation takes its types from it.
+    "vitest/require-mock-type-parameters": "off",
+
+    // Beyond "correctness": mistakes that are easy to make and to miss.
+    "eqeqeq": ["error", "smart"],
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-debugger": "error",
+    "typescript/no-explicit-any": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    // AGENTS.md rule 4: HTML from mail is shown only after sanitising. Each
+    // place that injects HTML has to say, in a comment that disables this
+    // rule, how its HTML was made safe.
+    "react/no-danger": "error",
+    // A test left as `.only` silently turns every other test off.
+    "vitest/no-focused-tests": "error",
+    "vitest/no-identical-title": "error"
+  },
+  "overrides": [
+    {
+      // AGENTS.md rule 1: nothing leaves the device. The app may not make a
+      // network request, except where a comment disabling this rule explains
+      // why that one is safe (today: fetching its own branding.json).
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "fetch", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "XMLHttpRequest", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "WebSocket", "message": "The app makes no network requests (AGENTS.md rule 1)." },
+          { "name": "EventSource", "message": "The app makes no network requests (AGENTS.md rule 1)." }
+        ]
+      }
+    }
+  ],
+  "ignorePatterns": ["dist", "deploy", "public", "patches", "fixtures", "node_modules", "playwright-report", "test-results", "coverage"]
+}

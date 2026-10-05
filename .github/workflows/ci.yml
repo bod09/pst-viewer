@@ -1,14 +1,70 @@
 name: CI
 
-# Validate every pull request (including Dependabot's) so an update can only be
-# merged once it still type-checks and builds. Pushes to main are already built
-# by the deploy workflow.
+# Every pull request (Dependabot's included) and every push to main is
+# type-checked, linted, tested and built here, and driven in a real browser.
+# The `build` job at the end is the one branch protection requires, so a pull
+# request can only be merged, or auto-merged, once all of it has passed.
+#
+# A change that touches nothing but documentation skips the tests (see the
+# `changes` job). The workflow itself still has to run for those: branch
+# protection waits for `build`, and a workflow filtered out by path would
+# never report it, leaving the pull request stuck.
 on:
   pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes the older run pointless. Pushes
+# to main each get their own group (the commit), so none is cancelled or
+# left waiting behind another.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  # Decides whether the tests need to run. They do unless every changed file
+  # is documentation, and they do whenever that cannot be worked out.
+  changes:
+    name: What changed
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # On a pull request the checkout is a merge of the branch into its
+          # target, so its first parent is the target and the difference is
+          # the pull request. On a push it is everything since the last push.
+          if [ "$EVENT" = "pull_request" ]; then from="HEAD^1"; else from="$BEFORE"; fi
+          code=true
+          if files=$(git diff --name-only "$from" HEAD 2>/dev/null) && [ -n "$files" ]; then
+            echo "$files"
+            # Documentation: Markdown, the screenshots, and the license. Not
+            # samples/, even its README: a test pins down what that holds.
+            docs='\.md$|^screenshots/|^LICENSE$'
+            code_files=$(printf '%s\n' "$files" | grep -vE "$docs" || true)
+            sample_files=$(printf '%s\n' "$files" | grep -E '^samples/' || true)
+            if [ -z "$code_files" ] && [ -z "$sample_files" ]; then code=false; fi
+          fi
+          echo "code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: Type-check, lint, tests, build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -16,4 +72,118 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Real .pst, .ost and .msg files for the tests: public, pinned and
+      # checked by hash (tests/public-mailboxes.json). Kept between runs, and
+      # saved as soon as they are fetched so a failing run keeps them too.
+      - uses: actions/cache/restore@v6
+        id: public-files
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
+      - run: npm run mailboxes
+      - uses: actions/cache/save@v6
+        if: steps.public-files.outputs.cache-hit != 'true'
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:coverage
+      # A skipped test is reported as success by the test runner. Not here.
+      - run: node scripts/check-test-reports.mjs vitest
       - run: npm run build
+
+  e2e:
+    name: Browser tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Restored only: the other job saves this cache, and two jobs saving the
+      # same key at once just race.
+      - uses: actions/cache/restore@v6
+        with:
+          path: fixtures/public
+          key: public-test-files-${{ hashFiles('tests/public-mailboxes.json') }}
+      - run: npm run mailboxes
+      # The browser itself is a large download, so it is kept between runs
+      # and fetched again only when the Playwright version changes.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - uses: actions/cache/save@v6
+        if: steps.browser.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the browser's system libraries
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run test:e2e
+      - run: node scripts/check-test-reports.mjs playwright
+      # What the tests saw: for a failure, a screenshot and a trace that
+      # replays it step by step (https://trace.playwright.dev). Kept for
+      # every run, since a test that passed only on its second try is worth
+      # looking at too. Only made-up and public test mail is ever on screen.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-test-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Branch protection requires a check called `build`, which is what this
+  # workflow's only job used to be called. It is kept as the single gate so
+  # the setting never has to change when jobs are added: it passes only if
+  # every job listed in `needs` did, so a new job must be added to that list.
+  # (Without `if: always()` it would be skipped when one failed, and GitHub
+  # treats a skipped required check as passed.)
+  build:
+    name: build
+    if: always()
+    needs: [changes, checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          TESTS: ${{ needs.checks.result }} ${{ needs.e2e.result }}
+        run: |
+          echo "changes: $CHANGES (code changed: $CODE), tests: $TESTS"
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error::Could not work out what changed ($CHANGES)."
+            exit 1
+          fi
+          # Only documentation changed: the tests were skipped on purpose,
+          # and skipped is the only thing they are allowed to be.
+          if [ "$CODE" = "false" ]; then want=skipped; else want=success; fi
+          for result in $TESTS; do
+            if [ "$result" != "$want" ]; then
+              echo "::error::A CI job did not pass ($result, expected $want). See the jobs above."
+              exit 1
+            fi
+          done
+          if [ "$(echo $TESTS | wc -w)" -ne 2 ]; then
+            echo "::error::Expected two job results, got: $TESTS"
+            exit 1
+          fi

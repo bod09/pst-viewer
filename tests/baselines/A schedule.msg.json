@@ -1,0 +1,46 @@
+{
+ "format": 3,
+ "file": "A schedule.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "d5d0a30b517e3bea"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "4ae109c3a530bc0d",
+     "from": "e99d42c6f4001d24",
+     "to": "fcaef2c575195dcc",
+     "date": 1634116448000,
+     "att": false,
+     "cls": "IPM.Appointment",
+     "opened": true,
+     "kind": "appointment",
+     "html": null,
+     "text": "ca717d5309ff4769",
+     "people": "43942ab8602397c3",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": "d4ef08cb31fdab33",
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
+    }
+   ]
+  }
+ ]
+}

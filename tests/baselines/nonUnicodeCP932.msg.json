@@ -1,0 +1,46 @@
+{
+ "format": 3,
+ "file": "nonUnicodeCP932.msg",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "04d7b48339271ea6"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "msg0",
+     "subject": "6865df13287f186e",
+     "from": "300ecc65a39e2b01",
+     "to": "b6b020ae91ed9ee6",
+     "date": 1636107917000,
+     "att": false,
+     "cls": "IPM.Note",
+     "opened": true,
+     "kind": "email",
+     "html": "542521c6d6441c9b",
+     "text": "79f60e8860e2018f",
+     "people": "3794a510659771de",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "4f53cda18c2baa0c",
+     "files": [],
+     "types": "0bcb407e79d60349",
+     "bytes": "4f53cda18c2baa0c"
+    }
+   ]
+  }
+ ]
+}

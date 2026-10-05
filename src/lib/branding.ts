@@ -230,6 +230,9 @@ export async function initBranding(): Promise<void> {
   applyAccent()
   applyTheme()
   try {
+    // The app's one network request: its own branding file, from the same
+    // place the app itself was loaded from. Nothing is sent with it.
+    // eslint-disable-next-line no-restricted-globals
     const res = await fetch(`${import.meta.env.BASE_URL}branding.json`, { cache: 'no-cache' })
     if (!res.ok) return
     const raw: unknown = await res.json()

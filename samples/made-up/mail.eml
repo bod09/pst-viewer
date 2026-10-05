@@ -1,0 +1,20 @@
+From: Alice Example <alice@example.com>
+To: Bob Tester <bob@example.com>
+Subject: Quarterly zebra report
+Date: Tue, 12 Mar 2024 10:15:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUND1"
+
+--BOUND1
+Content-Type: text/plain; charset=utf-8
+
+The zebra migration figures are attached. Distinctive keyword: pomegranate.
+
+--BOUND1
+Content-Type: image/png; name="chart.png"
+Content-Disposition: attachment; filename="chart.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP8//8/AzbAhFVkuIsDAK2eBP+3XiBjAAAAAElFTkSuQmCC
+
+--BOUND1--

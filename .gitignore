@@ -13,3 +13,12 @@ deploy
 *.eml
 # Fidelity baselines describe a real mailbox (subjects, senders): keep them local
 /.fidelity
+# Test output
+.e2e
+test-results
+playwright-report
+coverage
+
+# Sample files that ARE meant to be committed: made-up, or openly licensed
+# synthetic test data with nothing personal in it (see samples/README.md).
+!/samples/**

@@ -17,7 +17,6 @@ import { Consts, type IPSTMessage } from '@hiraokahypertools/pst-extractor'
 /** A run of RFC 2047 encoded words. The whitespace between adjacent words is
  *  not part of the text, so a run is decoded as one. */
 const ENCODED_RUN = /=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=(?:\s+=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=)*/g
-const PLACEHOLDER = /pstvencoded(\d+)x/g
 
 /**
  * Read an address header the way RFC 2047 intends: structure first, encoded
@@ -36,28 +35,48 @@ const PLACEHOLDER = /pstvencoded(\d+)x/g
  * reads "Name <boss@company.example>" beside the true address, so the attempt
  * is visible rather than believed.
  */
+/** "pstv" and sixteen random hex digits: letters and digits only, so the
+ *  address parser reads it as one ordinary word. */
+function placeholderTag(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return 'pstv' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function structuredAddresses(raw: string): Address[] {
+  // The token stands in for a run while the structure is read. It is random,
+  // so nothing the sender wrote can be taken for one and replaced, however it
+  // is spelled or escaped in the header.
+  let tag = placeholderTag()
+  while (raw.includes(tag)) tag = placeholderTag()
+  const placeholder = new RegExp(`${tag}(\\d+)x`, 'g')
+
   const runs: string[] = []
-  const inert = raw.replace(ENCODED_RUN, (run) => `pstvencoded${runs.push(run) - 1}x`)
-  const decoded = (s: string) => s.replace(PLACEHOLDER, (_, i) => decodeWords(runs[Number(i)]))
+  const inert = raw.replace(ENCODED_RUN, (run) => `${tag}${runs.push(run) - 1}x`)
+  const decoded = (s: string) => s.replace(placeholder, (_, i) => decodeWords(runs[Number(i)]))
   // An encoded word is not allowed inside an address, so one found there is
   // kept as written rather than decoded into an address it never was.
-  const verbatim = (s: string) => s.replace(PLACEHOLDER, (_, i) => runs[Number(i)])
+  const verbatim = (s: string) => s.replace(placeholder, (_, i) => runs[Number(i)])
+
+  const parsed = addressParser(inert)
+  // Whether the header names any address outside its encoded words.
+  const anyReal = parsed.some((a) => (a.group ? a.group.some((m) => m.address) : Boolean(a.address)))
 
   const mailbox = (m: Mailbox): Mailbox[] => {
     const name = decoded(m.name)
     const address = verbatim(m.address)
-    if (address) return [{ name, address }]
-    // Nothing outside the encoded words: some mailers encode a whole
-    // "Name <address>" in one go. With no real address to contradict it,
-    // reading one out of the text cannot misattribute anything.
+    if (address || anyReal) return [{ name, address }]
+    // Nothing outside the encoded words anywhere in the header: some mailers
+    // encode a whole "Name <address>" in one go. With no real address to
+    // contradict it, reading one out of the text cannot misattribute
+    // anything. Where the header does carry a real address, text that only
+    // looks like one stays a name.
     const inner = addressParser(name, { flatten: true }).filter(
       (a): a is Mailbox => !a.group && Boolean(a.address),
     )
     return inner.length ? inner : [{ name, address: '' }]
   }
 
-  return addressParser(inert).flatMap((a): Address[] =>
+  return parsed.flatMap((a): Address[] =>
     a.group ? [{ name: decoded(a.name), group: a.group.flatMap(mailbox) }] : mailbox(a),
   )
 }
@@ -253,10 +272,29 @@ class EmlMessageAdapter {
 function rereadAddresses(email: Email): void {
   const raw = (key: string) => email.headers.filter((h) => h.key === key).map((h) => h.value)
   const from = raw('from')
-  if (from.length) email.from = structuredAddresses(from[0])[0]
+  if (from.length) {
+    // The sender is the first entry that has an address: a name on its own in
+    // front of it (which an encoded word can be made to look like) is not one.
+    const senders = safeAddresses(from[0])
+    email.from = senders.find((a) => !a.group && a.address) ?? senders[0]
+  }
   for (const key of ['to', 'cc', 'bcc'] as const) {
     const values = raw(key)
-    if (values.length) email[key] = structuredAddresses(values.join(', '))
+    if (values.length) email[key] = safeAddresses(values.join(', '))
+  }
+}
+
+/**
+ * structuredAddresses, for a header that may be anything at all. If it cannot
+ * be read, the message still opens, with those people left out. Nothing else
+ * is fallen back on: any other reading of the header decodes encoded words
+ * first, which is the fault this exists to avoid.
+ */
+function safeAddresses(raw: string): Address[] {
+  try {
+    return structuredAddresses(raw)
+  } catch {
+    return []
   }
 }
 

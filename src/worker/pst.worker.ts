@@ -1,6 +1,6 @@
 import * as Comlink from 'comlink'
 import MiniSearch from 'minisearch'
-import { queryTerms } from '../lib/highlight'
+import { FILTER_KEYS, queryTerms } from '../lib/highlight'
 import { parseTnef, type TnefAttachment } from '../lib/tnef'
 import { extractSmime } from '../lib/smime'
 import {
@@ -2287,12 +2287,11 @@ const api = {
     const terms: string[] = []
     const filters: Record<string, string[]> = {}
     const TOKEN = /(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]*)"|(\S+)/g
-    const KEYS = new Set(['from', 'to', 'subject', 'person', 'has', 'is', 'before', 'after', 'mailbox', 'folder'])
     let tok: RegExpExecArray | null
     while ((tok = TOKEN.exec(q))) {
       const key = (tok[1] ?? tok[3])?.toLowerCase()
       const val = tok[2] ?? tok[4]
-      if (key && KEYS.has(key) && val) {
+      if (key && FILTER_KEYS.has(key) && val) {
         ;(filters[key] ??= []).push(val.toLowerCase())
       } else if (tok[5] !== undefined) {
         if (tok[5].trim()) phrases.push(tok[5].toLowerCase())

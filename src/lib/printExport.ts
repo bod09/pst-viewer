@@ -1,5 +1,5 @@
 import type { MessageContent, RecipientInfo } from '../types'
-import { sanitizeEmailHtml } from './sanitizeHtml'
+import { NO_REMOTE_POLICY, sanitizeEmailHtml } from './sanitizeHtml'
 import { formatDate } from './format'
 
 function escapeHtml(s: string): string {
@@ -84,7 +84,9 @@ export function buildPrintDocument(contents: MessageContent[], allowRemote = tru
   // `!important` html/body reset wins over any sizing rules that leak in from an
   // individual email's own CSS (some set body{height:100%}), which would
   // otherwise force a full-height body and a blank trailing page.
-  return `<!doctype html><html><head><meta charset="utf-8"><title></title>
+  // Only the bodies are taken from the sanitised messages, so the policy that
+  // travels in each one's head is put back here, once, for the whole page.
+  return `<!doctype html><html><head><meta charset="utf-8">${allowRemote ? '' : NO_REMOTE_POLICY}<title></title>
 <style>
   @page { margin: 0; }
   html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }

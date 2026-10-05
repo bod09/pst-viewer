@@ -1,0 +1,65 @@
+{
+ "format": 3,
+ "file": "alpha-beta-gamma-delta.pst",
+ "full": true,
+ "redacted": true,
+ "messages": 1,
+ "bodies": 1,
+ "folders": [
+  {
+   "path": [],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  },
+  {
+   "path": [
+    "1f7542c686e0c41b"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": [
+    {
+     "id": "2097188",
+     "subject": "b1a96dd646bccaa2",
+     "from": "300ecc65a39e2b01",
+     "to": "e3b0c44298fc1c14",
+     "date": 1658745482006,
+     "att": true,
+     "cls": "IPM.Note",
+     "opened": true,
+     "kind": "email",
+     "html": null,
+     "text": "53913fc4d51f9c3e",
+     "people": "bc7e6c3b14eff264",
+     "headers": "e3b0c44298fc1c14",
+     "marks": "f41e7e5840df4094",
+     "card": null,
+     "atts": "0f70aea0895bbd7c",
+     "files": [
+      [
+       237,
+       0,
+       0
+      ],
+      [
+       22072,
+       0,
+       1
+      ]
+     ],
+     "types": "c7380b32a9a917ea",
+     "bytes": "6d12ce36ee8d39d8"
+    }
+   ]
+  },
+  {
+   "path": [
+    "94eadfded0e4ab99"
+   ],
+   "nth": 0,
+   "unreadable": 0,
+   "rows": []
+  }
+ ]
+}
