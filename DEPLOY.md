@@ -11,7 +11,7 @@ no Node needed), or build it once and serve the resulting folder of files.
 
 ## Build it
 
-Requires [Node.js](https://nodejs.org) 20.19+ (or 22+).
+Requires [Node.js](https://nodejs.org). The project runs on 24 (see `.nvmrc`); building alone also works on 20.19 or newer, with a warning from npm about `engines`.
 
 ```bash
 npm install        # first time only

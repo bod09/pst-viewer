@@ -1,0 +1,65 @@
+name: Node LTS check
+
+# Once a week, asks whether the Node version this repository pins (.nvmrc) is
+# still the newest Long Term Support release, by the Node project's own
+# schedule, and opens an issue when it is not. Dependabot cannot do this: it
+# sees every new major the day it is released, six months before it becomes
+# LTS, and odd majors never do. The pins also have to move together (.nvmrc,
+# package.json, the workflows, the Dockerfile and @types/node), which is a
+# pull request to make by hand, not five separate bumps.
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Compare the pin with the schedule
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Ask the schedule
+        id: lts
+        run: |
+          set +e
+          node scripts/node-lts.mjs | tee -a "$GITHUB_OUTPUT"
+          code=${PIPESTATUS[0]}
+          set -e
+          case $code in
+            0) echo "behind=false" >> "$GITHUB_OUTPUT" ;;
+            3) echo "behind=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$code" ;;
+          esac
+      - name: Open an issue, unless one is already open
+        if: steps.lts.outputs.behind == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.lts.outputs.pinned }}
+          NEWEST: ${{ steps.lts.outputs.newest }}
+        run: |
+          title="Move to Node $NEWEST, the current LTS"
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json title --jq '.[].title' | grep -qxF "$title"; then
+            echo "an issue for Node $NEWEST is already open"
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file - <<BODY
+          Node $NEWEST is now in Long Term Support, and this repository pins Node $PINNED. The pins all move together, in one pull request:
+
+          - [ ] \`.nvmrc\` (the workflows read the Node version from it)
+          - [ ] \`engines.node\` in \`package.json\`
+          - [ ] \`FROM\` in the \`Dockerfile\`
+          - [ ] \`@types/node\` in \`package.json\` (the \`$NEWEST.x\` line), then \`npm install\` for the lockfile
+          - [ ] the Node version named in CONTRIBUTING.md
+
+          Then \`REQUIRE_MAILBOXES=1 npm run check\` and \`REQUIRE_MAILBOXES=1 npm run test:e2e\` on Node $NEWEST.
+
+          Opened by the Node LTS check workflow (\`.github/workflows/node-lts.yml\`).
+          BODY

@@ -21,8 +21,10 @@ Found a security problem? Please don't open an issue; see
 
 ## Getting started
 
-You need a current [Node.js](https://nodejs.org) 22 (22.22 or newer, which the
-test tools require; building alone works on older versions, see DEPLOY.md).
+You need [Node.js](https://nodejs.org) 24, the version in `.nvmrc` (`nvm use`
+picks it up). It is the one CI and the Docker image run; building alone works
+on older versions, see DEPLOY.md. When a newer Long Term Support release
+comes out, a weekly workflow opens an issue to move every pin to it together.
 
 ```bash
 npm install        # also applies the patches in patches/

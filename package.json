@@ -2,6 +2,9 @@
   "name": "pst-viewer",
   "version": "1.0.0",
   "description": "Fast, private, fully in-browser viewer for Outlook PST/OST mailboxes.",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -46,7 +49,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^22.20.5",
+    "@types/node": "^24.19.1",
     "@types/node-forge": "^1.3.14",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
