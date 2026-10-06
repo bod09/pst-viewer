@@ -76,6 +76,16 @@ export function Download({ className }: IconProps) {
   )
 }
 
+/** Saving into one file: a document with an arrow into it (the .mbox export). */
+export function DownloadFile({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" strokeLinejoin="round" />
+      <path d="M14 3v5h5M12 11v6m0 0 3-3m-3 3-3-3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function Close({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>

@@ -10,7 +10,10 @@ import {
   describeError,
   EmlTreeWriter,
   ExportDirectory,
+  MboxFolder,
+  MboxTreeWriter,
   pickExportFolder,
+  type ExportFormat,
 } from '../lib/bulkExport'
 import { getCachedOcr, putCachedOcr, hashImageBytes } from '../lib/ocrCache'
 import { clearCachedImages } from '../lib/imageCache'
@@ -52,6 +55,8 @@ export interface Source {
 export interface EmlExportJob {
   /** What is being exported, for the dialog title. */
   title: string
+  /** .eml files, or one .mbox file per folder. */
+  format: ExportFormat
   /** `unsupported`: this browser cannot write to a folder, so nothing started. */
   status: 'running' | 'done' | 'cancelled' | 'failed' | 'unsupported'
   /** The directory created for this export inside the one the user picked. */
@@ -137,10 +142,13 @@ interface AppState {
   exportSelected: (direction?: 'asc' | 'desc') => void
   exportSingle: (sourceId: string, messageId: string) => void
   exportEml: (sourceId: string, messageId: string) => void
-  /** Export a folder and its subfolders, or with no folder the whole mailbox, as .eml files. */
-  exportFolderEml: (sourceId: string, folderId?: string) => void
-  /** Export the messages picked in the selection bar as .eml files. */
-  exportSelectedEml: () => void
+  /**
+   * Export a folder and its subfolders, or with no folder the whole mailbox,
+   * as .eml files, or with `format` 'mbox' as one .mbox file per folder.
+   */
+  exportFolderEml: (sourceId: string, folderId?: string, format?: ExportFormat) => void
+  /** Export the messages picked in the selection bar as .eml files, or .mbox files. */
+  exportSelectedEml: (format?: ExportFormat) => void
   cancelEmlExport: () => void
   closeEmlExport: () => void
 }
@@ -256,6 +264,22 @@ function findFolder(node: FolderNode, id: string): FolderNode | null {
 /** How many levels of subfolders a folder has (0 for none). */
 function levelsBelow(node: FolderNode): number {
   return node.children.reduce((n, c) => Math.max(n, levelsBelow(c) + 1), 0)
+}
+
+/**
+ * Where one folder's messages go in a bulk export: a directory of .eml files,
+ * or an .mbox file. One export only ever uses one of the two.
+ */
+type ExportPlace = ExportDirectory | MboxFolder
+
+function asDirectory(place: ExportPlace): ExportDirectory {
+  if (place instanceof ExportDirectory) return place
+  throw new Error('This export writes .eml files.')
+}
+
+function asMbox(place: ExportPlace): MboxFolder {
+  if (place instanceof MboxFolder) return place
+  throw new Error('This export writes .mbox files.')
 }
 
 /** The folders from just below the root down to `id`; empty if it is not found. */
@@ -507,7 +531,8 @@ export const useApp = create<AppState>((set, get) => {
     set((s) => (s.emlExport ? { emlExport: { ...s.emlExport, ...patch } } : {}))
 
   /**
-   * Run one export of messages to .eml files.
+   * Run one export of messages to .eml files, or to .mbox files (one per
+   * folder) when `job.format` is 'mbox'.
    *
    * Asks where to save, makes a new directory there (never writing into or
    * over anything already on disk), then lets `read` drive the worker, which
@@ -517,22 +542,29 @@ export const useApp = create<AppState>((set, get) => {
    * path the disk refuses), is counted and left out; only a failure every
    * later write would hit too stops the export (see EmlTreeWriter).
    *
+   * For .mbox, `top` is the folder an export of one folder starts from: it
+   * becomes `<name>.mbox` in the new directory, with `<name>.mbox.sbd` beside
+   * it for its subfolders. Without it (a whole mailbox, or a selection), the
+   * top-level folders' files go straight into the new directory. An .eml
+   * export does not need it.
+   *
    * Must be called straight from a click: the folder picker needs it.
    */
   const runEmlExport = (
-    job: Pick<EmlExportJob, 'title' | 'total' | 'folders'>,
+    job: Pick<EmlExportJob, 'title' | 'total' | 'folders' | 'format'>,
     directoryName: string,
     read: (ctx: {
-      root: ExportDirectory
-      /** A sink for the worker, writing each message into the directory `dirOf` names. */
+      root: ExportPlace
+      /** A sink for the worker, writing each message into the place `dirOf` names. */
       sink: (
-        dirOf: (folderId: string) => ExportDirectory,
+        dirOf: (folderId: string) => ExportPlace,
       ) => (step: EmlExportStep) => Promise<boolean>
       /** True once the export should end (cancelled, or it cannot go on). */
       stopped: () => boolean
       /** Report the folder now being read, a folder finished, or messages lost unread. */
       progress: (p: { current?: string; folderDone?: boolean; skipped?: number }) => void
     }) => Promise<void>,
+    top?: FolderNode,
   ): void => {
     // The picker is open, or an export is running: a second click does nothing.
     if (emlPicking || get().emlExport?.status === 'running') return
@@ -567,7 +599,8 @@ export const useApp = create<AppState>((set, get) => {
       emlCancel = false
       set({ emlExport: start })
 
-      const writer = new EmlTreeWriter(() => emlCancel)
+      const cancelled = () => emlCancel
+      const writer = job.format === 'mbox' ? new MboxTreeWriter(cancelled) : new EmlTreeWriter(cancelled)
       let foldersDone = 0
       let current = ''
       let failure: string | null = null
@@ -590,10 +623,19 @@ export const useApp = create<AppState>((set, get) => {
       try {
         const root = await createFreshDirectory(picked, directoryName, 'Mail export')
         patchEmlExport({ directory: root.nameOnDisk })
+        const mboxRoot = () => MboxFolder.root(root, directoryName)
         await read({
-          root,
+          root:
+            job.format === 'eml'
+              ? root
+              : top
+                ? mboxRoot().child(top.name, levelsBelow(top))
+                : mboxRoot(),
           sink: (dirOf) => async (step) => {
-            const go = await writer.step(step, dirOf)
+            const go =
+              writer instanceof MboxTreeWriter
+                ? await writer.step(step, (id) => asMbox(dirOf(id)))
+                : await writer.step(step, (id) => asDirectory(dirOf(id)))
             show()
             return go
           },
@@ -1079,7 +1121,7 @@ export const useApp = create<AppState>((set, get) => {
         })
     },
 
-    exportFolderEml: (sourceId, folderId) => {
+    exportFolderEml: (sourceId, folderId, format = 'eml') => {
       const source = get().sources.find((s) => s.id === sourceId)
       const root = source?.index?.rootFolder
       const top = root && (folderId ? findFolder(root, folderId) : root)
@@ -1094,8 +1136,8 @@ export const useApp = create<AppState>((set, get) => {
       }
       count(top)
       const name = folderId ? top.name : source.label
-      runEmlExport({ title: name, total, folders }, name, async (ctx) => {
-        const exportOne = async (id: string, dir: ExportDirectory, holdsMail: boolean) => {
+      runEmlExport({ title: name, total, folders, format }, name, async (ctx) => {
+        const exportOne = async (id: string, dir: ExportPlace, holdsMail: boolean) => {
           const { notListed } = await pst.exportFolderEml(
             sourceId,
             id,
@@ -1104,7 +1146,7 @@ export const useApp = create<AppState>((set, get) => {
           if (!ctx.stopped()) ctx.progress({ folderDone: holdsMail, skipped: notListed })
         }
         // Depth first, one folder at a time, each into its own directory.
-        const visit = async (node: FolderNode, dir: ExportDirectory): Promise<void> => {
+        const visit = async (node: FolderNode, dir: ExportPlace): Promise<void> => {
           ctx.progress({ current: node === root ? source.label : node.name })
           await exportOne(node.id, dir, node.messageCount > 0)
           if (ctx.stopped()) return
@@ -1114,22 +1156,22 @@ export const useApp = create<AppState>((set, get) => {
           }
         }
         await visit(top, ctx.root)
-      })
+      }, folderId ? top : undefined)
     },
 
-    exportSelectedEml: () => {
+    exportSelectedEml: (format = 'eml') => {
       const picks = Object.values(get().exportSel)
       if (!picks.length) return
       const sources = get().sources
       // Picks from more than one mailbox get a directory per mailbox on top.
       const several = new Set(picks.map((p) => p.sourceId)).size > 1
       const title = `${picks.length} selected message${picks.length === 1 ? '' : 's'}`
-      runEmlExport({ title, total: picks.length, folders: 0 }, 'Selected messages', async (ctx) => {
+      runEmlExport({ title, total: picks.length, folders: 0, format }, 'Selected messages', async (ctx) => {
         // Each message goes where its folder sits in its mailbox, so the
         // export has the same shape as the mailbox, holding just the picks.
-        const dirs = new Map<string, ExportDirectory>()
+        const dirs = new Map<string, ExportPlace>()
         const below = (
-          parent: ExportDirectory,
+          parent: ExportPlace,
           key: string,
           node: FolderNode,
           name = node.name,

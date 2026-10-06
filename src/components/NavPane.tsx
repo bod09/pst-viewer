@@ -4,6 +4,7 @@ import type { FolderNode } from '../types'
 import { ACCEPT_ATTR, filterAccepted } from '../lib/files'
 import { BrandHeader } from './BrandHeader'
 import { SettingsButton } from './Settings'
+import { ExportFormatDialog } from './ExportFormatDialog'
 import {
   Alert,
   Archive,
@@ -11,6 +12,7 @@ import {
   Caret,
   Chat,
   Download,
+  DownloadFile,
   Drafts,
   FolderIcon,
   Inbox,
@@ -258,6 +260,16 @@ function SourceTree({ source }: { source: Source }) {
                 <Download className="h-4 w-4" />
               </button>
             )}
+            {source.status === 'ready' && source.index && source.index.totalMessages > 0 && (
+              <button
+                onClick={() => exportFolderEml(source.id, undefined, 'mbox')}
+                className="text-slate-400 transition hover:text-slate-200"
+                data-tip="Export the whole mailbox as .mbox files, one per folder"
+                aria-label={`Export ${source.label} as .mbox files`}
+              >
+                <DownloadFile className="h-4 w-4" />
+              </button>
+            )}
             {source.status === 'ready' && (
               <button
                 onClick={startEdit}
@@ -339,6 +351,9 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
   const hasChildren = childNodes.length > 0
   const canExport = subtreeMessages(node) > 0
   const Icon = folderIcon(node)
+  const row = useRef<HTMLDivElement>(null)
+  // The format chooser for this folder's export is open.
+  const [choosing, setChoosing] = useState(false)
 
   return (
     // A tree item rather than a plain row, so it can be reached and operated
@@ -346,6 +361,7 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
     // and collapse it.
     <li role="none">
       <div
+        ref={row}
         role="treeitem"
         tabIndex={0}
         aria-selected={selected}
@@ -366,7 +382,7 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
             // The export action is not a Tab stop of its own, so the tree
             // stays one stop; E on the focused folder does the same.
             e.preventDefault()
-            exportFolderEml(sourceId, node.id)
+            setChoosing(true)
           } else if (e.key === 'ArrowRight' && hasChildren && !expanded) {
             e.preventDefault()
             toggleFolder(sourceId, node.id)
@@ -412,16 +428,19 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
           <button
             onClick={(e) => {
               e.stopPropagation()
-              exportFolderEml(sourceId, node.id)
+              // Focus goes back to the folder when the chooser closes.
+              row.current?.focus()
+              setChoosing(true)
             }}
             tabIndex={-1}
             className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 opacity-0 transition hover:text-slate-200 group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
             data-tip={
               hasChildren
-                ? 'Export this folder and its subfolders as .eml files (E)'
-                : 'Export this folder as .eml files (E)'
+                ? 'Export this folder and its subfolders (E)'
+                : 'Export this folder (E)'
             }
-            aria-label={`Export ${node.name} as .eml files`}
+            aria-label={`Export ${node.name}`}
+            aria-haspopup="dialog"
           >
             <Download className="h-3.5 w-3.5" />
           </button>
@@ -439,6 +458,17 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
             <FolderRow key={child.id} sourceId={sourceId} node={child} depth={depth + 1} />
           ))}
         </ul>
+      )}
+      {choosing && (
+        <ExportFormatDialog
+          folderName={node.name}
+          hasSubfolders={hasChildren}
+          onChoose={(format) => {
+            setChoosing(false)
+            exportFolderEml(sourceId, node.id, format)
+          }}
+          onClose={() => setChoosing(false)}
+        />
       )}
     </li>
   )

@@ -9,13 +9,27 @@
  *   written;
  * - what is written only becomes the file's content when the stream is
  *   closed, and is thrown away if it is aborted;
+ * - a stream starts empty, or with the file's content if asked to keep it,
+ *   and can seek and truncate the way the browser's does (a truncate to
+ *   before the write position moves the position back to the new end);
+ * - a failed write, seek or truncate errors the stream, as the browser's
+ *   does: every later write, seek, truncate or close fails with the same
+ *   error, and abort does nothing;
  * - a disk can treat names that differ only by case as the same name.
  *
  * `fail` lets a test make any single operation throw, the way a full disk, a
  * lost permission or a refused name would.
  */
 
-export type Operation = 'createFile' | 'createDirectory' | 'openWritable' | 'write' | 'close' | 'remove'
+export type Operation =
+  | 'createFile'
+  | 'createDirectory'
+  | 'openWritable'
+  | 'write'
+  | 'seek'
+  | 'truncate'
+  | 'close'
+  | 'remove'
 
 export interface MemoryFsOptions {
   /** Treat names that differ only by case as the same, like Windows and macOS. */
@@ -45,26 +59,70 @@ export class MemoryFile {
     return new File([this.content as Uint8Array<ArrayBuffer>], this.name)
   }
 
-  async createWritable() {
+  async createWritable(options?: { keepExistingData?: boolean }) {
     const fs = this.parent.fs
     fs.check('openWritable', this.name, this.parent.pathTo(this.name))
-    const pieces: Uint8Array[] = []
+    let buffer = options?.keepExistingData ? this.content.slice() : new Uint8Array(0)
+    let position = 0
     let done = false
-    return {
+    const stream = {
       write: async (data: Uint8Array) => {
         if (done) throw new TypeError('the stream is closed')
         fs.check('write', this.name, this.parent.pathTo(this.name))
-        pieces.push(data.slice())
+        const end = position + data.length
+        if (end > buffer.length) {
+          const grown = new Uint8Array(end)
+          grown.set(buffer)
+          buffer = grown
+        }
+        buffer.set(data, position)
+        position = end
+      },
+      seek: async (offset: number) => {
+        if (done) throw new TypeError('the stream is closed')
+        fs.check('seek', this.name, this.parent.pathTo(this.name))
+        position = offset
+      },
+      truncate: async (size: number) => {
+        if (done) throw new TypeError('the stream is closed')
+        fs.check('truncate', this.name, this.parent.pathTo(this.name))
+        const cut = new Uint8Array(size)
+        cut.set(buffer.subarray(0, Math.min(size, buffer.length)))
+        buffer = cut
+        position = Math.min(position, size)
       },
       close: async () => {
         if (done) throw new TypeError('the stream is closed')
         done = true
         fs.check('close', this.name, this.parent.pathTo(this.name))
-        this.content = new Uint8Array(Buffer.concat(pieces))
+        this.content = buffer
         this.commits++
       },
       abort: async () => {
         done = true
+      },
+    }
+    // Once a write, seek or truncate has failed, the stream stays failed.
+    let broken: unknown = null
+    const erroring =
+      <A extends unknown[]>(run: (...args: A) => Promise<void>) =>
+      async (...args: A) => {
+        if (broken) throw broken
+        try {
+          await run(...args)
+        } catch (err) {
+          broken = err
+          throw err
+        }
+      }
+    return {
+      ...stream,
+      write: erroring(stream.write),
+      seek: erroring(stream.seek),
+      truncate: erroring(stream.truncate),
+      close: async () => {
+        if (broken) throw broken
+        await stream.close()
       },
     }
   }
