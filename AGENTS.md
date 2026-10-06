@@ -68,6 +68,9 @@ set `CI`; if a fresh clone fails saying the public test files are missing, run
 - `REQUIRE_MAILBOXES=1 npm run test:e2e` passes.
 - A bug fix has a test that fails without the fix. New behaviour has tests.
   Put them where the tests for that code already are.
+- A new file that parses or writes mail, attachments or exported files gets a
+  coverage limit of its own in `vitest.config.ts`, next to the ones already
+  there, so that later changes to it cannot go untested.
 - If the change is visible in the UI: start the app (`npm run dev`), open the
   made-up files from `npm run fixtures`, and look. Include a screenshot in the
   pull request, or a short recording when the change is about movement or a
