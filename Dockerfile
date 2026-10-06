@@ -1,5 +1,5 @@
 # Build the static app
-FROM docker.io/library/node:22-alpine AS build
+FROM docker.io/library/node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY patches ./patches

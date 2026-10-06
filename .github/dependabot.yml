@@ -15,8 +15,9 @@ updates:
           - minor
           - patch
     ignore:
-      # The Node types follow the Node version that CI and the Docker image
-      # run (22). A major bump here would describe a runtime we do not use.
+      # The Node types follow the Node version pinned in .nvmrc, and move
+      # with it (see .github/workflows/node-lts.yml). A major bump on its own
+      # would describe a runtime we do not use.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
