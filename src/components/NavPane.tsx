@@ -11,6 +11,7 @@ import {
   Caret,
   Chat,
   Download,
+  DownloadFile,
   Drafts,
   FolderIcon,
   Inbox,
@@ -258,6 +259,16 @@ function SourceTree({ source }: { source: Source }) {
                 <Download className="h-4 w-4" />
               </button>
             )}
+            {source.status === 'ready' && source.index && source.index.totalMessages > 0 && (
+              <button
+                onClick={() => exportFolderEml(source.id, undefined, 'mbox')}
+                className="text-slate-400 transition hover:text-slate-200"
+                data-tip="Export the whole mailbox as .mbox files, one per folder"
+                aria-label={`Export ${source.label} as .mbox files`}
+              >
+                <DownloadFile className="h-4 w-4" />
+              </button>
+            )}
             {source.status === 'ready' && (
               <button
                 onClick={startEdit}
@@ -351,7 +362,7 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
         aria-selected={selected}
         aria-expanded={hasChildren ? expanded : undefined}
         onClick={() => selectFolder(sourceId, node.id)}
-        aria-keyshortcuts={canExport ? 'E' : undefined}
+        aria-keyshortcuts={canExport ? 'E M' : undefined}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
@@ -367,6 +378,16 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
             // stays one stop; E on the focused folder does the same.
             e.preventDefault()
             exportFolderEml(sourceId, node.id)
+          } else if (
+            canExport &&
+            (e.key === 'm' || e.key === 'M') &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            // The same for the .mbox export.
+            e.preventDefault()
+            exportFolderEml(sourceId, node.id, 'mbox')
           } else if (e.key === 'ArrowRight' && hasChildren && !expanded) {
             e.preventDefault()
             toggleFolder(sourceId, node.id)
@@ -424,6 +445,24 @@ function FolderRow({ sourceId, node, depth }: { sourceId: string; node: FolderNo
             aria-label={`Export ${node.name} as .eml files`}
           >
             <Download className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {canExport && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              exportFolderEml(sourceId, node.id, 'mbox')
+            }}
+            tabIndex={-1}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 opacity-0 transition hover:text-slate-200 group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+            data-tip={
+              hasChildren
+                ? 'Export this folder and its subfolders as .mbox files, one per folder (M)'
+                : 'Export this folder as an .mbox file (M)'
+            }
+            aria-label={`Export ${node.name} as .mbox files`}
+          >
+            <DownloadFile className="h-3.5 w-3.5" />
           </button>
         )}
         {node.messageCount > 0 && (

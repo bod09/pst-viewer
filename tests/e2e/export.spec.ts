@@ -1,5 +1,6 @@
 import PostalMime from 'postal-mime'
 import { type Page } from '@playwright/test'
+import { readMboxrd } from '../support/mboxrd'
 import { expect, fixture, folderRow, messageRow, openFiles, openMessage, reader, test } from './support'
 
 /**
@@ -111,6 +112,74 @@ test.describe('exporting to a folder', () => {
   })
 })
 
+test.describe('exporting to .mbox files', () => {
+  test.beforeEach(async ({ page }) => pickPrivateFolder(page))
+
+  test('a folder is saved as one .mbox file holding every message', async ({ page }) => {
+    await openThree(page)
+    await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' }).click()
+    await expect(exportDialog(page).getByRole('status')).toContainText(
+      'Saved 3 messages to .mbox files (one per folder) into Messages,',
+    )
+    const files = await written(page)
+    expect(Object.keys(files)).toEqual(['Messages/Messages.mbox'])
+    const messages = readMboxrd(files['Messages/Messages.mbox'])
+    expect(messages.map((m) => m.separator)).toEqual([
+      'From MAILER-DAEMON Tue Mar 12 10:15:00 2024',
+      'From MAILER-DAEMON Tue Mar 12 12:00:00 2024',
+      expect.stringMatching(/^From MAILER-DAEMON /),
+    ])
+    const parsed = await Promise.all(messages.map((m) => PostalMime.parse(m.message)))
+    expect(parsed.map((e) => e.subject)).toEqual([
+      'Quarterly zebra report',
+      'Fwd: Original walrus memo',
+      'Distinctive msg subject wombat',
+    ])
+    expect(parsed[0].attachments.map((a) => a.filename)).toEqual(['chart.png'])
+  })
+
+  test('a whole mailbox keeps its folders, one file each', async ({ page }) => {
+    await openThree(page)
+    await page.getByRole('button', { name: /^Export Messages \(3\) as \.mbox files$/ }).click()
+    await expect(exportDialog(page).getByRole('status')).toContainText('Saved 3 messages')
+    const files = await written(page)
+    expect(Object.keys(files)).toEqual(['Messages (3)/Messages.mbox'])
+    expect(readMboxrd(files['Messages (3)/Messages.mbox'])).toHaveLength(3)
+  })
+
+  test('pressing M on a folder exports it as .mbox', async ({ page }) => {
+    await openThree(page)
+    await folderRow(page, 'Messages').focus()
+    await page.keyboard.press('m')
+    await expect(exportDialog(page).getByRole('status')).toContainText('to .mbox files')
+  })
+
+  test('only the ticked messages are saved, in their folder\'s file', async ({ page }) => {
+    await openThree(page)
+    await messageRow(page, 'Quarterly zebra report').getByRole('checkbox').check()
+    await messageRow(page, 'Distinctive msg subject wombat').getByRole('checkbox').check()
+    await page.getByRole('button', { name: 'Export MBOX' }).click()
+    await expect(exportDialog(page).getByRole('status')).toContainText('Saved 2 messages')
+    const files = await written(page)
+    expect(Object.keys(files)).toEqual(['Selected messages/Messages.mbox'])
+    const subjects = await Promise.all(
+      readMboxrd(files['Selected messages/Messages.mbox']).map(async (m) => (await PostalMime.parse(m.message)).subject),
+    )
+    expect(subjects).toEqual(['Quarterly zebra report', 'Distinctive msg subject wombat'])
+  })
+
+  test('exporting twice never writes over the first export', async ({ page }) => {
+    await openThree(page)
+    const button = folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' })
+    await button.click()
+    await expect(exportDialog(page).getByRole('status')).toContainText('into Messages,')
+    await exportDialog(page).getByRole('button', { name: 'Close' }).first().click()
+    await button.click()
+    await expect(exportDialog(page).getByRole('status')).toContainText('into Messages (2),')
+    expect(Object.keys(await written(page)).sort()).toEqual(['Messages (2)/Messages.mbox', 'Messages/Messages.mbox'])
+  })
+})
+
 test('closing the folder picker without choosing starts nothing', async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as { showDirectoryPicker: () => Promise<never> }
@@ -130,6 +199,15 @@ test('a browser that cannot write to a folder is told so, with what still works'
   await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' }).click()
   await expect(page.getByRole('dialog')).toContainText('needs a Chromium-based browser')
   await expect(page.getByRole('dialog')).toContainText('Single messages can still be saved one at a time')
+})
+
+test('the .mbox export tells such a browser the same', async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker
+  })
+  await openThree(page)
+  await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' }).click()
+  await expect(page.getByRole('dialog', { name: 'Export as .mbox files' })).toContainText('needs a Chromium-based browser')
 })
 
 test.describe('saving one message', () => {

@@ -8,7 +8,7 @@ import { SearchBar } from './SearchBar'
 import { SearchResults } from './SearchResults'
 import { Resizer } from './Resizer'
 import { dragHasFiles, filterAccepted } from '../lib/files'
-import { Download, Printer, Spinner } from './icons'
+import { Download, DownloadFile, Printer, Spinner } from './icons'
 import { BrandHeader } from './BrandHeader'
 import { SettingsButton } from './Settings'
 import { EmlExportDialog } from './EmlExportDialog'
@@ -194,12 +194,20 @@ function ExportBar() {
           Clear
         </button>
         <button
-          onClick={exportSelectedEml}
+          onClick={() => exportSelectedEml()}
           className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 font-medium text-slate-200 transition hover:bg-slate-700/60"
           data-tip="Save each selected email as a .eml file, in folders like the mailbox's"
         >
           <Download className="h-4 w-4" />
           Export EML
+        </button>
+        <button
+          onClick={() => exportSelectedEml('mbox')}
+          className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 font-medium text-slate-200 transition hover:bg-slate-700/60"
+          data-tip="Save the selected emails into .mbox files, one per folder, in folders like the mailbox's"
+        >
+          <DownloadFile className="h-4 w-4" />
+          Export MBOX
         </button>
         {count === 1 ? (
           <button

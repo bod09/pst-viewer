@@ -5,7 +5,7 @@ import { Alert, Spinner } from './icons'
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`
 
-/** Progress, and then the outcome, of an export to a folder of .eml files. */
+/** Progress, and then the outcome, of an export to a folder of .eml or .mbox files. */
 export function EmlExportDialog() {
   const job = useApp((s) => s.emlExport)
   const cancel = useApp((s) => s.cancelEmlExport)
@@ -15,7 +15,7 @@ export function EmlExportDialog() {
   const running = job.status === 'running'
   const title =
     job.status === 'unsupported'
-      ? 'Export as .eml files'
+      ? `Export as ${job.format === 'mbox' ? '.mbox' : '.eml'} files`
       : running
         ? `Exporting ${job.title}`
         : `Export of ${job.title}`
@@ -114,12 +114,18 @@ function Summary({ job }: { job: EmlExportJob }) {
   ) : null
   return (
     <>
-      {job.status === 'done' && (
-        <p role="status" className="text-slate-200">
-          Saved {plural(job.exported, 'message')} as .eml {job.exported === 1 ? 'file' : 'files'}
-          {where}, in the folder you chose.
-        </p>
-      )}
+      {job.status === 'done' &&
+        (job.format === 'mbox' ? (
+          <p role="status" className="text-slate-200">
+            Saved {plural(job.exported, 'message')} to .mbox files (one per folder){where}, in the
+            folder you chose.
+          </p>
+        ) : (
+          <p role="status" className="text-slate-200">
+            Saved {plural(job.exported, 'message')} as .eml {job.exported === 1 ? 'file' : 'files'}
+            {where}, in the folder you chose.
+          </p>
+        ))}
       {job.status === 'cancelled' && (
         <p role="status" className="text-slate-200">
           Export cancelled. {plural(job.exported, 'message')}{' '}
