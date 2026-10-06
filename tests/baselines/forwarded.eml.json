@@ -30,7 +30,7 @@
      "opened": true,
      "kind": "email",
      "html": null,
-     "text": "7d3419abb627110d",
+     "text": "137c1b6dfdaf28f1",
      "people": "0550369223325e75",
      "headers": "2f582ef39b1f0158",
      "marks": "fa6d8104e9ebdfe8",
@@ -38,13 +38,13 @@
      "atts": "[\"Original walrus memo.eml\"]",
      "files": [
       [
-       452,
+       451,
        0,
        1
       ]
      ],
      "types": "027d2107c9c8bd2e",
-     "bytes": "f5f1acb8351addac"
+     "bytes": "ec80c2c8e1c52a78"
     }
    ]
   }
