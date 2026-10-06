@@ -94,7 +94,7 @@ test.describe('exporting to a folder', () => {
     const button = folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' })
     await button.click()
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages,')
-    await exportDialog(page).getByRole('button', { name: 'Close' }).first().click()
+    await exportDialog(page).getByRole('button', { name: 'Close' }).click()
     await button.click()
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages (2),')
     const paths = Object.keys(await written(page))
