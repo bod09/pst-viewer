@@ -30,23 +30,19 @@ export function EmlExportDialog() {
         ) : (
           <Summary job={job} />
         )}
-        <div className="flex justify-end">
-          {running ? (
+        {/* The dialog's close button in the header is hidden while the export
+            runs, so that closing is a deliberate Cancel; once it has ended the
+            header button, Escape and the backdrop close this like any dialog. */}
+        {running && (
+          <div className="flex justify-end">
             <button
               onClick={cancel}
               className="rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 font-medium text-slate-200 transition hover:bg-slate-700/60"
             >
               Cancel
             </button>
-          ) : (
-            <button
-              onClick={close}
-              className="rounded-md bg-sky-500 px-3 py-1.5 font-medium text-white transition hover:bg-sky-400"
-            >
-              Close
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </Dialog>
   )
