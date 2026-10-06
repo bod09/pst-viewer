@@ -12,6 +12,9 @@
  * - a stream starts empty, or with the file's content if asked to keep it,
  *   and can seek and truncate the way the browser's does (a truncate to
  *   before the write position moves the position back to the new end);
+ * - a failed write, seek or truncate errors the stream, as the browser's
+ *   does: every later write, seek, truncate or close fails with the same
+ *   error, and abort does nothing;
  * - a disk can treat names that differ only by case as the same name.
  *
  * `fail` lets a test make any single operation throw, the way a full disk, a
@@ -62,7 +65,7 @@ export class MemoryFile {
     let buffer = options?.keepExistingData ? this.content.slice() : new Uint8Array(0)
     let position = 0
     let done = false
-    return {
+    const stream = {
       write: async (data: Uint8Array) => {
         if (done) throw new TypeError('the stream is closed')
         fs.check('write', this.name, this.parent.pathTo(this.name))
@@ -97,6 +100,29 @@ export class MemoryFile {
       },
       abort: async () => {
         done = true
+      },
+    }
+    // Once a write, seek or truncate has failed, the stream stays failed.
+    let broken: unknown = null
+    const erroring =
+      <A extends unknown[]>(run: (...args: A) => Promise<void>) =>
+      async (...args: A) => {
+        if (broken) throw broken
+        try {
+          await run(...args)
+        } catch (err) {
+          broken = err
+          throw err
+        }
+      }
+    return {
+      ...stream,
+      write: erroring(stream.write),
+      seek: erroring(stream.seek),
+      truncate: erroring(stream.truncate),
+      close: async () => {
+        if (broken) throw broken
+        await stream.close()
       },
     }
   }

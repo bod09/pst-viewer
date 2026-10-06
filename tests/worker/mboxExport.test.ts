@@ -164,12 +164,14 @@ describe('exporting made-up mail as .mbox', () => {
     expect(writer.exported).toBe(2)
   })
 
-  test('a message whose writing fails part-way is cut out, and the rest are kept whole', async () => {
+  test('a write that fails part-way through a message loses the file so far, and the rest are kept whole', async () => {
     const eml = await emlOf('loose', 'msgfolder')
     const { read, writer } = await mboxOf('loose', [looseFolder], { failPartWayThrough: 3 })
+    // The failed write errors the stream, so the new file and the two messages
+    // already in it are given up; the export goes on in a new file.
     const back = read('msgfolder').map((m) => stable(m.message))
-    expect(back).toEqual([eml[0], eml[1], eml[3], eml[4]].map(stable))
-    expect([writer.exported, writer.unsaved]).toEqual([4, 1])
+    expect(back).toEqual([eml[3], eml[4]].map(stable))
+    expect([writer.exported, writer.unsaved]).toEqual([2, 3])
   })
 })
 

@@ -241,6 +241,24 @@ describe('the folder tree', () => {
     expect(files).toContain('name@example_com.mbox')
   })
 
+  test('sibling folders named X, X.mbox and X.mbox.sbd do not run into one another', async () => {
+    const { root, save, read, out, writer } = await setup()
+    for (const n of ['X', 'X.mbox', 'X.mbox.sbd']) await save(root.child(n, 1).child('Sub'), message(n))
+    await writer.discard()
+    expect(out().tree().sort()).toEqual([
+      'X.mbox',
+      'X.mbox.sbd/',
+      'X.mbox.sbd/Sub.mbox',
+      'X_mbox.mbox',
+      'X_mbox.mbox.sbd/',
+      'X_mbox.mbox.sbd/Sub.mbox',
+      'X_mbox_sbd.mbox',
+      'X_mbox_sbd.mbox.sbd/',
+      'X_mbox_sbd.mbox.sbd/Sub.mbox',
+    ])
+    expect(read('X_mbox.mbox.sbd/Sub.mbox').map((m) => m.message)).toEqual([lf(message('X.mbox'))])
+  })
+
   test('however deep and long-named the folders, every path stays short enough for Windows', async () => {
     const { dir, root, save, fs } = await setup({}, 'x'.repeat(200))
     expect(dir.nameOnDisk.length).toBe(40)
@@ -352,32 +370,67 @@ describe('a message that does not finish', () => {
 })
 
 describe('when saving fails', () => {
-  test('a write that fails part-way is cut back, counted, and the export goes on', async () => {
+  test('a write that fails gives up the new file and its messages, and the export goes on in a new one', async () => {
     let writes = 0
-    const { root, save, read, writer } = await setup({
-      fail: (op) => (op === 'write' && ++writes === 4 ? new DOMException('Disk hiccup.', 'InvalidStateError') : null),
+    const { root, save, read, writer, out } = await setup({
+      fail: (op) => (op === 'write' && ++writes === 5 ? new DOMException('Disk hiccup.', 'InvalidStateError') : null),
     })
     const inbox = root.child('Inbox')
     await save(inbox, message('one'))
     expect(await save(inbox, [bytes('From: x\r\n'), bytes('Subject: two\r\n\r\nbody\r\n')])).toBe(true)
+    // The browser errors the stream, so the file that was new is removed, and
+    // "one", written to it before, is counted as not saved too.
+    expect(out().list()).toEqual([])
     await save(inbox, message('three'))
     await writer.discard()
-    expect(read('Inbox.mbox').map((m) => m.message)).toEqual([lf(message('one')), lf(message('three'))])
-    expect([writer.exported, writer.unsaved]).toEqual([2, 1])
-    expect([...writer.reasons]).toEqual([['Disk hiccup.', 1]])
+    expect(read('Inbox.mbox').map((m) => m.message)).toEqual([lf(message('three'))])
+    expect([writer.exported, writer.unsaved]).toEqual([1, 2])
+    expect([...writer.reasons]).toEqual([['Disk hiccup.', 2]])
+  })
+
+  test('a write that fails in a file opened again takes it back to what it held when opened', async () => {
+    let aWrites = 0
+    const { root, save, read, writer } = await setup({
+      fail: (op, name) =>
+        op === 'write' && name === 'A.mbox' && ++aWrites === 8 ? new DOMException('Disk hiccup.', 'InvalidStateError') : null,
+    })
+    const a = root.child('A')
+    await save(a, message('a one'))
+    await save(root.child('B'), message('b'))
+    await save(a, message('a two'))
+    expect(await save(a, message('a three'))).toBe(true)
+    await writer.discard()
+    expect(read('A.mbox').map((m) => m.message)).toEqual([lf(message('a one'))])
+    expect(read('B.mbox')).toHaveLength(1)
+    expect([writer.exported, writer.unsaved]).toEqual([2, 2])
+  })
+
+  test('after a failed write the file is not cut back, since the browser would refuse that too', async () => {
+    let writes = 0
+    const ops: string[] = []
+    const { root, save, writer } = await setup({
+      fail: (op) => {
+        ops.push(op)
+        return op === 'write' && ++writes === 2 ? new DOMException('Disk hiccup.', 'InvalidStateError') : null
+      },
+    })
+    await save(root.child('Inbox'), message('one'))
+    await writer.discard()
+    expect(ops).not.toContain('truncate')
+    expect(ops).not.toContain('close')
+    expect(ops.at(-1)).toBe('remove')
   })
 
   test('if the file cannot be cut back, the messages in it are counted as not saved', async () => {
-    let writes = 0
     const { root, step, save, writer, out } = await setup({
-      fail: (op) =>
-        (op === 'write' && ++writes === 8) || op === 'truncate' ? new DOMException('Broken.', 'InvalidStateError') : null,
+      fail: (op) => (op === 'truncate' ? new DOMException('Broken.', 'InvalidStateError') : null),
     })
     const inbox = root.child('Inbox')
     await save(inbox, message('one'))
     await save(inbox, message('two'))
     await step({ kind: 'start', subject: 's', date: null, folderId: 'f' }, inbox)
-    expect(await step({ kind: 'data', data: bytes(message('three')) }, inbox)).toBe(true)
+    await step({ kind: 'data', data: bytes(message('three').slice(0, 30)) }, inbox)
+    expect(await step({ kind: 'skip' }, inbox)).toBe(true)
     await writer.discard()
     // The new file was given up and removed; nothing in it was complete on disk.
     expect(out().list()).toEqual([])
@@ -428,9 +481,12 @@ describe('when saving fails', () => {
     expect([writer.exported, writer.unsaved]).toEqual([3, 1])
   })
 
-  test('a full disk stops the export, keeping every complete message', async () => {
+  test('a full disk stops the export: finished folders are kept, and the folder being written is lost', async () => {
     let writes = 0
-    const { root, save, read, writer } = await setup({ fail: (op) => (op === 'write' && ++writes === 8 ? quotaExceeded() : null) })
+    const { root, save, read, writer, out } = await setup({
+      fail: (op) => (op === 'write' && ++writes === 11 ? quotaExceeded() : null),
+    })
+    await save(root.child('Done'), message('done'))
     const inbox = root.child('Inbox')
     await save(inbox, message('one'))
     await save(inbox, message('two'))
@@ -438,7 +494,12 @@ describe('when saving fails', () => {
     expect(writer.fatal).toBe('The disk is full.')
     expect(await save(inbox, message('four'))).toBe(false)
     await writer.discard()
-    expect(read('Inbox.mbox')).toHaveLength(2)
+    expect(read('Done.mbox')).toHaveLength(1)
+    expect(out().list()).toEqual(['Done.mbox'])
+    // "one" and "two" are counted as not saved; "three", the message the
+    // export stopped on, is not counted, as in the .eml export.
+    expect([writer.exported, writer.unsaved]).toEqual([1, 2])
+    expect([...writer.reasons]).toEqual([['The disk is full.', 2]])
   })
 
   test('a disk that fills up as the last file is closed stops the export with its reason', async () => {
@@ -534,6 +595,25 @@ describe('when saving fails', () => {
     const { root, save, writer } = await setup({ fail: (op) => (op === 'createFile' ? notAllowed() : null) })
     expect(await save(root.child('Inbox'), message('one'))).toBe(false)
     expect(writer.fatal).toBe('Permission was withdrawn.')
+  })
+
+  test('a parent\'s empty file is not kept for a subfolder whose messages were all lost', async () => {
+    let childWrites = 0
+    const { root, step, save, writer, out } = await setup({
+      fail: (op, name) =>
+        op === 'write' && name === 'Child.mbox' && ++childWrites === 4 ? new DOMException('Disk hiccup.', 'InvalidStateError') : null,
+    })
+    const parent = root.child('Parent', 1)
+    const child = parent.child('Child')
+    await save(child, message('child one'))
+    expect(out().list()).toContain('Parent.mbox')
+    await save(child, message('child two'))
+    // The parent's own message turns out unreadable, so its file is empty when closed.
+    await step({ kind: 'start', subject: 's', date: null, folderId: 'f' }, parent)
+    await step({ kind: 'skip' }, parent)
+    await writer.discard()
+    expect(out().tree()).toEqual(['Parent.mbox.sbd/'])
+    expect([writer.exported, writer.unsaved, writer.unreadable]).toEqual([0, 2, 1])
   })
 
   test('a parent whose empty file cannot be closed is left without one', async () => {

@@ -973,10 +973,16 @@ async function removeMbox(folder: MboxFolder, dir: FileSystemDirectoryHandle): P
  *
  * A folder's file stays open while its messages arrive, and is closed when a
  * message for another folder starts or the export ends. The file's size is
- * noted before each message; if the message cannot be read or saved
- * part-way, or the export is cancelled, the file is cut back to that size, so
- * every message saved is complete. If the file then cannot be closed, the
- * messages written to it since it was opened are counted as not saved.
+ * noted before each message; if the message turns out unreadable, a new
+ * message starts before it ends, or the export is cancelled, the file is cut
+ * back to that size, so every message saved is complete. If the file then
+ * cannot be closed, the messages written to it since it was opened are
+ * counted as not saved.
+ *
+ * A write that fails is different: the browser gives up the whole stream
+ * (nothing more can be written, cut back or closed), so the file goes back to
+ * what it held when it was opened, and the messages written to it since then
+ * are counted as not saved. On a full disk that can be a whole folder.
  */
 export class MboxTreeWriter {
   static readonly MAX_IN_A_ROW = EmlTreeWriter.MAX_IN_A_ROW
@@ -1066,17 +1072,40 @@ export class MboxTreeWriter {
     }
   }
 
-  /** Write `data` to the file and move the position past it. */
+  /**
+   * Write `data` to the file and move the position past it. A failed write
+   * leaves the stream unusable, so it is given up at once (see giveUp).
+   */
   private async put(file: MboxFileWriter, data: Uint8Array): Promise<void> {
     if (data.length === 0) return
-    await file.write(data)
+    try {
+      await file.write(data)
+    } catch (err) {
+      await this.giveUp(file, err)
+      throw err
+    }
     this.position += data.length
+  }
+
+  /**
+   * Give up a stream whose write failed. The browser errors a stream when a
+   * write to it fails, after which a truncate or close fails too, so there is
+   * no cutting back: the file goes back to what it held when it was opened
+   * (one that was new is removed), and the messages written to it since then
+   * are counted as not saved.
+   */
+  private async giveUp(file: MboxFileWriter, err: unknown): Promise<void> {
+    this.encoder = null
+    if (this.file === file) this.file = null
+    await file.abandon()
+    this.lose(file, err)
   }
 
   /**
    * Cut the file back to before the message being written, if there is one.
    * If even that fails, the stream is given up, and the messages it held are
-   * counted as not saved.
+   * counted as not saved. After a failed write a truncate cannot succeed, so
+   * that case never comes here: put gives the stream up straight away.
    */
   private async dropMessage(): Promise<void> {
     const file = this.file
@@ -1146,9 +1175,17 @@ export class MboxTreeWriter {
     }
   }
 
-  /** Whether a folder below `folder` has saved a message (and so needs its file as a way in). */
+  /**
+   * Whether a folder below `folder` still holds a saved message (and so needs
+   * its file as a way in). A folder whose stream was given up holds only what
+   * it held before. It stays in savedIn, because it did work, which is what
+   * the in-a-row rule asks.
+   */
   private needed(folder: MboxFolder): boolean {
-    for (const f of this.savedIn) for (let p = f.parent; p; p = p.parent) if (p === folder) return true
+    for (const f of this.savedIn) {
+      if (f.size === 0) continue
+      for (let p = f.parent; p; p = p.parent) if (p === folder) return true
+    }
     return false
   }
 
