@@ -121,14 +121,22 @@ describe('headers', () => {
       name: 'IT Support <helpdesk@company.example>',
       address: 'attacker@evil.example',
     })
-    // The last recipient has no address at all. It stays one recipient: the
-    // addresses inside its name do not become recipients of their own. (A
-    // parser has nowhere to put a name on its own, so it lands in `address`.)
-    expect(email.to).toEqual([
+    const to = email.to ?? []
+    expect(to.slice(0, 2)).toEqual([
       { name: 'Smith, John', address: 'john@example.com' },
       { name: 'Quote "Q" Back\\slash', address: 'quote@example.com' },
-      { name: '', address: 'Boss <ceo@company.example>, Other <x@example.com>' },
     ])
+    // The last recipient has no address at all. It stays one recipient: the
+    // addresses inside its name do not become recipients of their own. A
+    // parser has nowhere to put a name on its own, and where it lands differs
+    // (postal-mime 4.0.0 made the whole of it the address; 4.0.4 reads the
+    // quoted text as a local part), so only that is checked: one recipient,
+    // with every character of the name still in it.
+    expect(to).toHaveLength(3)
+    const last = to[2]
+    expect(`${last.name}${last.address}`.replace(/"/g, '')).toBe(
+      'Boss <ceo@company.example>, Other <x@example.com>',
+    )
     // And the app's own reader agrees (it does not trust postal-mime here).
     expect(structuredAddresses(header(eml, 'From'))).toEqual([email.from])
     expect(structuredAddresses(header(eml, 'To'))).toEqual(email.to)
