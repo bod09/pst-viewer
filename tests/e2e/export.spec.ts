@@ -1,7 +1,7 @@
 import PostalMime from 'postal-mime'
 import { type Page } from '@playwright/test'
 import { readMboxrd } from '../support/mboxrd'
-import { expect, fixture, folderRow, messageRow, openFiles, openMessage, reader, test } from './support'
+import { expect, fixture, folderRow, messageRow, openFiles, openMessage, publicMailboxPath, reader, test } from './support'
 
 /**
  * Exporting writes to a folder the reader picks. A test cannot click through
@@ -36,6 +36,19 @@ async function written(page: Page): Promise<Record<string, string>> {
 
 const exportDialog = (page: Page) => page.getByRole('dialog').filter({ hasText: /Export/ })
 
+/** The format chooser a folder's export button, or E, opens. */
+const chooser = (page: Page, folder: string) => page.getByRole('dialog', { name: `Export ${folder}`, exact: true })
+const exportButton = (page: Page, folder: string) =>
+  folderRow(page, folder).getByRole('button', { name: `Export ${folder}`, exact: true })
+
+/** Export a folder from its row: the export button, then a format. */
+async function exportFolder(page: Page, folder: string, format: RegExp) {
+  await exportButton(page, folder).click()
+  await chooser(page, folder).getByRole('button', { name: format }).click()
+}
+const EML = /^\.eml files, one per message$/
+const MBOX = /^An \.mbox file$/
+
 async function openThree(page: Page) {
   await openFiles(page, fixture('mail.eml'), fixture('forwarded.eml'), fixture('mail.msg'))
   await expect(messageRow(page, 'Quarterly zebra report')).toBeVisible()
@@ -46,7 +59,7 @@ test.describe('exporting to a folder', () => {
 
   test('a folder is saved as one .eml per message, named by date and subject', async ({ page }) => {
     await openThree(page)
-    await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' }).click()
+    await exportFolder(page, 'Messages', EML)
     await expect(exportDialog(page).getByRole('status')).toContainText('Saved 3 messages as .eml files into Messages')
 
     const files = await written(page)
@@ -71,11 +84,13 @@ test.describe('exporting to a folder', () => {
     expect(paths.every((p) => /^Messages \(3\)\/Messages\/[^/]+\.eml$/.test(p))).toBe(true)
   })
 
-  test('pressing E on a folder exports it', async ({ page }) => {
+  test('pressing E on a folder asks for the format, and Enter takes the first', async ({ page }) => {
     await openThree(page)
     await folderRow(page, 'Messages').focus()
     await page.keyboard.press('e')
-    await expect(exportDialog(page).getByRole('status')).toContainText('Saved 3 messages')
+    await expect(chooser(page, 'Messages').getByRole('button', { name: EML })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(exportDialog(page).getByRole('status')).toContainText('Saved 3 messages as .eml files')
   })
 
   test('only the ticked messages are saved', async ({ page }) => {
@@ -91,11 +106,10 @@ test.describe('exporting to a folder', () => {
 
   test('exporting twice never writes over the first export', async ({ page }) => {
     await openThree(page)
-    const button = folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' })
-    await button.click()
+    await exportFolder(page, 'Messages', EML)
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages,')
     await exportDialog(page).getByRole('button', { name: 'Close' }).click()
-    await button.click()
+    await exportFolder(page, 'Messages', EML)
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages (2),')
     const paths = Object.keys(await written(page))
     expect(paths.filter((p) => p.startsWith('Messages/'))).toHaveLength(3)
@@ -104,7 +118,7 @@ test.describe('exporting to a folder', () => {
 
   test('nothing but finished .eml files is left in the folder', async ({ page }) => {
     await openThree(page)
-    await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' }).click()
+    await exportFolder(page, 'Messages', EML)
     await expect(exportDialog(page).getByRole('status')).toContainText('Saved 3 messages')
     const files = await written(page)
     expect(Object.keys(files).every((p) => p.endsWith('.eml'))).toBe(true)
@@ -117,7 +131,7 @@ test.describe('exporting to .mbox files', () => {
 
   test('a folder is saved as one .mbox file holding every message', async ({ page }) => {
     await openThree(page)
-    await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' }).click()
+    await exportFolder(page, 'Messages', MBOX)
     await expect(exportDialog(page).getByRole('status')).toContainText(
       'Saved 3 messages to .mbox files (one per folder) into Messages,',
     )
@@ -147,10 +161,13 @@ test.describe('exporting to .mbox files', () => {
     expect(readMboxrd(files['Messages (3)/Messages.mbox'])).toHaveLength(3)
   })
 
-  test('pressing M on a folder exports it as .mbox', async ({ page }) => {
+  test('in the format choice, the arrow keys reach .mbox', async ({ page }) => {
     await openThree(page)
     await folderRow(page, 'Messages').focus()
-    await page.keyboard.press('m')
+    await page.keyboard.press('e')
+    await page.keyboard.press('ArrowDown')
+    await expect(chooser(page, 'Messages').getByRole('button', { name: MBOX })).toBeFocused()
+    await page.keyboard.press('Enter')
     await expect(exportDialog(page).getByRole('status')).toContainText('to .mbox files')
   })
 
@@ -170,13 +187,83 @@ test.describe('exporting to .mbox files', () => {
 
   test('exporting twice never writes over the first export', async ({ page }) => {
     await openThree(page)
-    const button = folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' })
-    await button.click()
+    await exportFolder(page, 'Messages', MBOX)
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages,')
     await exportDialog(page).getByRole('button', { name: 'Close' }).first().click()
-    await button.click()
+    await exportFolder(page, 'Messages', MBOX)
     await expect(exportDialog(page).getByRole('status')).toContainText('into Messages (2),')
     expect(Object.keys(await written(page)).sort()).toEqual(['Messages (2)/Messages.mbox', 'Messages/Messages.mbox'])
+  })
+})
+
+test.describe('the format choice', () => {
+  test.beforeEach(async ({ page }) => pickPrivateFolder(page))
+
+  test('a folder row has one export button, which offers both formats', async ({ page }) => {
+    await openThree(page)
+    await expect(folderRow(page, 'Messages')).toHaveAttribute('aria-keyshortcuts', 'E')
+    await expect(folderRow(page, 'Messages').getByRole('button', { name: /^Export / })).toHaveCount(1)
+    await expect(exportButton(page, 'Messages')).toHaveAttribute('aria-haspopup', 'dialog')
+    await exportButton(page, 'Messages').click()
+    const choices = chooser(page, 'Messages').getByRole('group', { name: 'Format' }).getByRole('button')
+    await expect(choices).toHaveText([EML, MBOX])
+    await expect(choices.first()).toBeFocused()
+  })
+
+  test('a folder with subfolders is offered one .mbox file per folder', async ({ page }) => {
+    await openFiles(page, publicMailboxPath('enron.pst'))
+    const row = page.getByRole('treeitem', { expanded: true }).first()
+    await expect(row).toBeVisible()
+    await row.focus()
+    await page.keyboard.press('e')
+    const dialog = page.getByRole('dialog', { name: /^Export / })
+    await expect(dialog).toContainText('Save this folder and its subfolders as:')
+    await expect(dialog.getByRole('button', { name: /^\.mbox files, one per folder$/ })).toBeVisible()
+  })
+
+  test('Tab moves between the choices and stays in the dialog', async ({ page }) => {
+    await openThree(page)
+    await folderRow(page, 'Messages').focus()
+    await page.keyboard.press('e')
+    const dialog = chooser(page, 'Messages')
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: MBOX })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused()
+    await page.keyboard.press('ArrowUp')
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: EML })).toBeFocused()
+    await page.keyboard.press('ArrowUp')
+    await expect(dialog.getByRole('button', { name: MBOX })).toBeFocused()
+  })
+
+  test('Escape closes it, starts nothing, and puts focus back on the folder', async ({ page }) => {
+    await openThree(page)
+    await folderRow(page, 'Messages').focus()
+    await page.keyboard.press('e')
+    await expect(chooser(page, 'Messages')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(folderRow(page, 'Messages')).toBeFocused()
+    expect(await written(page)).toEqual({})
+  })
+
+  test('the X in its header closes it, and focus goes back to the folder', async ({ page }) => {
+    await openThree(page)
+    await exportButton(page, 'Messages').click()
+    await chooser(page, 'Messages').getByRole('button', { name: 'Close' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(folderRow(page, 'Messages')).toBeFocused()
+  })
+
+  test('a click outside closes it', async ({ page }) => {
+    await openThree(page)
+    await exportButton(page, 'Messages').click()
+    await expect(chooser(page, 'Messages')).toBeVisible()
+    await page.mouse.click(5, 5)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(await written(page)).toEqual({})
   })
 })
 
@@ -186,7 +273,7 @@ test('closing the folder picker without choosing starts nothing', async ({ page 
     w.showDirectoryPicker = () => Promise.reject(new DOMException('The user aborted a request.', 'AbortError'))
   })
   await openThree(page)
-  await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' }).click()
+  await exportFolder(page, 'Messages', EML)
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(messageRow(page, 'Quarterly zebra report')).toBeVisible()
 })
@@ -196,7 +283,7 @@ test('a browser that cannot write to a folder is told so, with what still works'
     delete (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker
   })
   await openThree(page)
-  await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .eml files' }).click()
+  await exportFolder(page, 'Messages', EML)
   await expect(page.getByRole('dialog')).toContainText('needs a Chromium-based browser')
   await expect(page.getByRole('dialog')).toContainText('Single messages can still be saved one at a time')
 })
@@ -206,7 +293,7 @@ test('the .mbox export tells such a browser the same', async ({ page }) => {
     delete (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker
   })
   await openThree(page)
-  await folderRow(page, 'Messages').getByRole('button', { name: 'Export Messages as .mbox files' }).click()
+  await exportFolder(page, 'Messages', MBOX)
   await expect(page.getByRole('dialog', { name: 'Export as .mbox files' })).toContainText('needs a Chromium-based browser')
 })
 
