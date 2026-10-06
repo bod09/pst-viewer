@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Dialog } from './Dialog'
 import type { ExportFormat } from '../lib/bulkExport'
@@ -9,8 +9,8 @@ import type { ExportFormat } from '../lib/bulkExport'
  * X in the header, Escape or a click outside. Focus starts on the first
  * choice; Tab and the arrow keys move between the two, and Enter picks one.
  *
- * Rendered into the document body: inside the folder tree, its clicks and
- * key presses would also reach the folder row's own handlers.
+ * Rendered into the document body, so that a role="dialog" never sits inside
+ * the folder list's role="tree" in the DOM.
  */
 export function ExportFormatDialog({
   folderName,
@@ -24,11 +24,12 @@ export function ExportFormatDialog({
   onClose: () => void
 }) {
   const first = useRef<HTMLButtonElement>(null)
+  const promptId = useId()
 
-  // The dialog focuses its own panel, in an effect that runs after this one,
-  // so the first choice takes focus once that has happened.
+  // React runs the Dialog's effect (which focuses its panel) before this one,
+  // so the first choice takes focus last.
   useEffect(() => {
-    queueMicrotask(() => first.current?.focus())
+    first.current?.focus()
   }, [])
 
   const onArrow = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -47,12 +48,12 @@ export function ExportFormatDialog({
   return createPortal(
     <Dialog title={`Export ${folderName}`} onClose={onClose} size="sm">
       <div className="space-y-3 p-4">
-        <p className="text-xs leading-relaxed text-slate-400">
+        <p id={promptId} className="text-xs leading-relaxed text-slate-400">
           {hasSubfolders
             ? 'Save this folder and its subfolders as:'
             : 'Save this folder as:'}
         </p>
-        <div role="group" aria-label="Format" className="space-y-2" onKeyDown={onArrow}>
+        <div role="group" aria-labelledby={promptId} className="space-y-2" onKeyDown={onArrow}>
           <button ref={first} className={choice} onClick={() => onChoose('eml')}>
             .eml files, one per message
           </button>
